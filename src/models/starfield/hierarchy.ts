@@ -1,7 +1,4 @@
-export type Point2D = {
-  readonly x: number;
-  readonly y: number;
-};
+import type { Point2D } from '../../utils/geometry/point2d';
 
 export type HierarchyCell = {
   readonly minX: number;

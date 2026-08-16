@@ -7,7 +7,8 @@ import {
   type AddressedRandom,
   type Seed,
 } from '../../utils/rng/addressedRandom';
-import { dependencyAncestor, type HierarchyCell, type Point2D } from './hierarchy';
+import type { Point2D } from '../../utils/geometry/point2d';
+import { dependencyAncestor, type HierarchyCell } from './hierarchy';
 
 export const STAR_DENSITY = 8;
 export const STAR_MATERIALIZATION_THRESHOLD = 64;
