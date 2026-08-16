@@ -33,60 +33,91 @@ When resolving these questions, prefer:
 
 ### Q1. What hierarchy supports an unbounded Poisson starfield?
 
-**Status:** Open
+**Status:** Decided
 
 `DESIGN.md` describes a coarse box whose population is subdivided among its children,
 while also describing an extremely large or unbounded plane. An unbounded plane cannot
 have a single finite root box with a finite Poisson population.
 
-Questions to resolve:
+**Conclusion:** The hierarchy begins with four unit-square root cells, one in each
+quadrant, each having `(0, 0)` as a corner. Each quadrant has a canonical chain of
+outward expansions with side lengths `1, 2, 4, ...`, anchored at the origin. For
+example, the positive-positive unit cell expands to `[0, 2) × [0, 2)`.
 
-- Is the plane tiled by independent, fixed-size root cells with integer coordinates?
-- If so, what is the root-cell size in world units?
-- Are boxes coarser than a root cell supported directly, or only by aggregating roots?
-- Is statistical translation invariance sufficient even though the hierarchy is anchored
-  to an integer grid?
+An expansion preserves the existing cell and samples an independent Poisson count for
+the newly added three quarters. Equivalently, the expanded cell consists of the old
+cell and three new equal-size siblings, and its count is their sum. Refinement in the
+opposite direction subdivides a cell into four equal children and conditionally splits
+its known count among them.
 
-**Proposed direction:** Tile the plane with independently populated integer-addressed
-base cells, then refine downward within each cell. Arbitrary larger regions aggregate
-the required base cells rather than depending on a global root.
+The implementation must define one canonical parent/child address for every hierarchy
+cell; expansion and subdivision are inverse views of that same relationship, not two
+alternative ways to generate a cell. Regions that cross an axis may combine results
+from multiple quadrant hierarchies.
 
-**Conclusion:** _Pending discussion._
+Hierarchy cells are allowed to overlap at their boundaries. Two neighboring cells may
+both own stars whose coordinates lie on their shared boundary. Counts belong to the
+generating cells and are combined additively, so shared geometric boundaries do not
+cause a generated occurrence to be counted twice. Public spatial queries must preserve
+that ownership semantics rather than deduplicating equal coordinates.
 
 ### Q2. What constitutes the stable identity of a star?
 
-**Status:** Open
+**Status:** Decided
 
 Count consistency does not by itself specify which individual stars are observed when
 the same area is reached through different refinement or query strategies.
 
-Questions to resolve:
+**Conclusion:** Stars have no identity. They are stateless, indistinguishable
+occurrences in a spatial point process, analogous to indistinguishable particles rather
+than persistent objects. The model exposes a point multiset: each occurrence has a
+position, but neither an object ID nor mutable state. Equal coordinate values must not
+be deduplicated, because separate generated occurrences may coincide.
 
-- Does each star have an identity such as `(baseCell, starIndex)`?
-- Are exact positions assigned immediately from that identity, with counts derived by
-  classifying positions?
-- Or are identities deterministically partitioned during hierarchical multinomial splits?
-- What stability is promised when density or another model parameter changes?
+This means position materialization must be canonical and query-order independent. If
+a hierarchy cell materializes positions because its count is below the threshold,
+queries of its descendants must obtain their positions by spatially restricting that
+same materialized set. They must not independently resample new positions from the
+descendant address.
 
-**Conclusion:** _Pending discussion._
+**Detail to settle during specification:** Define the canonical materialization rule so
+that independently querying a low-count descendant reaches the same materializing
+ancestor. The rule must depend only on hierarchy counts and addresses, never on which
+cells were previously queried or cached.
 
 ### Q3. What does `points(box, resolution)` return?
 
-**Status:** Open
+**Status:** Decided
 
 The term `resolution` could mean positional precision, hierarchy depth, world-space
 tolerance, or projected screen-space tolerance. An exact query may also have an
 arbitrarily large output.
 
-Questions to resolve:
+**Conclusion:** Remove `points(box, resolution)` from the foundational model API. The
+starfield has two interface layers:
 
-- Does the result contain exact points, aggregate cells, or both?
-- Is resolution expressed in world units or supplied as a hierarchy level?
-- What refinement/nesting property must hold between coarse and fine queries?
-- How are result-size or work budgets represented?
-- What does it mean to avoid generating points outside the requested region?
+1. The internal hierarchy layer accepts one canonical hierarchy box and returns:
 
-**Conclusion:** _Pending discussion._
+   ```ts
+   type HierarchyCellResult = {
+     count: number;
+     positions?: Coords[];
+   };
+   ```
+
+   `positions` is present exactly when the cell's population is below a fixed
+   materialization threshold. The threshold is a model/implementation constant chosen
+   from performance experiments, not a caller-selected resolution.
+
+2. The public query layer provides operations needed by visualizations and other
+   clients. It may accept arbitrary boxes or other region shapes, decompose them into
+   hierarchy queries, and return corresponding counts, materialized points, or aggregate
+   cells. These public operations should be added when concrete consumers establish
+   their required semantics. This layer has no random-number generation capability; it
+   can only compose facts obtained from the internal hierarchy layer.
+
+The internal layer is the source of deterministic hierarchical facts; the public layer
+adapts those facts without introducing new randomness.
 
 ---
 
@@ -94,7 +125,7 @@ Questions to resolve:
 
 ### Q4. What is the exact random-access diamond-square dependency graph?
 
-**Status:** Open
+**Status:** Deferred
 
 The conceptual recurrence in `DESIGN.md` does not yet define a complete algorithm.
 
@@ -111,39 +142,82 @@ Questions to resolve:
 **Required design artifact:** A worked coordinate example across at least two refinement
 levels, including negative coordinates and a boundary shared by neighboring query tiles.
 
-**Conclusion:** _Pending discussion._
+**Proposed direction:** Adapt the lattice rule from the earlier project's
+[`coordinate.js`](https://github.com/pdeblanc/dark-wizard-kiyoshi/blob/master/scripts/coordinate.js).
+For an integer lattice point `(x, y)`, find the smallest power of two `d` such that
+`x` and `y` are not both divisible by `2d`. This determines the point's introduction
+scale.
+
+- If `(x / d) + (y / d)` is even, the point is a square-step point. Its four parents
+  are the diagonal points at offsets `(±d, ±d)`, which lie on the next coarser lattice.
+- If `(x / d) + (y / d)` is odd, the point is a diamond-step point. Its four parents
+  are the axial points at offsets `(±d, 0)` and `(0, ±d)`. Some of these are square-step
+  points introduced at the same refinement scale.
+
+The dependency order is therefore lexicographic: coarser scales precede finer scales,
+and square-step values precede diamond-step values within a scale. This supplies an
+acyclic ordering even though not every dependency is strictly coarser.
+
+The starter model stops recursion at a fixed coarse lattice scale. Values at those
+coarse vertices are i.i.d. addressed random variables. Negative coordinates follow the
+same divisibility and parity rules.
+
+To extend the construction below the integer lattice, dyadic coordinates should have a
+canonical exact representation, such as integer numerators at a stated power-of-two
+scale with common factors of two normalized away. Floating-point coordinates must not
+determine lattice identity.
+
+**Still to specify:** The exact interpolation formula and displacement scale by level;
+the canonical representation of coarse-scale and dyadic coordinates; and worked
+examples confirming the parent rules and termination condition.
+
+These details are deferred to the terrain implementation experiment. The proposal is
+accepted as the starting construction; implementation must satisfy the stated DAG,
+boundary-consistency, canonical-coordinate, and termination requirements before Q4 can
+be marked validated.
 
 ### Q5. Is literal diamond-square the right terrain requirement?
 
-**Status:** Open
+**Status:** Decided
 
 An unbounded literal diamond-square construction may require awkward coarse boundary
 conditions or an infinite regress toward coarser levels. A different multiscale random
 field might preserve the intended Polis properties more cleanly.
 
-Questions to resolve:
+**Conclusion:** Use random-access diamond-square with a fixed coarsest lattice and i.i.d.
+coarse values for the initial implementation. This is a legitimate bounded-coarseness
+model and avoids making unbounded expansion a prerequisite for the first terrain
+experiment.
 
-- Is studying random-access diamond-square itself a project goal?
-- Or is the actual goal any correlated, continuous, hierarchical random field?
-- Would comparing two constructions be more informative than committing to one?
-
-**Conclusion:** _Pending discussion._
+An origin-anchored, expanding-powers-of-two construction analogous to the starfield may
+be investigated later. It is not required initially because extending a lattice field
+while preserving interpolation dependencies and boundary consistency is less direct
+than adding independent Poisson population in newly expanded area.
 
 ### Q6. What is the public terrain query API?
 
-**Status:** Open
+**Status:** Decided
 
 The design mentions terrain vertices, arbitrary visible regions, and raster rendering,
 but does not define the model operation used by the renderer.
 
-Questions to resolve:
+**Conclusion:** As with the starfield, separate the terrain model into an internal
+stochastic layer and a consumer-motivated API layer.
 
-- Can callers query only canonical vertices, or arbitrary world coordinates too?
-- Does the model provide interpolation?
-- Is the main rendering query a regular grid or a hierarchy-aligned tile?
-- Does one batch query share a per-query dependency cache?
+The internal layer exposes only the minimal recursive operations needed to define the
+field. Initially, its central operation is evaluation of a canonical terrain lattice
+vertex. It owns addressed random displacement, recursive dependency evaluation, and
+per-query memoization.
 
-**Conclusion:** _Pending discussion._
+The API layer adds operations only in response to concrete consumers, such as regular
+sample grids, hierarchy-aligned tiles, arbitrary-coordinate samples, or interpolation.
+It may batch and compose internal queries and share a query context, but it has no
+random-number generation capability. Therefore it cannot introduce new stochastic
+facts; all random choices must originate in canonically addressed internal queries.
+
+This capability boundary should be reflected structurally in the code—for example,
+the API layer receives a narrow internal-query interface rather than an RNG object or a
+general model context containing randomness.
 
 ---
 
@@ -151,10 +225,10 @@ Questions to resolve:
 
 ### Q7. What is the canonical random-address encoding?
 
-**Status:** Open
+**Status:** Deferred
 
 Reproducibility requires more than a conceptual tuple. The encoded identity of each
-random variable must be unambiguous and versioned.
+random variable must be unambiguous.
 
 Questions to resolve:
 
@@ -162,59 +236,145 @@ Questions to resolve:
 - How are signed integers, lengths, strings, and domain tags encoded?
 - How are seed strings converted to keys?
 - Which hash or pseudorandom-function primitive is used?
-- Is an RNG/model version included in the domain?
+**Conclusion so far:** Every model constructor accepts a seed of one shared project-wide
+`Seed` type. The precise representation remains to be chosen; a string is a plausible
+initial choice because it is opaque, easy to expose in the UI, and easy to serialize.
 
-**Conclusion:** _Pending discussion._
+Each model owns the decision about which addressed RNG it uses. We should nevertheless
+design one shared RNG implementation that is suitable for all initial models rather
+than gratuitously choosing a different primitive per model.
+
+The RNG's address input must be general enough for each model to express its own random
+variable identities. “Anything hashable” means values admitted by an explicit canonical
+hash-input contract; it must not mean arbitrary JavaScript objects serialized according
+to property insertion order or other incidental runtime behavior. Candidate contracts
+include a typed component sequence or a deliberately encoded byte/string key. The
+choice should account for hashing and allocation cost in high-volume terrain queries.
+
+No version value is supplied to individual RNG calls.
+
+**Still to decide:** The concrete `Seed` type, address value types and encoding, shared
+RNG primitive, and whether the model selects its RNG internally or receives an RNG
+implementation through construction for testing and experimentation.
+
+These choices are deferred until implementation can compare viable libraries and
+measure address-construction cost. The selected design must provide canonical hashing,
+support every initial model address, remain browser-compatible, and satisfy the
+determinism and monotonic-sampler tests recorded here.
 
 ### Q8. What reproducibility guarantee does the project make?
 
-**Status:** Open
+**Status:** Decided
 
 Possible guarantees range from deterministic behavior within one build to permanent
 cross-browser compatibility for all generated values.
 
-Questions to resolve:
+**Conclusion:** Do not build an explicit versioning scheme into the starter RNG,
+addresses, or individual queries. A model instance is initialized with its seed, and
+queries inherit all stochastic configuration from that model.
 
-- Must raw RNG vectors remain stable forever?
-- Must integer distribution outputs remain stable across algorithm upgrades?
-- Must floating-point terrain values be bit-identical across browser engines?
-- How are intentional compatibility-breaking changes versioned?
+If compatibility versions become necessary, expose version selection at model
+construction. A version identifies a model definition, which may include its RNG,
+address encoding, distribution algorithms, and other output-affecting behavior. It is
+never repeated on individual queries or random-number requests.
 
-**Conclusion:** _Pending discussion._
+For now, determinism means that the same implementation, model configuration, seed,
+and query produce the same result. Permanent compatibility across future algorithm
+changes is not yet promised. Focused golden tests may pin intentional behavior without
+turning every implementation detail into a permanent public compatibility contract.
 
 ### Q9. How should distribution parameters affect coupling and identity?
 
-**Status:** Open
+**Status:** Decided
 
 The design proposes that parameters generally reinterpret the same addressed quantile.
 This is useful in some cases but may be surprising or underspecified in others.
 
-Questions to resolve:
+**Conclusion:** A distribution sampler receives an address prefix rather than the
+identity of one indivisible random draw. It may derive as many canonically indexed child
+addresses as its algorithm requires, including bounded attempt numbers where relevant.
+It never consumes a shared mutable random stream.
 
-- Which parameter changes are intentionally coupled?
-- Is the latent addressed randomness separate from its distribution transform?
-- How do samplers with rejection or a variable number of random draws derive attempts?
-- Does changing distribution implementation preserve compatibility?
+Distribution parameters normally reinterpret randomness beneath the same prefix rather
+than becoming address components. For a sampler with an ordered mean parameter,
+sampling with the same seed and address prefix at a higher mean must never return a
+lower result. Analogous monotonicity may be specified for other naturally ordered
+parameters, such as binomial probability, when those samplers are introduced.
 
-**Conclusion:** _Pending discussion._
+The precise coupling construction is an implementation concern that must be documented
+and tested for each distribution. In particular, the bounded Poisson-like truncation or
+clamping rule must preserve monotonicity in its mean. If this cannot be achieved without
+unacceptable complexity or distortion, the requirement must be revisited explicitly
+rather than silently abandoned.
 
 ### Q10. Where is truncation allowed?
 
-**Status:** Open
+**Status:** Decided
 
 A truncated Poisson distribution does not produce the exact Poisson point process
 claimed by the starfield model. Bounded terrain displacement, on the other hand, can be
 part of the terrain's explicit definition.
 
-Questions to resolve:
+**Conclusion:** Primitive distributions with mathematically unbounded support must have
+bounded behavior in Polis. The initial utilities may define one project-wide truncation
+constant for each distinct distribution family. Finer per-model or per-query control is
+unnecessary until a concrete consumer requires it.
 
-- Must starfield counts use an exact Poisson distribution?
-- Which model distributions are deliberately bounded?
-- Is there any genuine need for a global truncation policy?
-- How are model truncation, numerical approximation, and operational safety factors
-  documented separately?
+For each distribution, the specification must distinguish among possible bounding
+rules—for example, conditioning on a bounded interval, clamping an unbounded variate,
+or defining a separate finite-support approximation. These choices have different
+effects on probabilities and monotone coupling and are not interchangeable merely
+because they use the same maximum-deviation constant. Both output bounds and worst-case
+sampler work must be finite if the intended guarantee covers computational behavior.
 
-**Conclusion:** _Pending discussion._
+As a consequence, the initial starfield is not an exact homogeneous Poisson point
+process. It is a bounded Poisson-like hierarchical point process whose precise count
+distribution is determined by the selected truncation rule. `DESIGN.md` must be revised
+to make this approximation explicit and avoid claiming exact Poisson laws.
+
+Certified or heuristic region bounds have no consumer in the starter project and are
+out of scope. The proposed `SAFETY_FACTOR` mechanism therefore needs neither design nor
+implementation now. It can return alongside a future feature that consumes such
+bounds.
+
+#### Follow-up: scale-dependent starfield split bounds
+
+**Status:** Deferred
+
+A fixed truncation rule for primitive binomial samples may not give a hard bound on
+starfield refinement depth. A nonempty cell could continue assigning more than the
+materialization threshold to one child through arbitrarily many subdivisions.
+
+A possible solution is a scale-dependent occupancy capacity that becomes stricter as
+cells become smaller. Given a parent population, child counts would follow a bounded
+conditional multinomial distribution constrained by:
+
+```text
+childCount[i] <= capacity(childScale)
+```
+
+The capacity schedule must preserve feasibility:
+
+```text
+parentCount <= sum(childCapacities)
+```
+
+and must eventually fall to the position-materialization threshold. This would provide
+a structural termination and per-cell occupancy bound, but it would suppress unusually
+dense fine-scale clusters and therefore become part of the starfield's mathematical
+definition.
+
+The model should specify the desired bounded joint child-count distribution first. A
+sequential implementation may then realize it with bounded binomial samples. This is a
+model-level policy, not merely a global binomial-utility setting.
+
+An alternative is to use ordinary bounded multinomial splits until a fixed maximum
+depth and then materialize every remaining occurrence regardless of count. That causes
+less distributional distortion but permits a larger worst-case materialization burst.
+
+**Conclusion:** Choose between a coherent scale-dependent capacity schedule and a
+maximum-depth materialization fallback during starfield implementation, when both can
+be evaluated against complexity and visual behavior.
 
 ---
 
@@ -222,22 +382,24 @@ Questions to resolve:
 
 ### Q11. What coordinate range does the starter project support?
 
-**Status:** Open
+**Status:** Decided
 
 JavaScript `number` viewport centers eventually lose local precision far from the
 origin, even if model addresses use exact integers.
 
-Questions to resolve:
+**Conclusion:** Use finite JavaScript `number` coordinates for the prototype, including
+dyadic terrain coordinates. Every finite binary floating-point value is itself dyadic,
+and coordinates reached from integer lattices through power-of-two subdivision remain
+exact while they stay within the supported precision and exponent range.
 
-- Is a documented safe numeric range acceptable for the starter project?
-- Should the viewport instead store an exact cell origin plus a floating local offset?
-- When, if ever, are `bigint` coordinates exposed through the UI?
-
-**Conclusion:** _Pending discussion._
+The starter project may document and enforce practical magnitude and refinement limits.
+It does not initially need `bigint` viewport controls or an exact-cell-plus-local-offset
+viewport representation. Model structural addresses must still be formed canonically;
+in particular, normalize `-0` and reject non-finite coordinates.
 
 ### Q12. What are the coordinate and hierarchy conventions?
 
-**Status:** Open
+**Status:** Decided
 
 The following terms need one consistent definition:
 
@@ -248,7 +410,35 @@ The following terms need one consistent definition:
 - zoom units, such as pixels per world unit;
 - relationship between viewport zoom and model resolution.
 
-**Conclusion:** _Pending discussion._
+**Conclusion:** World units form shared spatial language across models so later models
+can be composed in the same space. Individual models retain private structural
+addressing schemes behind their internal-query interfaces.
+
+For the starfield, a hierarchy box is a square characterized geometrically by its four
+edge coordinates. Its side length belongs to the supported power-of-two hierarchy, and
+each edge coordinate is an integer multiple of that side length. Boxes with equal side
+length need not have equal generation or dependency depth: some may be initial cells
+while others are introduced by outward expansion. Generation is not required in the
+box's identity if the internal model can derive its canonical dependencies from the
+geometry. Neither the box representation nor its addressing rules are exposed beyond
+the boundary between the internal model and its public API wrapper.
+
+The viewport is described in world-space area, or equivalently the square root of that
+area, together with its center and the screen aspect ratio. Resizing or reshaping the
+browser preserves the depicted world area; the world-space width and height change to
+match the new aspect ratio while keeping their product constant.
+
+The starfield resolver stops refining empty cells and materializes positions below its
+population threshold. It does not need a user-facing maximum refinement setting.
+However, if the implementation requires a hard worst-case termination bound, it may
+still need an internal maximum depth or bounded fallback: a nonempty cell can in
+principle remain above the threshold through arbitrarily many random splits.
+
+Terrain API queries at off-lattice coordinates use nearest-neighbor sampling on a
+specified lattice level. A level or lattice spacing is required because the union of
+all dyadic refinement lattices is dense and therefore has no nearest vertex to a
+general coordinate. The visualization derives the requested level from its world area
+and pixel dimensions. The terrain model may clamp this to a maximum refinement level.
 
 ---
 
@@ -256,49 +446,85 @@ The following terms need one consistent definition:
 
 ### Q13. How should complexity goals account for output size?
 
-**Status:** Open
+**Status:** Decided
 
 No query returning a million terrain samples or stars can take time polynomial only in
 the logarithm of resolution. The complexity goal should separate random-access overhead
 from the amount of requested output.
 
-Questions to resolve:
+**Conclusion:** State the model-query bound in terms of encoded input and output size.
+The amount of data returned by one model query, measured in bits, must be polynomially
+bounded in the size of that query's encoded input, also measured in bits. Relative to
+the numeric magnitude of binary-encoded coordinates, this may be described informally
+as polylogarithmic output growth.
 
-- Is the goal polylogarithmic navigation/dependency overhead plus output-sensitive work?
-- Which variables are included in each benchmark?
-- Should large-coordinate bit complexity be measured or merely documented?
+A query for a huge box may return a huge population count because the count is one
+scalar whose encoded bit length grows with the input coordinates' bit length. It must
+not return an explicit list proportional to that huge population. Starfield position
+lists remain bounded by the fixed materialization threshold; otherwise a query returns
+aggregate counts.
 
-**Conclusion:** _Pending discussion._
+The viewport is a consumer that may issue many individually bounded queries. For the
+prototype, it may query a star count for each pixel (or corresponding pixel footprint)
+and derive brightness from that count when zoomed far out. Work proportional to the
+number of output pixels is acceptable. Later rendering optimizations may aggregate
+pixels or use other levels of detail without changing the foundational model contract.
+
+This output-size requirement does not by itself prove a runtime bound. Runtime and
+dependency growth remain subjects for instrumentation and experiments, with any
+polylogarithmic runtime claim labeled conjectural until supported.
 
 ### Q14. What is the unit of instrumentation?
 
-**Status:** Open
+**Status:** Decided
 
 “Current render” is not a reliable model-query boundary because React may restart,
 batch, or cancel rendering work.
 
-Questions to resolve:
+**Conclusion:** Models may own caches whose lifetime spans multiple queries. This cache
+serves the memoization role previously assigned to a per-query context and is always an
+optimization: clearing it cannot change any result.
 
-- Does each explicit model call create a query context and return its own statistics?
-- How are batch queries distinguished from individual sample queries?
-- Are cold-cache and warm-cache measurements both exposed?
+Models expose `clearCache()` for benchmarks, correctness tests, and debugging. A cold
+benchmark clears the cache immediately before the measured query. Normal application
+code does not need to clear it for correctness.
 
-**Conclusion:** _Pending discussion._
+Statistics still belong to one explicit public model/API call rather than to the cache
+lifetime. Counters are reset or snapshotted at the query boundary and report both new
+work and cache hits for that call. A batch or viewport-facing API operation is one query
+when invoked as one operation, even if it performs many internal recursive lookups.
+
+Model-scoped caches use least-recently-used (LRU) eviction so exploration cannot cause
+unbounded memory growth. Each distinct cache type initially has a project-wide capacity
+constant. Cache capacity may later become a model-constructor argument if consumers or
+experiments require finer control. Eviction and capacity changes must remain
+semantically invisible.
 
 ### Q15. How does the browser avoid obsolete or blocking work?
 
-**Status:** Open
+**Status:** Decided
 
 Panning and zooming can invalidate expensive work before it finishes.
 
-Questions to resolve:
+**Conclusion:** Everything within a model is synchronous, including both its internal
+stochastic layer and its public API layer. A single model API call obeys the project's
+bounded-output contract and does not own an open-ended rendering or scheduling loop.
 
-- Are model queries synchronous initially, or designed to support cancellation?
-- Is work bounded per frame or query?
-- When should a Web Worker be introduced?
-- How does the UI reject a stale result after the viewport changes?
+Potentially large consumer operations—for example, issuing one query per viewport
+pixel—belong above the model API. The viewport owns that work and may initially perform
+it directly. Shared consumer-side coordination can later live under `helpers/`.
 
-**Conclusion:** _Pending discussion._
+Directory semantics are:
+
+- `utils/` contains lower-level abstractions on which models may depend;
+- `models/` defines synchronous procedural models and their APIs;
+- `helpers/` contains higher-level logic that consumes or coordinates models for views
+  or other applications.
+
+The starter project does not require cancellation, progressive scheduling, stale-result
+handling, or Web Workers. These mechanisms should be introduced only in response to
+observed slowness and the concrete source of that slowness. Model code must still remain
+independent of React and the DOM, as already required for reuse and testing.
 
 ---
 
@@ -306,7 +532,7 @@ Questions to resolve:
 
 ### Q16. Which implementation choices are requirements versus defaults?
 
-**Status:** Open
+**Status:** Decided
 
 React, Vite, Canvas, React Router, the proposed directory tree, and a shared viewport are
 reasonable defaults. Not all need to be architectural commitments.
@@ -318,24 +544,62 @@ Questions to resolve:
 - Should the shared viewport emerge from the first demo instead of preceding it?
 - Which distribution utilities are actually required for the first two models?
 
-**Conclusion:** _Pending discussion._
+**Conclusion:** Use Vite, React, React Router, TypeScript, and Canvas 2D for the starter.
+React Router and the exact source layout are implementation conveniences rather than
+architectural contracts.
+
+Use Canvas 2D for both initial model visualizations. The expected
+expensive work is procedural model evaluation on the CPU, so GPU rendering APIs are
+unlikely to address the first performance bottlenecks and would add unnecessary
+complexity.
+
+Interactive controls, text, labels, and other accessible UI elements should be ordinary
+React/HTML elements layered above or placed around the canvas rather than painted into
+it. Model code remains independent of Canvas, so the renderer can be replaced later if
+profiling shows a rendering bottleneck.
+
+The internal/public model separation, synchronous model API, and prohibition on RNG
+access in the public API layer are architectural requirements. Exact component names
+and directory details remain working defaults. Add `helpers/` for shared logic that
+sits above and coordinates models, while `utils/` remains below models.
+
+Develop the viewport alongside the starfield, then extract or generalize the shared
+behavior before implementing the terrain view. Implement only distribution utilities
+actually required by the initial models, preferring viable library primitives and
+testing Polis-owned adaptations and semantics.
 
 ### Q17. What belongs in the initial testing contract?
 
-**Status:** Open
+**Status:** Decided
 
-Questions to resolve:
+**Conclusion:** Test code and behavior owned by Polis. Prefer suitable library
+implementations for prototype infrastructure and mathematical primitives rather than
+reimplementing them merely to control their internals. Upstream libraries are
+responsible for testing their own implementation.
 
-- Which small set of RNG compatibility vectors is permanent?
-- Which behavior is tested through invariants or property-based tests instead?
-- How are negative coordinates and region boundaries covered?
-- How are deterministic statistical tests isolated from correctness tests?
+Polis tests must still cover integration behavior that the project relies upon,
+including configuration, adapters, canonical address construction, deterministic model
+invariants, cache independence, hierarchy consistency, negative coordinates, boundary
+behavior, and all project-specific bounds. If a library is wrapped to provide addressed
+sampling or other Polis semantics, test the wrapper and those semantics rather than
+duplicating the library's general test suite.
 
-**Conclusion:** _Pending discussion._
+Keep a small set of fixed RNG vectors only if Polis owns the RNG implementation or
+depends on an output contract not already guaranteed by the chosen library. Broad model
+snapshots are secondary to invariants. Statistical tests are needed only for
+distribution transformations or bounding rules implemented by Polis and remain
+separate from deterministic correctness tests.
+
+**Required sampler invariant:** For every sampler with an ordered mean parameter, hold
+the seed, address prefix, and all other parameters fixed. Increasing the mean must never
+decrease the sampled result. Tests should exercise many deterministic prefixes and
+parameter pairs, including values near truncation boundaries. Statistical tests remain
+separate: monotonicity is an exact pointwise property, not an approximate distributional
+check.
 
 ### Q18. Should reproducible and inspectable views be more ambitious?
 
-**Status:** Open
+**Status:** Decided
 
 Potential additions that closely support the project's purpose include:
 
@@ -346,19 +610,84 @@ Potential additions that closely support the project's purpose include:
 - a headless benchmark entry point;
 - comparison between alternative terrain constructions.
 
-Questions to resolve:
+**Conclusion:** Encode the seed, viewport center, and depicted world area in the URL so
+an observed world location can be reproduced and shared.
 
-- Which of these belong in the starter milestone?
-- Which should remain explicit future work?
+Both demos include optional debug overlays. The starfield overlay exposes hierarchy
+information near the cursor; the terrain overlay exposes relevant lattice dependencies
+near the cursor. The overlays are toggleable and follow pointer movement rather than
+attempting to visualize the entire viewport's dependency structure at once.
 
-**Conclusion:** _Pending discussion._
+The browser's initial performance display may remain small: queries issued per frame
+and frames per second. Detailed model counters remain available programmatically so
+tests and benchmarks can measure unique dependency evaluations, cache hits, and depth.
+Queries per frame and FPS describe interactive cost but cannot by themselves establish
+algorithmic dependency growth.
+
+Defer a dedicated browser benchmark page. Add small Node-based CLI benchmarks for
+order-of-magnitude measurements and complexity experiments. Node and browser timings
+are not identical, so report these as comparative estimates rather than browser
+performance guarantees.
+
+Canonical result hashes, automatic cache-comparison UI, and alternative terrain-model
+comparisons remain future work.
 
 ---
 
 ## Accepted decisions summary
 
-No decisions recorded yet.
+- **Q1:** Use four origin-anchored unit root cells, one per quadrant, with canonical
+  outward power-of-two expansions and inward subdivisions. Neighboring cells may both
+  own stars on a shared boundary; counts retain generating-cell ownership.
+- **Q2:** Stars are stateless, indistinguishable occurrences with no identity. The model
+  exposes a point multiset, and position materialization must be canonical across query
+  strategies.
+- **Q3:** Replace `points(box, resolution)` with a threshold-materializing internal cell
+  query plus consumer-driven public region-query APIs.
+- **Q5:** Initially implement random-access diamond-square with a fixed coarsest lattice
+  whose vertex values are i.i.d.; defer an outward-expanding coarse hierarchy.
+- **Q6:** Separate terrain into a minimal stochastic vertex-query layer and a
+  consumer-driven API layer. The API layer has no random-number generation capability.
+- **Q8:** Do not version individual addresses, RNG calls, or queries. If compatibility
+  versions are later needed, select them once when constructing a model.
+- **Q9:** Distribution samplers receive address prefixes and derive canonical child
+  addresses. Samplers with an ordered mean parameter must be pointwise monotone in that
+  mean for a fixed seed and prefix, including after bounding or truncation.
+- **Q10:** Give every unbounded primitive distribution explicitly bounded behavior,
+  initially using one truncation constant per distribution family. The starfield is
+  consequently Poisson-like rather than an exact Poisson point process. Defer safety
+  factors until a bounds-consuming feature exists.
+- **Q11:** Use finite JavaScript numbers, including exact-in-range dyadic terrain
+  coordinates, with documented prototype magnitude and refinement limits.
+- **Q12:** Share world units but keep model hierarchy addresses private. Identify
+  starfield boxes geometrically, preserve viewport world area across resize, and sample
+  off-lattice terrain at a requested nearest-neighbor lattice level.
+- **Q13:** Bound each query's encoded output size polynomially in its encoded input size;
+  large populations return scalar counts, while viewport work may scale with pixels.
+- **Q14:** Use model-scoped, correctness-independent caches with `clearCache()` for cold
+  benchmarks. Use LRU eviction with a global capacity per cache type, measure statistics
+  per explicit API call, and keep eviction invisible.
+- **Q15:** Keep all model APIs synchronous. Viewports own potentially large collections
+  of model calls, with reusable consumer coordination placed in `helpers/`. Defer
+  cancellation and workers until actual performance evidence calls for them.
+- **Q16:** Use the selected TypeScript/React/Vite/React Router/Canvas stack as starter
+  tooling, generalize the viewport after the starfield establishes its needs, and build
+  only currently required distribution utilities. Preserve architectural boundaries
+  without treating tooling or file layout as permanent contracts.
+- **Q17:** Test Polis-owned code, adapters, and invariants without duplicating upstream
+  library suites. Prefer viable libraries for prototype primitives, while testing all
+  project-specific determinism, bounds, hierarchy, and monotonicity contracts.
+- **Q18:** Put seed, center, and area in the URL; add toggleable cursor-following model
+  overlays and a minimal queries-per-frame/FPS display; use small Node CLI benchmarks
+  and defer a dedicated browser benchmark page.
 
 ## Deferred questions summary
 
-No questions deferred yet.
+- Browser benchmark page, canonical result hashes, cache-comparison UI, and alternative
+  terrain-model comparisons are deferred until concrete needs arise.
+- **Q4 details:** Validate the terrain recurrence, interpolation, displacement scaling,
+  dyadic representation, worked dependencies, and termination during implementation.
+- **Q7 details:** Select and benchmark the seed type, canonical address encoding, and
+  shared addressed RNG during implementation.
+- **Q10 follow-up:** Choose and validate either a scale-dependent starfield capacity
+  schedule or a maximum-depth materialization fallback during implementation.
