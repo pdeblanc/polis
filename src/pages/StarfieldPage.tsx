@@ -9,8 +9,7 @@ export function StarfieldPage() {
       title="Bounded Poisson-like starfield"
       introduction={
         <p>
-          Move the cursor across the viewport to inspect its nested canonical hierarchy
-          cells.
+          Navigate a deterministic point field and inspect its canonical query dependencies.
         </p>
       }
     >

@@ -15,6 +15,7 @@
   "dependencies": {
     "@stdlib/stats-base-dists-binomial-quantile": "^0.2.3",
     "@stdlib/stats-base-dists-poisson-quantile": "^0.2.3",
+    "lru-cache": "^11.5.2",
     "rapidhash-js": "^3.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

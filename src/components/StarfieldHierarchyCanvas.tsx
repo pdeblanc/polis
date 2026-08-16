@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -11,12 +12,16 @@ import {
   type HierarchyCell,
   type Point2D,
 } from "../models/starfield/hierarchy";
+import { Starfield } from "../models/starfield/starfield";
 
 const INITIAL_VIEW_AREA = 64;
 const MIN_CELL_PIXELS = 8;
 const KEYBOARD_PAN_RATE = 0.8;
 const KEYBOARD_ZOOM_RATE = 1.5;
 const WHEEL_ZOOM_RATE = 0.0033;
+const RENDER_CELL_PIXELS = 16;
+const STAR_RADIUS = 0.025;
+const DEFAULT_SEED = "polis-demo-1";
 
 type Size = { readonly width: number; readonly height: number };
 type ViewportState = {
@@ -39,6 +44,7 @@ const INITIAL_VIEWPORT: ViewportState = {
 
 export function StarfieldHierarchyCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const starfield = useMemo(() => new Starfield(DEFAULT_SEED), []);
   const viewportRef = useRef(INITIAL_VIEWPORT);
   const pointersRef = useRef(new Map<number, ScreenPoint>());
   const pinchRef = useRef<Pinch | undefined>(undefined);
@@ -164,8 +170,9 @@ export function StarfieldHierarchyCanvas() {
     if (context === null) return;
     context.setTransform(scale, 0, 0, scale, 0, 0);
     drawBackground(context, size, world, viewport);
+    drawStarfield(context, size, world, viewport, starfield);
     if (showHierarchy) drawHierarchy(context, size, world, viewport, cursor);
-  }, [cursor, showHierarchy, size, viewport, world]);
+  }, [cursor, showHierarchy, size, starfield, viewport, world]);
 
   function commitViewport(next: ViewportState) {
     viewportRef.current = next;
@@ -381,6 +388,86 @@ function drawHierarchy(
   context.beginPath();
   context.arc(pointer.x, pointer.y, 2.5, 0, Math.PI * 2);
   context.fill();
+}
+
+function drawStarfield(
+  context: CanvasRenderingContext2D,
+  size: Size,
+  world: Size,
+  viewport: ViewportState,
+  starfield: Starfield,
+) {
+  const worldPerPixel = world.width / size.width;
+  const edgeLength =
+    2 ** Math.ceil(Math.log2(worldPerPixel * RENDER_CELL_PIXELS));
+  const maxX = viewport.centerX + world.width / 2;
+  const maxY = viewport.centerY + world.height / 2;
+  const startX =
+    Math.floor((viewport.centerX - world.width / 2) / edgeLength) * edgeLength;
+  const startY =
+    Math.floor((viewport.centerY - world.height / 2) / edgeLength) * edgeLength;
+
+  for (let cellX = startX; cellX < maxX; cellX += edgeLength) {
+    for (let cellY = startY; cellY < maxY; cellY += edgeLength) {
+      const cell = { minX: cellX, minY: cellY, edgeLength };
+      const result = starfield.queryCell(cell);
+      if (result.positions === undefined) {
+        drawAggregateCell(context, size, world, viewport, cell, result.count);
+      } else {
+        drawPositions(context, size, world, viewport, result.positions);
+      }
+    }
+  }
+}
+
+function drawPositions(
+  context: CanvasRenderingContext2D,
+  size: Size,
+  world: Size,
+  viewport: ViewportState,
+  positions: readonly Point2D[],
+) {
+  const radiusPixels = (STAR_RADIUS / world.width) * size.width;
+  const areaPixels = Math.PI * radiusPixels ** 2;
+
+  if (areaPixels <= 1) {
+    context.fillStyle = `rgb(245 248 255 / ${areaPixels})`;
+    for (const position of positions) {
+      const screen = worldToScreen(position, size, world, viewport);
+      context.fillRect(Math.floor(screen.x), Math.floor(screen.y), 1, 1);
+    }
+    return;
+  }
+
+  context.fillStyle = "#f5f8ff";
+  context.beginPath();
+  for (const position of positions) {
+    const screen = worldToScreen(position, size, world, viewport);
+    context.moveTo(screen.x + radiusPixels, screen.y);
+    context.arc(screen.x, screen.y, radiusPixels, 0, Math.PI * 2);
+  }
+  context.fill();
+}
+
+function drawAggregateCell(
+  context: CanvasRenderingContext2D,
+  size: Size,
+  world: Size,
+  viewport: ViewportState,
+  cell: HierarchyCell,
+  count: number,
+) {
+  const northwest = worldToScreen(
+    { x: cell.minX, y: cell.minY + cell.edgeLength },
+    size,
+    world,
+    viewport,
+  );
+  const cellPixels = (cell.edgeLength / world.width) * size.width;
+  const starArea = Math.PI * STAR_RADIUS ** 2;
+  const brightness = 1 - Math.exp(-(count * starArea) / cell.edgeLength ** 2);
+  context.fillStyle = `rgb(237 243 255 / ${brightness})`;
+  context.fillRect(northwest.x, northwest.y, cellPixels, cellPixels);
 }
 
 function dependencyChain(requestedCell: HierarchyCell): HierarchyCell[] {
