@@ -10,36 +10,51 @@ const ROOT: HierarchyCell = { minX: 0, minY: 0, edgeLength: 1 };
 
 describe('Starfield', () => {
   it('returns child populations that sum to their parent', () => {
-    const result = new Starfield('population-sum').queryCell({
+    const result = new Starfield('population-sum').querySubdivision({
       minX: 0,
       minY: 0,
       edgeLength: 8,
     });
 
-    expect(sum(result.childCounts)).toBe(result.count);
+    expect(sum(result.children.map((child) => child.count))).toBe(result.count);
   });
 
   it('gives child queries the counts owned by their parent', () => {
     const starfield = new Starfield('child-consistency');
-    const parent = starfield.queryCell(ROOT);
+    const parent = starfield.querySubdivision(ROOT);
     const children = immediateChildren(ROOT).map((cell) => starfield.queryCell(cell));
 
-    expect(children.map((child) => child.count)).toEqual(parent.childCounts);
+    expect(children.map((child) => child.count)).toEqual(
+      parent.children.map((child) => child.count),
+    );
   });
 
   it('preserves the smaller cell during outward expansion', () => {
     const starfield = new Starfield('expansion-consistency');
     const root = starfield.queryCell(ROOT);
-    const expansion = starfield.queryCell({ minX: 0, minY: 0, edgeLength: 2 });
+    const expansion = starfield.querySubdivision({ minX: 0, minY: 0, edgeLength: 2 });
 
-    expect(expansion.childCounts[0]).toBe(root.count);
+    expect(expansion.children[0].count).toBe(root.count);
+  });
+
+  it('does not subdivide the requested cell for a whole-cell query', () => {
+    const starfield = new Starfield('whole-cell-only');
+    const cell = { minX: 8, minY: 0, edgeLength: 8 } as const;
+
+    const whole = starfield.queryCell(cell);
+    expect(starfield.getLastQueryStats().populationSplits).toBe(0);
+
+    const subdivision = starfield.querySubdivision(cell);
+    expect(subdivision.count).toBe(whole.count);
+    expect(starfield.getLastQueryStats().populationSplits).toBe(1);
   });
 
   it('classifies materialized positions into canonical child cells', () => {
-    const result = new Starfield('position-classification').queryCell(ROOT);
+    const result = new Starfield('position-classification').querySubdivision(ROOT);
 
     expect(result.positions).toBeDefined();
-    expect(classify(ROOT, result)).toEqual(result.childCounts);
+    expect(classify(ROOT, result)).toEqual(result.children.map((child) => child.count));
+    expect(result.children.every((child) => child.positions !== undefined)).toBe(true);
     expect(result.positions?.length).toBe(result.count);
     expect(result.positions?.length).toBeLessThanOrEqual(STAR_MATERIALIZATION_THRESHOLD);
   });
