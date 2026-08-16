@@ -241,7 +241,7 @@ general model context containing randomness.
 
 ### Q7. What is the canonical random-address encoding?
 
-**Status:** Deferred
+**Status:** Validated
 
 Reproducibility requires more than a conceptual tuple. The encoded identity of each
 random variable must be unambiguous.
@@ -269,14 +269,23 @@ choice should account for hashing and allocation cost in high-volume terrain que
 
 No version value is supplied to individual RNG calls.
 
-**Still to decide:** The concrete `Seed` type, address value types and encoding, shared
-RNG primitive, and whether the model selects its RNG internally or receives an RNG
-implementation through construction for testing and experimentation.
+**Validated implementation:** `Seed` is an opaque string. Canonical address components
+are strings, finite JavaScript numbers, `bigint` values, and byte arrays. Their binary
+encoding uses explicit type tags and component lengths, normalizes `-0`, rejects
+malformed Unicode and non-finite numbers, and returns a `Uint8Array`.
 
-These choices are deferred until implementation can compare viable libraries and
-measure address-construction cost. The selected design must provide canonical hashing,
-support every initial model address, remain browser-compatible, and satisfy the
-determinism and monotonic-sampler tests recorded here.
+The shared synchronous RNG uses the version-specific RapidHash v3.0 entry point. It
+derives a 64-bit numeric seed by hashing `['polis.seed', userSeed]` with a fixed project
+constant, then uses that numeric seed to hash canonical model addresses. A seed-hash
+collision may intentionally produce identical worlds; this negligible non-cryptographic
+risk is accepted for the prototype.
+
+Local Node 22 benchmarks on Apple Silicon measured complete encode-and-hash throughput
+of about 0.72 million starfield-shaped addresses per second and 0.90 million
+terrain-shaped addresses per second. XXH64/WASM was about 1.5 times faster end to end,
+but canonical encoding dominated total cost and RapidHash avoided asynchronous WASM
+initialization. Reconsider the encoder or hash only if profiling identifies this path as
+a material bottleneck.
 
 ### Q8. What reproducibility guarantee does the project make?
 
@@ -667,6 +676,9 @@ comparisons remain future work.
   whose vertex values are i.i.d.; defer an outward-expanding coarse hierarchy.
 - **Q6:** Separate terrain into a minimal stochastic vertex-query layer and a
   consumer-driven API layer. The API layer has no random-number generation capability.
+- **Q7:** Use opaque string seeds, canonical typed binary addresses, and synchronous
+  RapidHash v3.0. Derive its 64-bit seed from the same hash under the `polis.seed`
+  domain and a fixed project constant.
 - **Q8:** Do not version individual addresses, RNG calls, or queries. If compatibility
   versions are later needed, select them once when constructing a model.
 - **Q9:** Distribution samplers receive address prefixes and derive canonical child
@@ -706,8 +718,6 @@ comparisons remain future work.
   terrain-model comparisons are deferred until concrete needs arise.
 - **Q4 details:** Validate the terrain recurrence, interpolation, displacement scaling,
   dyadic representation, worked dependencies, and termination during implementation.
-- **Q7 details:** Select and benchmark the seed type, canonical address encoding, and
-  shared addressed RNG during implementation.
 - **Q10 follow-up:** Instrument natural threshold recursion first. Revisit a
   scale-dependent capacity schedule or maximum-depth materialization fallback only if
   a hard starfield query-depth bound becomes a concrete requirement.

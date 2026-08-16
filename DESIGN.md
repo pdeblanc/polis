@@ -127,8 +127,8 @@ src/
 
   utils/
     rng/
-      randomBits.ts
       address.ts
+      addressedRandom.ts
       ...
 
     distributions/
@@ -193,7 +193,7 @@ Conversion from model values to pixels belongs in `components/` or the relevant 
 
 Polis must not use a conventional mutable random-number stream as its fundamental source of randomness.
 
-Every model constructor accepts a seed of one shared project-wide `Seed` type. The concrete representation will be selected during implementation; a string is the leading initial option because it is opaque, serializable, and easy to expose in the UI. A model owns its choice of addressed RNG, although the initial models should share one implementation if a suitable primitive is available.
+Every model constructor accepts a seed of one shared project-wide `Seed` type, represented initially as an opaque string. The initial models share a synchronous addressed RNG based on the version-specific RapidHash v3.0 entry point.
 
 Instead, random values are addressed.
 
@@ -203,7 +203,7 @@ Conceptually:
 R(\text{seed},\text{address})\rightarrow\text{random bits}.
 ]
 
-For example, subject to the concrete RNG interface selected during implementation:
+For example:
 
 ```ts
 randomU64(seed, address): bigint
@@ -221,7 +221,9 @@ starfield / cell / edges (-4, -2, -2, 0) / count
 terrain / level 12 / vertex (938, 421) / displacement
 ```
 
-The RNG accepts an address prefix general enough for each model to describe its random-variable identities. Its hash-input contract must be explicit and canonical; arbitrary JavaScript object serialization is not acceptable. The concrete address representation and encoding should be selected with both correctness and high-volume terrain-query allocation cost in mind.
+The RNG accepts an address prefix general enough for each model to describe its random-variable identities. Address components may be strings, finite JavaScript numbers, `bigint` values, or byte arrays. The canonical encoder uses explicit type tags and lengths, normalizes `-0`, rejects malformed Unicode and non-finite numbers, and produces a `Uint8Array` for hashing. Arbitrary JavaScript object serialization is not acceptable.
+
+The user seed string is encoded under a `polis.seed` domain and hashed with RapidHash and a fixed project constant. The resulting 64-bit value seeds RapidHash for model-address queries. A 64-bit collision between user seeds may produce identical worlds; this is an accepted non-cryptographic limitation.
 
 Model-specific addresses should use domain separation so that unrelated random variables cannot accidentally share the same underlying random value.
 
