@@ -332,6 +332,45 @@ clamping rule must preserve monotonicity in its mean. If this cannot be achieved
 unacceptable complexity or distortion, the requirement must be revisited explicitly
 rather than silently abandoned.
 
+#### Follow-up: large-parameter discrete samplers
+
+**Status:** Decided for the prototype
+
+The inverse-CDF implementations used initially become unusually expensive at large
+Poisson means and binomial trial counts. Above a fixed threshold, approximate either
+distribution by rounding a normal variate with the same mean and variance. Begin with a
+threshold of `1000` for both families and retain the normal sampler's six-standard-
+deviation clamp. At this threshold the clamped approximation remains strictly inside
+the distributions' nonnegative finite support where applicable.
+
+Preserve pointwise parameter monotonicity across the algorithm switch by anchoring the
+approximation to the exact quantile at the threshold. For a parameter above the
+threshold, return the greater of the threshold's exact quantile and the rounded normal
+approximation. The rounded normal expression is itself monotone above the threshold
+when driven by the same clamped standard-normal quantile. Tests should cover the switch
+boundary as well as distributional error and throughput.
+
+Rounding error is not independent of the normal sample, so the common `1/12`
+quantization variance must not be justified by an independent-noise argument. Directly
+summing the probability in each unit-width rounding cell, or equivalently using the
+Poisson-summation expansion for a quantized Gaussian, nevertheless shows that rounding
+a sufficiently broad normal adds approximately `1/12` to its variance; the covariance
+is included, and the remaining lattice corrections decay extremely quickly with the
+normal variance. At the initial threshold this is about `0.0083%` of Poisson variance
+and `0.033%` of an even-probability binomial's variance. Do not rescale the normal for
+this negligible effect initially; the Poisson approximation's missing skew is a
+materially larger source of error. Reconsider variance correction only if empirical
+tests show a consumer-relevant discrepancy.
+
+If greater Poisson fidelity is needed, first investigate the leading Cornish--Fisher
+skewness correction `(z * z - 1) / 6`. It is independent of the mean and therefore does
+not disturb the approximation branch's mean-monotonicity. Faster inverse-Poisson
+methods such as Mike Giles's Algorithm 955 are another future option. For binomial
+sampling, established rejection algorithms may be fast but consume a variable number
+of random draws and do not naturally provide the addressed inverse-quantile coupling
+required here. Port and validate a more sophisticated inverse algorithm only if the
+simple approximation proves inadequate.
+
 ### Q10. Where is truncation allowed?
 
 **Status:** Decided
