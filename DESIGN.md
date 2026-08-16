@@ -774,17 +774,3 @@ A reasonable first implementation sequence is:
 10. Add deterministic correctness tests, bound tests, sampler monotonicity tests, and CLI query-complexity experiments throughout implementation.
 
 At the end of this milestone, Polis should already demonstrate its central idea: a user can navigate around an apparently much larger world while the browser computes only the pieces needed for the current query, and every piece remains reproducible solely from its world seed and hierarchical address.
-
----
-
-## Temporary revision notes
-
-These notes are included to help review this revision and should be removed when the updated design is finalized.
-
-- The starfield is now explicitly bounded and Poisson-like rather than an exact homogeneous Poisson point process.
-- Both models now distinguish an internal stochastic layer from a synchronous, consumer-driven public API layer with no RNG capability.
-- The starfield hierarchy now has four origin-anchored unit cells, outward expansion, parent-owned immediate child counts, and threshold-based position materialization discovered through immediate-ancestor recursion.
-- Terrain now starts from a fixed i.i.d. coarse lattice; exact recurrence details will be validated during implementation.
-- RNG/address representation, possible future hard starfield termination bounds, and some terrain recurrence details remain intentional implementation experiments with acceptance criteria recorded in `DESIGN_QA.md`.
-- Model caches are bounded LRUs, viewport scale is expressed as depicted world area, and reproducible viewport state is encoded in the URL.
-- The starter UI uses Canvas 2D with HTML overlays, while small Node CLI programs provide initial complexity benchmarks.

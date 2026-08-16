@@ -1,12 +1,12 @@
 # Polis Design Q&A and Decision Log
 
-This document records questions, feedback, and decisions that arise while reviewing
-[`DESIGN.md`](./DESIGN.md). It is a working companion to the design rather than a
-replacement for it.
+This document records questions, feedback, and decisions from the review of
+[`DESIGN.md`](./DESIGN.md). The accepted conclusions have been incorporated into the
+design. This file remains as rationale and a record of deferred implementation
+questions; `DESIGN.md` is the normative specification if the two documents diverge.
 
-We will discuss a small number of issues at a time. Once an issue is resolved, its
-conclusion should be recorded here and the relevant part of `DESIGN.md` should
-eventually be updated. Decisions that remain experimental should say so explicitly.
+Future decisions should be recorded here and incorporated into `DESIGN.md` when they
+change the specification. Decisions that remain experimental should say so explicitly.
 
 ## Status key
 
@@ -177,10 +177,11 @@ The starter model stops recursion at a fixed coarse lattice scale. Values at tho
 coarse vertices are i.i.d. addressed random variables. Negative coordinates follow the
 same divisibility and parity rules.
 
-To extend the construction below the integer lattice, dyadic coordinates should have a
-canonical exact representation, such as integer numerators at a stated power-of-two
-scale with common factors of two normalized away. Floating-point coordinates must not
-determine lattice identity.
+To extend the construction below the integer lattice, dyadic coordinates need a
+canonical representation. The prototype may use finite JavaScript numbers because
+power-of-two subdivision remains exact within documented magnitude and refinement
+limits. Addressing must normalize `-0`, reject non-finite values, and hash a canonical
+representation rather than incidental decimal formatting.
 
 **Still to specify:** The exact interpolation formula and displacement scale by level;
 the canonical representation of coarse-scale and dyadic coordinates; and worked
@@ -344,8 +345,8 @@ sampler work must be finite if the intended guarantee covers computational behav
 
 As a consequence, the initial starfield is not an exact homogeneous Poisson point
 process. It is a bounded Poisson-like hierarchical point process whose precise count
-distribution is determined by the selected truncation rule. `DESIGN.md` must be revised
-to make this approximation explicit and avoid claiming exact Poisson laws.
+distribution is determined by the selected truncation rule. `DESIGN.md` has been
+revised to make this approximation explicit and avoid claiming exact Poisson laws.
 
 Certified or heuristic region bounds have no consumer in the starter project and are
 out of scope. The proposed `SAFETY_FACTOR` mechanism therefore needs neither design nor
