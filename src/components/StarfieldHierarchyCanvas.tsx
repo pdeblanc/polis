@@ -58,9 +58,12 @@ export function StarfieldHierarchyCanvas() {
       />
       <div className="hierarchy-readout">
         <span>
-          x {formatCoordinate(cursor.x)} · y {formatCoordinate(cursor.y)}
+          x {formatCoordinateAtScale(cursor.x, world.width)} · y{' '}
+          {formatCoordinateAtScale(cursor.y, world.height)}
         </span>
-        <span>area {formatCoordinate(state.area)}</span>
+        <span>
+          width {formatCoordinate(world.width)} · height {formatCoordinate(world.height)}
+        </span>
         <label>
           <input
             type="checkbox"
@@ -241,5 +244,11 @@ function drawCell(
 }
 
 function formatCoordinate(value: number): string {
+  if (value !== 0 && Math.abs(value) < 0.001) return value.toExponential(3);
   return value.toFixed(3).replace('-0.000', '0.000');
+}
+
+function formatCoordinateAtScale(value: number, span: number): string {
+  const decimalPlaces = Math.max(0, Math.ceil(-Math.log10(span)) + 3);
+  return value.toFixed(decimalPlaces).replace(/^-0(?:\.0+)?$/, (zero) => zero.slice(1));
 }
