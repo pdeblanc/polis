@@ -74,16 +74,11 @@ than persistent objects. The model exposes a point multiset: each occurrence has
 position, but neither an object ID nor mutable state. Equal coordinate values must not
 be deduplicated, because separate generated occurrences may coincide.
 
-This means position materialization must be canonical and query-order independent. If
-a hierarchy cell materializes positions because its count is below the threshold,
-queries of its descendants must obtain their positions by spatially restricting that
-same materialized set. They must not independently resample new positions from the
-descendant address.
-
-**Detail to settle during specification:** Define the canonical materialization rule so
-that independently querying a low-count descendant reaches the same materializing
-ancestor. The rule must depend only on hierarchy counts and addresses, never on which
-cells were previously queried or cached.
+Position materialization must be canonical and query-order independent. Each primitive
+cell query recursively evaluates its immediate canonical dependency ancestor. A
+descendant therefore discovers an ancestor's materialized point multiset through
+ordinary recursion and filters it spatially; no separate materializing-ancestor search
+or identity scheme is needed.
 
 ### Q3. What does `points(box, resolution)` return?
 
@@ -99,15 +94,23 @@ starfield has two interface layers:
 1. The internal hierarchy layer accepts one canonical hierarchy box and returns:
 
    ```ts
-   type HierarchyCellResult = {
-     count: number;
-     positions?: Coords[];
+   type StarfieldCellResult = {
+     count: PopulationCount;
+     childCounts: readonly [
+       PopulationCount,
+       PopulationCount,
+       PopulationCount,
+       PopulationCount,
+     ];
+     positions?: readonly Coords[];
    };
    ```
 
-   `positions` is present exactly when the cell's population is below a fixed
-   materialization threshold. The threshold is a model/implementation constant chosen
-   from performance experiments, not a caller-selected resolution.
+   The four immediate child counts are a stochastic fact owned by the queried parent.
+   `count` is their sum but may be returned for convenience. `positions` is present
+   when the cell has materialized its population or inherited materialized positions
+   from an ancestor. The threshold is a model/implementation constant chosen from
+   performance experiments, not a caller-selected resolution.
 
 2. The public query layer provides operations needed by visualizations and other
    clients. It may accept arbitrary boxes or other region shapes, decompose them into
@@ -118,6 +121,18 @@ starfield has two interface layers:
 
 The internal layer is the source of deterministic hierarchical facts; the public layer
 adapts those facts without introducing new randomness.
+
+The recursion rules are:
+
+- an outward expansion uses the smaller dependency ancestor as one child and samples
+  the other three child populations; materialization preserves existing-child positions
+  and materializes new occurrences within their respective new child boxes;
+- an inward refinement reads its count from the larger ancestor's `childCounts`;
+- a low-count inherited population materializes uniformly inside its box;
+- materialized positions determine further child counts by canonical spatial
+  classification; and
+- an unmaterialized parent owns the addressed bounded multinomial/binomial split that
+  determines its `childCounts`.
 
 ---
 
@@ -372,9 +387,11 @@ An alternative is to use ordinary bounded multinomial splits until a fixed maxim
 depth and then materialize every remaining occurrence regardless of count. That causes
 less distributional distortion but permits a larger worst-case materialization burst.
 
-**Conclusion:** Choose between a coherent scale-dependent capacity schedule and a
-maximum-depth materialization fallback during starfield implementation, when both can
-be evaluated against complexity and visual behavior.
+**Conclusion:** Begin with the natural threshold-based recursion and instrument its
+observed depth. Do not require either bounding mechanism before implementation starts.
+Experiments can characterize practical behavior but cannot establish a worst-case
+termination proof. Revisit a capacity schedule or maximum-depth fallback if a hard
+query bound becomes a concrete requirement.
 
 ---
 
@@ -429,10 +446,10 @@ browser preserves the depicted world area; the world-space width and height chan
 match the new aspect ratio while keeping their product constant.
 
 The starfield resolver stops refining empty cells and materializes positions below its
-population threshold. It does not need a user-facing maximum refinement setting.
-However, if the implementation requires a hard worst-case termination bound, it may
-still need an internal maximum depth or bounded fallback: a nonempty cell can in
-principle remain above the threshold through arbitrarily many random splits.
+population threshold. It does not need a user-facing maximum refinement setting. The
+initial natural recursion has no proven hard depth bound; a nonempty cell can in
+principle remain above the threshold through arbitrarily many random splits. A future
+hard-bound requirement would require a capacity schedule or bounded fallback.
 
 Terrain API queries at off-lattice coordinates use nearest-neighbor sampling on a
 specified lattice level. A level or lattice spacing is required because the union of
@@ -640,10 +657,11 @@ comparisons remain future work.
   outward power-of-two expansions and inward subdivisions. Neighboring cells may both
   own stars on a shared boundary; counts retain generating-cell ownership.
 - **Q2:** Stars are stateless, indistinguishable occurrences with no identity. The model
-  exposes a point multiset, and position materialization must be canonical across query
-  strategies.
-- **Q3:** Replace `points(box, resolution)` with a threshold-materializing internal cell
-  query plus consumer-driven public region-query APIs.
+  exposes a point multiset, and descendants discover canonical materialized positions
+  through immediate-ancestor recursion.
+- **Q3:** Replace `points(box, resolution)` with an internal cell query returning the
+  parent-owned four-way child split and optional materialized positions, plus
+  consumer-driven public region-query APIs.
 - **Q5:** Initially implement random-access diamond-square with a fixed coarsest lattice
   whose vertex values are i.i.d.; defer an outward-expanding coarse hierarchy.
 - **Q6:** Separate terrain into a minimal stochastic vertex-query layer and a
@@ -689,5 +707,6 @@ comparisons remain future work.
   dyadic representation, worked dependencies, and termination during implementation.
 - **Q7 details:** Select and benchmark the seed type, canonical address encoding, and
   shared addressed RNG during implementation.
-- **Q10 follow-up:** Choose and validate either a scale-dependent starfield capacity
-  schedule or a maximum-depth materialization fallback during implementation.
+- **Q10 follow-up:** Instrument natural threshold recursion first. Revisit a
+  scale-dependent capacity schedule or maximum-depth materialization fallback only if
+  a hard starfield query-depth bound becomes a concrete requirement.

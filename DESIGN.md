@@ -274,7 +274,7 @@ const MAX_DEVIATIONS = 6;
 
 The exact bounding rule must be documented for each distribution. Conditioning, clamping, and finite-support approximation have different effects and must not be treated as interchangeable merely because they use the same constant.
 
-For samplers with an ordered mean parameter, fixing the seed, address prefix, and all other parameters while increasing the mean must never decrease the result. Bounding rules must preserve this pointwise monotonicity. Analogous monotonicity should be specified for other naturally ordered parameters when those samplers are introduced.
+For samplers with an ordered mean parameter, fixing the seed, address prefix, and all other parameters while increasing the mean must never decrease the result. Bounding rules must preserve this pointwise monotonicity. Analogous monotonicity should be specified for other naturally ordered parameters when those samplers are introduced. If this requirement makes a useful bounded distribution substantially more difficult or distorts it unacceptably, bring the tradeoff back for design review rather than silently weakening the distribution or contorting the implementation.
 
 Certified or heuristic region bounds have no consumer in the starter project. Safety factors for such bounds are therefore out of scope and can be designed alongside a future feature that consumes them.
 
@@ -308,9 +308,18 @@ Inward refinement subdivides a box into four equal children. Its population is d
 
 Neighboring hierarchy cells may both own occurrences on a shared geometric boundary. Counts retain generating-cell ownership and are combined additively. Returned coordinates form a multiset and must not be deduplicated.
 
-Stars are stateless, indistinguishable occurrences and have no identity. When a cell's count is at or below a fixed materialization threshold, the internal model materializes positions rather than continuing to subdivide. Position materialization must be canonical and query-order independent: a descendant query must restrict the same materialized point multiset rather than resampling positions from a different address.
+Stars are stateless, indistinguishable occurrences and have no identity. When a cell's inherited count is at or below a fixed materialization threshold, the internal model materializes positions uniformly inside that cell rather than stochastically subdividing it further.
 
-The implementation must choose and validate a hard termination policy. Candidate policies are a scale-dependent child occupancy capacity that eventually reaches the materialization threshold, or a fixed maximum depth that materializes every remaining occurrence. A capacity schedule must always leave enough total child capacity for the parent count and becomes part of the model's statistical definition.
+Every box obtains its population through its immediate canonical dependency ancestor:
+
+- If the dependency ancestor is smaller than the requested box, evaluation performs an outward-expansion step. The smaller box supplies one child population, and three bounded Poisson-like samples supply the other child populations. Together they determine the requested box's population and immediate subdivision. If the expanded box is eligible for materialization, preserve any positions already materialized in the existing child, materialize each new child within its own bounds, and return their union; never rematerialize the existing population across the larger box.
+- If the dependency ancestor is larger than the requested box, its query result supplies the requested box's count through the appropriate entry in `childCounts`. If the ancestor has materialized positions, filter those positions into the requested box. Otherwise, materialize uniformly inside the requested box when its inherited count is at or below the threshold.
+
+Once a box has materialized positions, its four child counts are determined by classifying those positions into the immediate child cells. Boundary classification within one parent must use a canonical tie-breaking rule so each occurrence contributes to exactly one child. If a box has not materialized, its immediate child counts are a canonical bounded multinomial/binomial stochastic fact addressed to that parent box.
+
+This immediate-ancestor recursion makes the first sufficiently small population the materialization point without requiring a separate ancestor search. Querying a descendant discovers any materialized ancestor through ordinary recursion and filters the same point multiset, so query strategy and cache state cannot change positions.
+
+The first implementation should use this natural threshold-based scheme and instrument observed recursion depth. It need not select a scale-dependent occupancy cap or maximum-depth fallback before implementation begins. This does not establish a hard worst-case termination bound: experiments can characterize practical behavior but cannot prove the absence of arbitrarily deep paths. If Polis later requires such a bound for this query, revisit a scale-dependent capacity schedule or forced-materialization depth explicitly.
 
 The implementation must guarantee consistency between:
 
@@ -320,18 +329,24 @@ The implementation must guarantee consistency between:
 
 ### 9.3 Initial API
 
-The internal hierarchy layer needs one foundational query for a supported hierarchy box:
+The internal hierarchy layer needs one foundational query for a supported hierarchy box. The returned four-way subdivision is a stochastic fact owned by the queried parent box:
 
 ```ts
-type HierarchyCellResult = {
+type StarfieldCellResult = {
   count: PopulationCount;
-  positions?: Coords[];
+  childCounts: readonly [
+    PopulationCount,
+    PopulationCount,
+    PopulationCount,
+    PopulationCount,
+  ];
+  positions?: readonly Coords[];
 };
 
 starfield.queryCell(box);
 ```
 
-`PopulationCount` must exactly represent counts throughout the supported coordinate range; its concrete numeric representation is an implementation choice. `positions` is normally present when the cell count is at or below the fixed materialization threshold. A selected maximum-depth termination policy may also force materialization above that threshold.
+`count` is redundant with the sum of `childCounts` but convenient. `PopulationCount` must exactly represent counts throughout the supported coordinate range; its concrete numeric representation is an implementation choice. `positions` is present when this box has materialized its population or inherited materialized positions from an ancestor.
 
 The public API layer adds operations only when required by concrete consumers. It may accept arbitrary boxes or other region shapes, decompose them into internal hierarchy queries, and return counts, materialized positions, or aggregate cells. It has no RNG capability and must not return a position list proportional to an arbitrarily large population.
 
@@ -645,8 +660,10 @@ Starfield tests should include:
 - querying children before the parent gives the same result;
 - overlapping query strategies recover consistent stars;
 - clearing caches changes no results;
-- materialized position lists obey the selected threshold or forced-materialization rule;
-- the selected capacity or maximum-depth policy gives a hard termination bound.
+- materialized position lists obey the threshold-based materialization rule;
+- child counts derived from materialized positions equal the canonical classification of those positions;
+- immediate-ancestor recursion produces the same result for expansion and refinement query strategies;
+- observed recursion depth is recorded for the natural threshold-based scheme.
 
 Terrain tests should include:
 
@@ -737,6 +754,8 @@ These should be treated as later models rather than requirements imposed on the 
 
 In particular, we should avoid prematurely creating a single generic "world object" or universal hierarchy interface. The starfield and terrain models can share utilities while retaining model-specific data structures until genuine common abstractions become apparent.
 
+Initial shared machinery should be limited to concrete needs demonstrated by these models: seeds and addressing, the addressed RNG, required distributions, geometry and math utilities, LRU caching and statistics infrastructure, helpers, and UI components. Do not introduce a generic hierarchical stochastic-model framework in the starter project.
+
 ---
 
 ## 22. Initial implementation sequence
@@ -746,7 +765,7 @@ A reasonable first implementation sequence is:
 1. Create the Vite + React + TypeScript application and routes.
 2. Select the shared seed type, canonical address representation, and addressed RNG primitive after evaluating viable libraries and allocation cost.
 3. Implement only the bounded distribution utilities required by the starfield.
-4. Implement the bounded Poisson-like starfield model, its termination policy, and model instrumentation.
+4. Implement the bounded Poisson-like starfield model using immediate-ancestor recursion and natural threshold materialization, with recursion-depth instrumentation.
 5. Develop the 2D viewport, controls, Canvas renderer, URL state, and cursor-following hierarchy overlay alongside the starfield demo.
 6. Extract or generalize shared viewport behavior.
 7. Implement the additional bounded distribution utilities required by terrain.
@@ -764,8 +783,8 @@ These notes are included to help review this revision and should be removed when
 
 - The starfield is now explicitly bounded and Poisson-like rather than an exact homogeneous Poisson point process.
 - Both models now distinguish an internal stochastic layer from a synchronous, consumer-driven public API layer with no RNG capability.
-- The starfield hierarchy now has four origin-anchored unit cells, outward expansion, threshold-based position materialization, and a deferred hard-termination-policy choice.
+- The starfield hierarchy now has four origin-anchored unit cells, outward expansion, parent-owned immediate child counts, and threshold-based position materialization discovered through immediate-ancestor recursion.
 - Terrain now starts from a fixed i.i.d. coarse lattice; exact recurrence details will be validated during implementation.
-- RNG/address representation, starfield termination policy, and some terrain recurrence details remain intentional implementation experiments with acceptance criteria recorded in `DESIGN_QA.md`.
+- RNG/address representation, possible future hard starfield termination bounds, and some terrain recurrence details remain intentional implementation experiments with acceptance criteria recorded in `DESIGN_QA.md`.
 - Model caches are bounded LRUs, viewport scale is expressed as depicted world area, and reproducible viewport state is encoded in the URL.
 - The starter UI uses Canvas 2D with HTML overlays, while small Node CLI programs provide initial complexity benchmarks.
