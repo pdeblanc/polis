@@ -1,4 +1,5 @@
 import { BackLink, Page } from '../components/Page';
+import { StarfieldHierarchyCanvas } from '../components/StarfieldHierarchyCanvas';
 
 export function StarfieldPage() {
   return (
@@ -7,15 +8,13 @@ export function StarfieldPage() {
       title="Bounded Poisson-like starfield"
       introduction={
         <p>
-          The model and interactive viewport will be added in the next implementation
-          slice.
+          Move the cursor across the viewport to inspect its nested canonical hierarchy
+          cells.
         </p>
       }
     >
       <BackLink />
-      <div className="viewport-placeholder" role="img" aria-label="Starfield viewport placeholder">
-        Starfield viewport
-      </div>
+      <StarfieldHierarchyCanvas />
     </Page>
   );
 }

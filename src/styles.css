@@ -124,6 +124,44 @@ h1 {
   background-size: 2rem 2rem;
 }
 
+.hierarchy-demo {
+  position: relative;
+  overflow: hidden;
+  min-height: min(58vh, 38rem);
+  border: 1px solid #30394b;
+  border-radius: 0.75rem;
+  background: #0b0e14;
+}
+
+.hierarchy-canvas {
+  display: block;
+  width: 100%;
+  height: min(58vh, 38rem);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.hierarchy-readout {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid rgb(133 157 199 / 28%);
+  border-radius: 0.45rem;
+  color: #c7d5ef;
+  background: rgb(11 14 20 / 84%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  pointer-events: auto;
+}
+
+.hierarchy-readout label {
+  white-space: nowrap;
+}
+
 @media (max-width: 40rem) {
   .page-shell {
     width: min(100% - 1.25rem, 72rem);
