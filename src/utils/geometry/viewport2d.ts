@@ -11,6 +11,29 @@ export type ViewportState = {
   readonly area: number;
 };
 
+/**
+ * Keeps a viewport within the spatial resolution representable around its center.
+ * At the minimum, one CSS pixel spans one floating-point relative epsilon.
+ */
+export function constrainViewport(viewport: ViewportState, size: Size2D): ViewportState {
+  const aspectRatio = size.width / size.height;
+  const coordinateScale = Math.max(1, Math.abs(viewport.centerX), Math.abs(viewport.centerY));
+  const minimumWorldPerPixel = Number.EPSILON * coordinateScale;
+  const minimumWidth = minimumWorldPerPixel * size.width;
+  const minimumHeight = minimumWorldPerPixel * size.height;
+  const maximumArea = Number.MAX_VALUE / Math.max(aspectRatio, 1 / aspectRatio);
+  const minimumArea = Math.min(
+    maximumArea,
+    Math.max(minimumWidth ** 2 / aspectRatio, minimumHeight ** 2 * aspectRatio),
+  );
+  const requestedArea = Number.isNaN(viewport.area) ? minimumArea : viewport.area;
+
+  return {
+    ...viewport,
+    area: Math.min(maximumArea, Math.max(minimumArea, requestedArea)),
+  };
+}
+
 export function worldDimensions(size: Size2D, area: number): Size2D {
   const aspectRatio = size.width / size.height;
   return {
@@ -50,11 +73,13 @@ export function zoomAround(
   areaFactor: number,
 ): ViewportState {
   const anchor = screenToWorld(anchorScreen, size, viewport);
-  const area = viewport.area * areaFactor;
+  const requestedArea = viewport.area * areaFactor;
+  const area = constrainViewport({ ...viewport, area: requestedArea }, size).area;
+  if (area === viewport.area && requestedArea !== viewport.area) return viewport;
   const world = worldDimensions(size, area);
-  return {
+  return constrainViewport({
     area,
     centerX: anchor.x - (anchorScreen.x / size.width - 0.5) * world.width,
     centerY: anchor.y - (0.5 - anchorScreen.y / size.height) * world.height,
-  };
+  }, size);
 }

@@ -103,6 +103,7 @@ function drawHierarchy(
 ) {
   const worldPerPixel = world.width / size.width;
   const minimumEdge = 2 ** Math.ceil(Math.log2(worldPerPixel * MIN_CELL_PIXELS));
+  if (!(minimumEdge > 0) || !Number.isFinite(minimumEdge)) return;
   const cells = dependencyChain(cellContainingPoint(cursor, minimumEdge));
 
   [...cells].reverse().forEach((cell, index) => {
@@ -125,13 +126,18 @@ function drawStarfield(
 ) {
   const worldPerPixel = world.width / size.width;
   const edgeLength = 2 ** Math.ceil(Math.log2(worldPerPixel * RENDER_CELL_PIXELS));
+  if (!(edgeLength > 0) || !Number.isFinite(edgeLength)) return;
   const maxX = viewport.centerX + world.width / 2;
   const maxY = viewport.centerY + world.height / 2;
   const startX = Math.floor((viewport.centerX - world.width / 2) / edgeLength) * edgeLength;
   const startY = Math.floor((viewport.centerY - world.height / 2) / edgeLength) * edgeLength;
+  const columnCount = Math.max(0, Math.ceil((maxX - startX) / edgeLength));
+  const rowCount = Math.max(0, Math.ceil((maxY - startY) / edgeLength));
 
-  for (let cellX = startX; cellX < maxX; cellX += edgeLength) {
-    for (let cellY = startY; cellY < maxY; cellY += edgeLength) {
+  for (let column = 0; column < columnCount; column += 1) {
+    const cellX = startX + column * edgeLength;
+    for (let row = 0; row < rowCount; row += 1) {
+      const cellY = startY + row * edgeLength;
       const cell = { minX: cellX, minY: cellY, edgeLength };
       const result = starfield.queryCell(cell);
       if (result.positions === undefined) {

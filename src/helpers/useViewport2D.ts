@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -8,6 +9,7 @@ import {
 } from 'react';
 import type { Point2D } from '../utils/geometry/point2d';
 import {
+  constrainViewport,
   screenToWorld,
   worldDimensions,
   zoomAround,
@@ -49,6 +51,12 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialState);
   const [cursorPosition, setCursorPosition] = useState<Point2D>({ x: 0.5, y: 0.5 });
+
+  const commitState = useCallback((next: ViewportState) => {
+    const constrained = constrainViewport(next, size);
+    stateRef.current = constrained;
+    setState(constrained);
+  }, [size]);
 
   const world = worldDimensions(size, state.area);
   const cursor = screenToWorld(
@@ -133,12 +141,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
-  }, [size]);
-
-  function commitState(next: ViewportState) {
-    stateRef.current = next;
-    setState(next);
-  }
+  }, [commitState, size]);
 
   function updateCursor(point: Point2D) {
     setCursorPosition({ x: point.x / size.width, y: point.y / size.height });
@@ -185,7 +188,10 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       const [first, second] = [...pointersRef.current.values()];
       const midpoint = midpointOf(first, second);
       const distance = distanceBetween(first, second);
-      const area = pinch.area * (pinch.distance / distance) ** 2;
+      const requestedArea = pinch.area * (pinch.distance / distance) ** 2;
+      const current = stateRef.current;
+      const area = constrainViewport({ ...current, area: requestedArea }, size).area;
+      if (area === current.area && requestedArea < current.area) return;
       const dimensions = worldDimensions(size, area);
       commitState({
         area,
