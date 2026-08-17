@@ -9,6 +9,7 @@ import {
 import type { Point2D } from "../utils/geometry/point2d";
 import {
   constrainViewport,
+  createResetFlight,
   screenToWorld,
   worldDimensions,
   zoomAround,
@@ -53,6 +54,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const pointersRef = useRef(new Map<number, Point2D>());
   const pinchRef = useRef<Pinch | undefined>(undefined);
   const pressedKeysRef = useRef(new Set<string>());
+  const resetAnimationRef = useRef<number | undefined>(undefined);
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialUrlState);
   const [cursorPosition, setCursorPosition] = useState<Point2D>({
@@ -60,7 +62,12 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     y: 0.5,
   });
 
-  const commitState = useCallback(
+  const cancelResetAnimation = useCallback(() => {
+    if (resetAnimationRef.current === undefined) return;
+    cancelAnimationFrame(resetAnimationRef.current);
+    resetAnimationRef.current = undefined;
+  }, []);
+  const applyState = useCallback(
     (next: ViewportState) => {
       const constrained = constrainViewport(next, size);
       stateRef.current = constrained;
@@ -68,7 +75,36 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     },
     [size],
   );
-  const resetView = useCallback(() => commitState(defaultState), [commitState, defaultState]);
+  const commitState = useCallback(
+    (next: ViewportState) => {
+      cancelResetAnimation();
+      applyState(next);
+    },
+    [applyState, cancelResetAnimation],
+  );
+  const resetView = useCallback(() => {
+    cancelResetAnimation();
+    pressedKeysRef.current.clear();
+    const target = constrainViewport(defaultState, size);
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      applyState(target);
+      return;
+    }
+
+    const flight = createResetFlight(stateRef.current, target, size);
+    let startTime: number | undefined;
+    const animate = (time: number) => {
+      startTime ??= time;
+      const elapsed = time - startTime;
+      applyState(flight.stateAt(elapsed));
+      if (elapsed < flight.duration) {
+        resetAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        resetAnimationRef.current = undefined;
+      }
+    };
+    resetAnimationRef.current = requestAnimationFrame(animate);
+  }, [applyState, cancelResetAnimation, defaultState, size]);
 
   const world = worldDimensions(size, state.area);
   const cursor = screenToWorld(
@@ -91,6 +127,8 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => cancelResetAnimation, [cancelResetAnimation]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -173,6 +211,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       const action = keyboardAction(event.key);
       if (action === undefined) return;
       event.preventDefault();
+      cancelResetAnimation();
       pressedKeysRef.current.add(action);
       if (animationFrame === undefined)
         animationFrame = requestAnimationFrame(animate);
@@ -196,13 +235,14 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
-  }, [commitState, size]);
+  }, [cancelResetAnimation, commitState, size]);
 
   function updateCursor(point: Point2D) {
     setCursorPosition({ x: point.x / size.width, y: point.y / size.height });
   }
 
   const onPointerDown: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    cancelResetAnimation();
     const point = localPointer(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, point);

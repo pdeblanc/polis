@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   constrainViewport,
+  createResetFlight,
   screenToWorld,
   worldDimensions,
   worldToScreen,
@@ -58,5 +59,56 @@ describe('viewport2d geometry', () => {
     const attempted = zoomAround(minimum, size, { x: 700, y: 25 }, 0.5);
 
     expect(attempted).toEqual(minimum);
+  });
+
+  it('flies through a wider overview when resetting a displaced view', () => {
+    const start = { centerX: 12, centerY: -5, area: 16 };
+    const target = { centerX: 0, centerY: 0, area: 16 };
+    const flight = createResetFlight(start, target, size);
+    const quarter = flight.stateAt(flight.duration / 4);
+    const midpoint = flight.stateAt(flight.duration / 2);
+
+    expect(flight.stateAt(0)).toEqual(start);
+    expect(quarter.area).toBeGreaterThan(start.area);
+    expect(quarter.centerX).toBeLessThan(start.centerX);
+    expect(quarter.centerX).toBeGreaterThan(target.centerX);
+    expect(midpoint.area).toBeGreaterThan(start.area);
+    expect(midpoint.centerX).toBeLessThan(start.centerX);
+    expect(flight.stateAt(flight.duration)).toEqual(target);
+  });
+
+  it('uses a smooth zoom flight when only the area differs', () => {
+    const start = { centerX: 0, centerY: 0, area: 64 };
+    const target = { centerX: 0, centerY: 0, area: 16 };
+    const flight = createResetFlight(start, target, size);
+
+    expect(flight.duration).toBeGreaterThan(0);
+    expect(flight.stateAt(flight.duration / 2).centerX).toBe(0);
+    expect(flight.stateAt(flight.duration)).toEqual(target);
+  });
+
+  it('has one apparent lateral-speed maximum', () => {
+    const start = { centerX: 12, centerY: -5, area: 16 };
+    const target = { centerX: 0, centerY: 0, area: 16 };
+    const flight = createResetFlight(start, target, size);
+    const intervals = 100;
+    const interval = flight.duration / intervals;
+    const speeds = Array.from({ length: intervals }, (_, index) => {
+      const before = flight.stateAt(index * interval);
+      const after = flight.stateAt((index + 1) * interval);
+      const middle = flight.stateAt((index + 0.5) * interval);
+      return Math.hypot(
+        after.centerX - before.centerX,
+        after.centerY - before.centerY,
+      ) / Math.sqrt(middle.area);
+    });
+    const peak = speeds.indexOf(Math.max(...speeds));
+
+    for (let index = 1; index <= peak; index += 1) {
+      expect(speeds[index]).toBeGreaterThanOrEqual(speeds[index - 1] - 1e-10);
+    }
+    for (let index = peak + 1; index < speeds.length; index += 1) {
+      expect(speeds[index]).toBeLessThanOrEqual(speeds[index - 1] + 1e-10);
+    }
   });
 });
