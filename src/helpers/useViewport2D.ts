@@ -6,8 +6,8 @@ import {
   type PointerEventHandler,
   type RefObject,
   type WheelEventHandler,
-} from 'react';
-import type { Point2D } from '../utils/geometry/point2d';
+} from "react";
+import type { Point2D } from "../utils/geometry/point2d";
 import {
   constrainViewport,
   screenToWorld,
@@ -15,9 +15,9 @@ import {
   zoomAround,
   type Size2D,
   type ViewportState,
-} from '../utils/geometry/viewport2d';
+} from "../utils/geometry/viewport2d";
 
-const KEYBOARD_PAN_RATE = 0.8;
+const KEYBOARD_PAN_RATE = 1.2;
 const KEYBOARD_ZOOM_RATE = 1.5;
 const WHEEL_ZOOM_RATE = 0.0033;
 
@@ -50,13 +50,19 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const pressedKeysRef = useRef(new Set<string>());
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialState);
-  const [cursorPosition, setCursorPosition] = useState<Point2D>({ x: 0.5, y: 0.5 });
+  const [cursorPosition, setCursorPosition] = useState<Point2D>({
+    x: 0.5,
+    y: 0.5,
+  });
 
-  const commitState = useCallback((next: ViewportState) => {
-    const constrained = constrainViewport(next, size);
-    stateRef.current = constrained;
-    setState(constrained);
-  }, [size]);
+  const commitState = useCallback(
+    (next: ViewportState) => {
+      const constrained = constrainViewport(next, size);
+      stateRef.current = constrained;
+      setState(constrained);
+    },
+    [size],
+  );
 
   const world = worldDimensions(size, state.area);
   const cursor = screenToWorld(
@@ -93,34 +99,39 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       }
 
       const elapsed =
-        previousTime === undefined ? 0 : Math.min((time - previousTime) / 1_000, 0.05);
+        previousTime === undefined
+          ? 0
+          : Math.min((time - previousTime) / 1_000, 0.05);
       previousTime = time;
-      const horizontal = Number(keys.has('right')) - Number(keys.has('left'));
-      const vertical = Number(keys.has('up')) - Number(keys.has('down'));
-      const zoom = Number(keys.has('out')) - Number(keys.has('in'));
+      const horizontal = Number(keys.has("right")) - Number(keys.has("left"));
+      const vertical = Number(keys.has("up")) - Number(keys.has("down"));
+      const zoom = Number(keys.has("out")) - Number(keys.has("in"));
       const current = stateRef.current;
-      const dimensions = worldDimensions(size, current.area);
       const directionLength = Math.hypot(horizontal, vertical) || 1;
+      const panDistance = Math.sqrt(current.area) * KEYBOARD_PAN_RATE * elapsed;
 
       commitState({
         area: current.area * Math.exp(zoom * KEYBOARD_ZOOM_RATE * elapsed),
-        centerX:
-          current.centerX +
-          (horizontal / directionLength) * dimensions.width * KEYBOARD_PAN_RATE * elapsed,
-        centerY:
-          current.centerY +
-          (vertical / directionLength) * dimensions.height * KEYBOARD_PAN_RATE * elapsed,
+        centerX: current.centerX + (horizontal / directionLength) * panDistance,
+        centerY: current.centerY + (vertical / directionLength) * panDistance,
       });
       animationFrame = requestAnimationFrame(animate);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        isEditableTarget(event.target) ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      )
+        return;
       const action = keyboardAction(event.key);
       if (action === undefined) return;
       event.preventDefault();
       pressedKeysRef.current.add(action);
-      if (animationFrame === undefined) animationFrame = requestAnimationFrame(animate);
+      if (animationFrame === undefined)
+        animationFrame = requestAnimationFrame(animate);
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
@@ -131,13 +142,13 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     };
 
     const clearKeys = () => pressedKeysRef.current.clear();
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', clearKeys);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", clearKeys);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', clearKeys);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", clearKeys);
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
@@ -177,8 +188,12 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       const dimensions = worldDimensions(size, current.area);
       commitState({
         ...current,
-        centerX: current.centerX - ((point.x - previous.x) / size.width) * dimensions.width,
-        centerY: current.centerY + ((point.y - previous.y) / size.height) * dimensions.height,
+        centerX:
+          current.centerX -
+          ((point.x - previous.x) / size.width) * dimensions.width,
+        centerY:
+          current.centerY +
+          ((point.y - previous.y) / size.height) * dimensions.height,
       });
       return;
     }
@@ -190,13 +205,18 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       const distance = distanceBetween(first, second);
       const requestedArea = pinch.area * (pinch.distance / distance) ** 2;
       const current = stateRef.current;
-      const area = constrainViewport({ ...current, area: requestedArea }, size).area;
+      const area = constrainViewport(
+        { ...current, area: requestedArea },
+        size,
+      ).area;
       if (area === current.area && requestedArea < current.area) return;
       const dimensions = worldDimensions(size, area);
       commitState({
         area,
-        centerX: pinch.anchor.x - (midpoint.x / size.width - 0.5) * dimensions.width,
-        centerY: pinch.anchor.y - (0.5 - midpoint.y / size.height) * dimensions.height,
+        centerX:
+          pinch.anchor.x - (midpoint.x / size.width - 0.5) * dimensions.width,
+        centerY:
+          pinch.anchor.y - (0.5 - midpoint.y / size.height) * dimensions.height,
       });
     }
   };
@@ -231,7 +251,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     const scale = window.devicePixelRatio || 1;
     canvas.width = Math.round(size.width * scale);
     canvas.height = Math.round(size.height * scale);
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext("2d");
     context?.setTransform(scale, 0, 0, scale, 0, 0);
     return context;
   };
@@ -266,7 +286,8 @@ function wheelDeltaInPixels(
   pageHeight: number,
 ): number {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16;
-  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * pageHeight;
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE)
+    return event.deltaY * pageHeight;
   return event.deltaY;
 }
 
@@ -288,24 +309,24 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function keyboardAction(
   key: string,
-): 'up' | 'down' | 'left' | 'right' | 'in' | 'out' | undefined {
+): "up" | "down" | "left" | "right" | "in" | "out" | undefined {
   switch (key.toLowerCase()) {
-    case 'w':
-    case 'arrowup':
-      return 'up';
-    case 's':
-    case 'arrowdown':
-      return 'down';
-    case 'a':
-    case 'arrowleft':
-      return 'left';
-    case 'd':
-    case 'arrowright':
-      return 'right';
-    case '=':
-    case '+':
-      return 'in';
-    case '-':
-      return 'out';
+    case "w":
+    case "arrowup":
+      return "up";
+    case "s":
+    case "arrowdown":
+      return "down";
+    case "a":
+    case "arrowleft":
+      return "left";
+    case "d":
+    case "arrowright":
+      return "right";
+    case "=":
+    case "+":
+      return "in";
+    case "-":
+      return "out";
   }
 }
