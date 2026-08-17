@@ -16,7 +16,7 @@ import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometr
 const MIN_CELL_PIXELS = 8;
 const RENDER_CELL_PIXELS = 16;
 const STAR_RADIUS = 0.025;
-const DEFAULT_SEED = 'polis-demo-1';
+const DEFAULT_SEED = 'Polis 1';
 const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 64 };
 
 export function StarfieldHierarchyCanvas() {
@@ -39,27 +39,30 @@ export function StarfieldHierarchyCanvas() {
   }, [cursor, prepareContext, showHierarchy, size, starfield, state, world]);
 
   return (
-    <ViewportFrame
-      canvasLabel="Pannable and zoomable starfield hierarchy viewport"
-      viewport={viewport}
-    >
-      <SeedControl seed={seed} setSeed={setSeed} />
-      <CacheControl
-        usage={cacheUsage}
-        clearCache={() => {
-          starfield.clearCache();
-          setCacheUsage(starfield.getCacheUsage());
-        }}
-      />
-      <label>
-        <input
-          type="checkbox"
-          checked={showHierarchy}
-          onChange={(event) => setShowHierarchy(event.target.checked)}
-        />{' '}
-        Hierarchy
-      </label>
-    </ViewportFrame>
+    <>
+      <title>{`Starfield (${seed})`}</title>
+      <ViewportFrame
+        canvasLabel="Pannable and zoomable starfield hierarchy viewport"
+        viewport={viewport}
+      >
+        <SeedControl seed={seed} setSeed={setSeed} />
+        <CacheControl
+          usage={cacheUsage}
+          clearCache={() => {
+            starfield.clearCache();
+            setCacheUsage(starfield.getCacheUsage());
+          }}
+        />
+        <label>
+          <input
+            type="checkbox"
+            checked={showHierarchy}
+            onChange={(event) => setShowHierarchy(event.target.checked)}
+          />{' '}
+          Hierarchy
+        </label>
+      </ViewportFrame>
+    </>
   );
 }
 

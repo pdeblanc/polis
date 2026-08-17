@@ -19,6 +19,7 @@ const experiments = [
 export function HomePage() {
   return (
     <Page
+      documentTitle="Polis"
       eyebrow="Procedural world experiments"
       title="Polis"
       introduction={

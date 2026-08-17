@@ -11,6 +11,7 @@ describe('App routing', () => {
       </MemoryRouter>,
     );
 
+    expect(document.title).toBe('Polis');
     expect(screen.getByRole('heading', { level: 1, name: 'Polis' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Bounded Poisson-like starfield/ })).toHaveAttribute(
       'href',
@@ -25,6 +26,7 @@ describe('App routing', () => {
       </MemoryRouter>,
     );
 
+    expect(document.title).toBe('Terrain (Polis 2)');
     expect(
       screen.getByRole('heading', { level: 1, name: 'Diamond-square terrain' }),
     ).toBeInTheDocument();

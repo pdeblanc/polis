@@ -9,7 +9,7 @@ import { CacheControl, type CacheUsage } from './CacheControl';
 import { ViewportFrame } from './ViewportFrame';
 
 const SAMPLE_CELL_PIXELS = 8;
-const DEFAULT_SEED = 'polis-terrain-1';
+const DEFAULT_SEED = 'Polis 2';
 const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16 };
 
 export function TerrainCanvas() {
@@ -27,19 +27,22 @@ export function TerrainCanvas() {
   }, [prepareContext, size, state, terrain, world]);
 
   return (
-    <ViewportFrame
-      canvasLabel="Pannable and zoomable nearest-neighbor terrain viewport"
-      viewport={viewport}
-    >
-      <SeedControl seed={seed} setSeed={setSeed} />
-      <CacheControl
-        usage={cacheUsage}
-        clearCache={() => {
-          terrain.clearCache();
-          setCacheUsage(terrain.getCacheUsage());
-        }}
-      />
-    </ViewportFrame>
+    <>
+      <title>{`Terrain (${seed})`}</title>
+      <ViewportFrame
+        canvasLabel="Pannable and zoomable nearest-neighbor terrain viewport"
+        viewport={viewport}
+      >
+        <SeedControl seed={seed} setSeed={setSeed} />
+        <CacheControl
+          usage={cacheUsage}
+          clearCache={() => {
+            terrain.clearCache();
+            setCacheUsage(terrain.getCacheUsage());
+          }}
+        />
+      </ViewportFrame>
+    </>
   );
 }
 

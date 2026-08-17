@@ -538,7 +538,7 @@ Each demo should expose the current world seed.
 For example:
 
 ```text
-Seed: [ polis-demo-1 ]
+Seed: [ Polis 1 ]
 ```
 
 Changing the seed regenerates the logical world.
