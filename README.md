@@ -33,6 +33,20 @@ Run tests continuously while editing with:
 npm run test:watch
 ```
 
+## Run benchmarks
+
+Print tab-separated terrain and starfield complexity measurements:
+
+```sh
+npm run benchmark:complexity
+```
+
+Run the distribution throughput benchmarks:
+
+```sh
+npm run benchmark:distributions
+```
+
 ## Build and preview
 
 Create a production build:
