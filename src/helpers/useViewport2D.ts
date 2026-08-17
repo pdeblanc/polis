@@ -263,13 +263,20 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     };
 
     const clearKeys = () => pressedKeysRef.current.clear();
+    const handleVisibilityChange = () => {
+      if (document.hidden) clearKeys();
+    };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
     window.addEventListener("blur", clearKeys);
+    window.addEventListener("contextmenu", clearKeys);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", clearKeys);
+      window.removeEventListener("contextmenu", clearKeys);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
