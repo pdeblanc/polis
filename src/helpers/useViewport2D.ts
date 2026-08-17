@@ -287,6 +287,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   }
 
   const onPointerDown: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    if (event.button !== 0) return;
     cancelResetAnimation();
     cancelMomentum();
     const point = localPointer(event);
