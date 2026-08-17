@@ -12,6 +12,7 @@ import {
   constrainViewport,
   createResetFlight,
   screenToWorld,
+  positionWorldPointAtScreen,
   worldDimensions,
   zoomAround,
   type Size2D,
@@ -50,6 +51,7 @@ export type Viewport2D = {
   readonly onPointerUp: PointerEventHandler<HTMLCanvasElement>;
   readonly prepareContext: () => CanvasRenderingContext2D | null;
   readonly resetView: () => void;
+  readonly setCursorWorldPosition: (point: Point2D, onComplete?: () => void) => void;
   readonly size: Size2D;
   readonly state: ViewportState;
   readonly world: Size2D;
@@ -68,6 +70,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const momentumAnimationRef = useRef<number | undefined>(undefined);
   const panVelocityRef = useRef<PanVelocity | undefined>(undefined);
   const resetAnimationRef = useRef<number | undefined>(undefined);
+  const flightCompletionRef = useRef<(() => void) | undefined>(undefined);
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialUrlState);
   const [cursorPosition, setCursorPosition] = useState<Point2D>({
@@ -76,9 +79,13 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   });
 
   const cancelResetAnimation = useCallback(() => {
-    if (resetAnimationRef.current === undefined) return;
-    cancelAnimationFrame(resetAnimationRef.current);
-    resetAnimationRef.current = undefined;
+    if (resetAnimationRef.current !== undefined) {
+      cancelAnimationFrame(resetAnimationRef.current);
+      resetAnimationRef.current = undefined;
+    }
+    const complete = flightCompletionRef.current;
+    flightCompletionRef.current = undefined;
+    complete?.();
   }, []);
   const cancelMomentum = useCallback(() => {
     if (momentumAnimationRef.current === undefined) return;
@@ -101,17 +108,19 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     },
     [applyState, cancelMomentum, cancelResetAnimation],
   );
-  const resetView = useCallback(() => {
+  const animateTo = useCallback((requestedTarget: ViewportState, onComplete?: () => void) => {
     cancelResetAnimation();
     cancelMomentum();
     pressedKeysRef.current.clear();
-    const target = constrainViewport(defaultState, size);
+    const target = constrainViewport(requestedTarget, size);
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       applyState(target);
+      onComplete?.();
       return;
     }
 
     const flight = createResetFlight(stateRef.current, target, size);
+    flightCompletionRef.current = onComplete;
     let startTime: number | undefined;
     const animate = (time: number) => {
       startTime ??= time;
@@ -121,10 +130,16 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
         resetAnimationRef.current = requestAnimationFrame(animate);
       } else {
         resetAnimationRef.current = undefined;
+        const complete = flightCompletionRef.current;
+        flightCompletionRef.current = undefined;
+        complete?.();
       }
     };
     resetAnimationRef.current = requestAnimationFrame(animate);
-  }, [applyState, cancelMomentum, cancelResetAnimation, defaultState, size]);
+  }, [applyState, cancelMomentum, cancelResetAnimation, size]);
+  const resetView = useCallback(() => {
+    animateTo(defaultState);
+  }, [animateTo, defaultState]);
 
   const world = useMemo(() => worldDimensions(size, state.area), [size, state.area]);
   const cursor = useMemo(
@@ -135,6 +150,23 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
         state,
       ),
     [cursorPosition, size, state],
+  );
+  const setCursorWorldPosition = useCallback(
+    (point: Point2D, onComplete?: () => void) => {
+      animateTo(
+        positionWorldPointAtScreen(
+          stateRef.current,
+          size,
+          {
+            x: cursorPosition.x * size.width,
+            y: cursorPosition.y * size.height,
+          },
+          point,
+        ),
+        onComplete,
+      );
+    },
+    [animateTo, cursorPosition, size],
   );
 
   useEffect(() => {
@@ -452,6 +484,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     onPointerUp,
     prepareContext,
     resetView,
+    setCursorWorldPosition,
     size,
     state,
     world,

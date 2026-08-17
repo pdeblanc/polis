@@ -3,6 +3,7 @@ import {
   constrainViewport,
   createResetFlight,
   screenToWorld,
+  positionWorldPointAtScreen,
   worldDimensions,
   worldToScreen,
   zoomAround,
@@ -111,4 +112,16 @@ describe('viewport2d geometry', () => {
       expect(speeds[index]).toBeLessThanOrEqual(speeds[index - 1] + 1e-10);
     }
   });
+});
+
+it('positions an edited world coordinate at its original screen anchor', () => {
+  const size = { width: 800, height: 400 };
+  const viewport = { centerX: 3, centerY: -2, area: 8 };
+  const screen = { x: 120, y: 310 };
+  const requested = { x: 25, y: -40 };
+  const moved = positionWorldPointAtScreen(viewport, size, screen, requested);
+
+  expect(screenToWorld(screen, size, moved).x).toBeCloseTo(requested.x);
+  expect(screenToWorld(screen, size, moved).y).toBeCloseTo(requested.y);
+  expect(moved.area).toBe(viewport.area);
 });

@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import type { Viewport2D } from '../helpers/useViewport2D';
+import { CoordinateControl } from './CoordinateControl';
 
 type ViewportFrameProps = PropsWithChildren<{
   readonly canvasLabel: string;
@@ -16,6 +17,7 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
     onPointerMove,
     onPointerUp,
     resetView,
+    setCursorWorldPosition,
     world,
   } = viewport;
 
@@ -33,11 +35,12 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
       />
       <div className="viewport-top-widgets">
         <div className="hierarchy-readout">
-          <span>
-            x = {formatCoordinateAtScale(cursor.x, world.width)}, y ={' '}
-            {formatCoordinateAtScale(cursor.y, world.height)}
-          </span>
-          <span>
+          <CoordinateControl
+            formattedX={formatCoordinateAtScale(cursor.x, world.width)}
+            formattedY={formatCoordinateAtScale(cursor.y, world.height)}
+            setCoordinates={setCursorWorldPosition}
+          />
+          <span className="viewport-area-readout">
             A = {formatSpan(world.width)} × {formatSpan(world.height)}
           </span>
         </div>

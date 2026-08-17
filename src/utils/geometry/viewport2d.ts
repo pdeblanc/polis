@@ -226,6 +226,20 @@ export function worldToScreen(
   };
 }
 
+export function positionWorldPointAtScreen(
+  viewport: ViewportState,
+  size: Size2D,
+  screenPoint: Point2D,
+  worldPoint: Point2D,
+): ViewportState {
+  const world = worldDimensions(size, viewport.area);
+  return {
+    ...viewport,
+    centerX: worldPoint.x - (screenPoint.x / size.width - 0.5) * world.width,
+    centerY: worldPoint.y - (0.5 - screenPoint.y / size.height) * world.height,
+  };
+}
+
 export function zoomAround(
   viewport: ViewportState,
   size: Size2D,
