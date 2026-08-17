@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
 import { useUrlSeed } from '../helpers/urlState';
+import { CacheControl, type CacheUsage } from './CacheControl';
 import { SeedControl } from './SeedControl';
 import { ViewportFrame } from './ViewportFrame';
 import {
@@ -24,6 +25,7 @@ export function StarfieldHierarchyCanvas() {
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { cursor, prepareContext, size, state, world } = viewport;
   const [showHierarchy, setShowHierarchy] = useState(true);
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => starfield.getCacheUsage());
 
   useEffect(() => {
     const context = prepareContext();
@@ -33,6 +35,7 @@ export function StarfieldHierarchyCanvas() {
     if (showHierarchy) {
       drawHierarchy(context, size, world, state, cursor);
     }
+    updateCacheUsage(setCacheUsage, starfield.getCacheUsage());
   }, [cursor, prepareContext, showHierarchy, size, starfield, state, world]);
 
   return (
@@ -41,6 +44,13 @@ export function StarfieldHierarchyCanvas() {
       viewport={viewport}
     >
       <SeedControl seed={seed} setSeed={setSeed} />
+      <CacheControl
+        usage={cacheUsage}
+        clearCache={() => {
+          starfield.clearCache();
+          setCacheUsage(starfield.getCacheUsage());
+        }}
+      />
       <label>
         <input
           type="checkbox"
@@ -50,6 +60,15 @@ export function StarfieldHierarchyCanvas() {
         Hierarchy
       </label>
     </ViewportFrame>
+  );
+}
+
+function updateCacheUsage(
+  setUsage: (update: (current: CacheUsage) => CacheUsage) => void,
+  next: CacheUsage,
+) {
+  setUsage((current) =>
+    current.entries === next.entries && current.capacity === next.capacity ? current : next,
   );
 }
 

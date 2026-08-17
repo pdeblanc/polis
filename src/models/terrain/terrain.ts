@@ -76,6 +76,10 @@ export class TerrainField {
     return this.#lastQueryStats;
   }
 
+  getCacheUsage(): { readonly capacity: number; readonly entries: number } {
+    return { capacity: TERRAIN_VERTEX_CACHE_CAPACITY, entries: this.#cache.size };
+  }
+
   clearCache(): void {
     this.#cache.clear();
   }

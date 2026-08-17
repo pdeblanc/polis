@@ -72,7 +72,9 @@ describe('TerrainField', () => {
     const terrain = new TerrainField('terrain-cache');
     const vertex = { x: 0.625, y: -0.25 };
     const expected = terrain.queryVertex(vertex);
+    expect(terrain.getCacheUsage().entries).toBeGreaterThan(0);
     terrain.clearCache();
+    expect(terrain.getCacheUsage()).toEqual({ capacity: 50_000, entries: 0 });
 
     expect(terrain.queryVertex(vertex)).toBe(expected);
     expect(terrain.getLastQueryStats().verticesEvaluated).toBeGreaterThan(0);

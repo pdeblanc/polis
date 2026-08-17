@@ -25,11 +25,13 @@ describe('TerrainModel', () => {
     const point = { x: 0.375, y: 0.125 };
     const expected = model.sampleNearest(point, 0.125).height;
     expect(model.getLastQueryStats().verticesEvaluated).toBeGreaterThan(0);
+    expect(model.getCacheUsage().entries).toBeGreaterThan(0);
 
     expect(model.sampleNearest(point, 0.125).height).toBe(expected);
     expect(model.getLastQueryStats().cacheHits).toBe(1);
 
     model.clearCache();
+    expect(model.getCacheUsage()).toEqual({ capacity: 50_000, entries: 0 });
     expect(model.sampleNearest(point, 0.125).height).toBe(expected);
     expect(model.getLastQueryStats().verticesEvaluated).toBeGreaterThan(0);
   });

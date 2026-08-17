@@ -30,6 +30,10 @@ export class TerrainModel {
     return this.#field.getLastQueryStats();
   }
 
+  getCacheUsage(): { readonly capacity: number; readonly entries: number } {
+    return this.#field.getCacheUsage();
+  }
+
   clearCache(): void {
     this.#field.clearCache();
   }

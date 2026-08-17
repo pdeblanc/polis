@@ -29,5 +29,6 @@ describe('App routing', () => {
       screen.getByRole('heading', { level: 1, name: 'Diamond-square terrain' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset cache' })).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEventHandler,
@@ -125,11 +126,15 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     resetAnimationRef.current = requestAnimationFrame(animate);
   }, [applyState, cancelMomentum, cancelResetAnimation, defaultState, size]);
 
-  const world = worldDimensions(size, state.area);
-  const cursor = screenToWorld(
-    { x: cursorPosition.x * size.width, y: cursorPosition.y * size.height },
-    size,
-    state,
+  const world = useMemo(() => worldDimensions(size, state.area), [size, state.area]);
+  const cursor = useMemo(
+    () =>
+      screenToWorld(
+        { x: cursorPosition.x * size.width, y: cursorPosition.y * size.height },
+        size,
+        state,
+      ),
+    [cursorPosition, size, state],
   );
 
   useEffect(() => {
@@ -369,7 +374,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     updateCursor(localPointer(event));
   };
 
-  const prepareContext = () => {
+  const prepareContext = useCallback(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return null;
     const scale = window.devicePixelRatio || 1;
@@ -378,7 +383,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     const context = canvas.getContext("2d");
     context?.setTransform(scale, 0, 0, scale, 0, 0);
     return context;
-  };
+  }, [size]);
 
   function startMomentum(releaseTime: number) {
     const velocity = panVelocityRef.current;

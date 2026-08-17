@@ -81,6 +81,11 @@ describe('Starfield', () => {
     const cold = starfield.getLastQueryStats();
     expect(cold.cellsEvaluated).toBeGreaterThan(1);
     expect(cold.maximumDepth).toBeGreaterThan(0);
+    expect(starfield.getCacheUsage()).toMatchObject({
+      capacity: 40_000,
+      entries: expect.any(Number),
+    });
+    expect(starfield.getCacheUsage().entries).toBeGreaterThan(0);
 
     starfield.queryCell(cell);
     expect(starfield.getLastQueryStats()).toMatchObject({

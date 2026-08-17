@@ -31,15 +31,17 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       />
-      <div className="hierarchy-readout">
-        <span>
-          x {formatCoordinateAtScale(cursor.x, world.width)} · y{' '}
-          {formatCoordinateAtScale(cursor.y, world.height)}
-        </span>
-        <span>
-          width {formatSpan(world.width)} · height {formatSpan(world.height)}
-        </span>
-        {children}
+      <div className="viewport-top-widgets">
+        <div className="hierarchy-readout">
+          <span>
+            x = {formatCoordinateAtScale(cursor.x, world.width)}, y ={' '}
+            {formatCoordinateAtScale(cursor.y, world.height)}
+          </span>
+          <span>
+            A = {formatSpan(world.width)} × {formatSpan(world.height)}
+          </span>
+        </div>
+        <div className="viewport-model-controls">{children}</div>
       </div>
       <p className="viewport-help">Drag or WASD/arrows to pan · Wheel or −/= to zoom</p>
       <button

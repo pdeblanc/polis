@@ -152,14 +152,21 @@ h1 {
   cursor: grabbing;
 }
 
-.hierarchy-readout {
+.viewport-top-widgets {
   position: absolute;
   top: 0.75rem;
+  right: 0.75rem;
   left: 0.75rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.hierarchy-readout,
+.viewport-model-controls {
+  display: flex;
   padding: 0.5rem 0.7rem;
   border: 1px solid rgb(133 157 199 / 28%);
   border-radius: 0.45rem;
@@ -170,7 +177,18 @@ h1 {
   pointer-events: auto;
 }
 
-.hierarchy-readout label {
+.hierarchy-readout {
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.viewport-model-controls {
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.viewport-model-controls label {
   white-space: nowrap;
 }
 
@@ -186,6 +204,27 @@ h1 {
   color: inherit;
   background: rgb(24 29 40 / 90%);
   font: inherit;
+}
+
+.cache-control {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.cache-control button {
+  padding: 0.2rem 0.4rem;
+  border: 1px solid rgb(133 157 199 / 35%);
+  border-radius: 0.25rem;
+  color: inherit;
+  background: rgb(24 29 40 / 90%);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cache-control button:hover {
+  border-color: #7388b2;
 }
 
 .viewport-help {
@@ -313,9 +352,17 @@ h1 {
   }
 
   .hierarchy-readout {
+    max-width: 100%;
+  }
+
+  .viewport-top-widgets {
     top: 0.5rem;
+    right: 0.5rem;
     left: 0.5rem;
-    max-width: calc(100% - 1rem);
-    gap: 0.6rem;
+    flex-direction: column;
+  }
+
+  .viewport-model-controls {
+    gap: 0.35rem;
   }
 }

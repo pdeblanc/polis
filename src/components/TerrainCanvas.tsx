@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
 import { useUrlSeed } from '../helpers/urlState';
 import { TerrainModel } from '../models/terrain/terrainModel';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { SeedControl } from './SeedControl';
+import { CacheControl, type CacheUsage } from './CacheControl';
 import { ViewportFrame } from './ViewportFrame';
 
 const SAMPLE_CELL_PIXELS = 8;
@@ -16,11 +17,13 @@ export function TerrainCanvas() {
   const terrain = useMemo(() => new TerrainModel(seed), [seed]);
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { prepareContext, size, state, world } = viewport;
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => terrain.getCacheUsage());
 
   useEffect(() => {
     const context = prepareContext();
     if (context === null) return;
     drawTerrain(context, size, world, state, terrain);
+    updateCacheUsage(setCacheUsage, terrain.getCacheUsage());
   }, [prepareContext, size, state, terrain, world]);
 
   return (
@@ -29,7 +32,23 @@ export function TerrainCanvas() {
       viewport={viewport}
     >
       <SeedControl seed={seed} setSeed={setSeed} />
+      <CacheControl
+        usage={cacheUsage}
+        clearCache={() => {
+          terrain.clearCache();
+          setCacheUsage(terrain.getCacheUsage());
+        }}
+      />
     </ViewportFrame>
+  );
+}
+
+function updateCacheUsage(
+  setUsage: (update: (current: CacheUsage) => CacheUsage) => void,
+  next: CacheUsage,
+) {
+  setUsage((current) =>
+    current.entries === next.entries && current.capacity === next.capacity ? current : next,
   );
 }
 

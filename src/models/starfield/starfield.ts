@@ -86,6 +86,13 @@ export class Starfield {
     return this.#lastQueryStats;
   }
 
+  getCacheUsage(): { readonly capacity: number; readonly entries: number } {
+    return {
+      capacity: STARFIELD_CELL_CACHE_CAPACITY + STARFIELD_SUBDIVISION_CACHE_CAPACITY,
+      entries: this.#cellCache.size + this.#subdivisionCache.size,
+    };
+  }
+
   clearCache(): void {
     this.#cellCache.clear();
     this.#subdivisionCache.clear();
