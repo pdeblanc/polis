@@ -11,7 +11,7 @@ import {
   dependencyAncestor,
   type HierarchyCell,
 } from '../models/starfield/hierarchy';
-import { Starfield } from '../models/starfield/starfield';
+import { Starfield, type StarfieldTile } from '../models/starfield/starfield';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 
@@ -134,29 +134,20 @@ function drawStarfield(
   const worldPerPixel = world.width / size.width;
   const edgeLength = 2 ** Math.ceil(Math.log2(worldPerPixel * RENDER_CELL_PIXELS));
   if (!(edgeLength > 0) || !Number.isFinite(edgeLength)) return 0;
+  const minX = viewport.centerX - world.width / 2;
   const maxX = viewport.centerX + world.width / 2;
+  const minY = viewport.centerY - world.height / 2;
   const maxY = viewport.centerY + world.height / 2;
-  const startX = Math.floor((viewport.centerX - world.width / 2) / edgeLength) * edgeLength;
-  const startY = Math.floor((viewport.centerY - world.height / 2) / edgeLength) * edgeLength;
-  const columnCount = Math.max(0, Math.ceil((maxX - startX) / edgeLength));
-  const rowCount = Math.max(0, Math.ceil((maxY - startY) / edgeLength));
-  let queries = 0;
+  const tiles = starfield.queryTiles({ minX, minY, maxX, maxY }, edgeLength);
 
-  for (let column = 0; column < columnCount; column += 1) {
-    const cellX = startX + column * edgeLength;
-    for (let row = 0; row < rowCount; row += 1) {
-      const cellY = startY + row * edgeLength;
-      const cell = { minX: cellX, minY: cellY, edgeLength };
-      const result = starfield.queryCell(cell);
-      queries += 1;
-      if (result.positions === undefined) {
-        drawAggregateCell(context, size, world, viewport, cell, result.count);
-      } else {
-        drawPositions(context, size, world, viewport, result.positions);
-      }
+  for (const tile of tiles) {
+    if (tile.positions === undefined) {
+      drawAggregateCell(context, size, world, viewport, tile);
+    } else {
+      drawPositions(context, size, world, viewport, tile.positions);
     }
   }
-  return queries;
+  return tiles.length;
 }
 
 function drawPositions(
@@ -193,17 +184,17 @@ function drawAggregateCell(
   size: Size2D,
   world: Size2D,
   viewport: ViewportState,
-  cell: HierarchyCell,
-  count: number,
+  tile: StarfieldTile,
 ) {
+  const edgeLength = tile.bounds.maxX - tile.bounds.minX;
   const northwest = worldToScreen(
-    { x: cell.minX, y: cell.minY + cell.edgeLength },
+    { x: tile.bounds.minX, y: tile.bounds.maxY },
     size,
     viewport,
   );
-  const cellPixels = (cell.edgeLength / world.width) * size.width;
+  const cellPixels = (edgeLength / world.width) * size.width;
   const starArea = Math.PI * STAR_RADIUS ** 2;
-  const brightness = 1 - Math.exp(-(count * starArea) / cell.edgeLength ** 2);
+  const brightness = 1 - Math.exp(-(tile.count * starArea) / edgeLength ** 2);
   context.fillStyle = `rgb(237 243 255 / ${brightness})`;
   context.fillRect(northwest.x, northwest.y, cellPixels, cellPixels);
 }

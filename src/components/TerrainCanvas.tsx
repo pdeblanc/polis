@@ -3,7 +3,7 @@ import { useViewport2D } from '../helpers/useViewport2D';
 import { useUrlSeed } from '../helpers/urlState';
 import { useFramePerformance } from '../helpers/useFramePerformance';
 import { terrainDependencyGraph } from '../helpers/terrainDependencies';
-import { TerrainModel } from '../models/terrain/terrainModel';
+import { Terrain } from '../models/terrain/terrain';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { SeedControl } from './SeedControl';
@@ -17,7 +17,7 @@ const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16 };
 
 export function TerrainCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
-  const terrain = useMemo(() => new TerrainModel(seed), [seed]);
+  const terrain = useMemo(() => new Terrain(seed), [seed]);
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { cursor, prepareContext, size, state, world } = viewport;
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => terrain.getCacheUsage());
@@ -80,7 +80,7 @@ function drawTerrain(
   size: Size2D,
   world: Size2D,
   viewport: ViewportState,
-  terrain: TerrainModel,
+  terrain: Terrain,
 ): number {
   context.fillStyle = '#0b0e14';
   context.fillRect(0, 0, size.width, size.height);

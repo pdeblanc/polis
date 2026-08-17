@@ -2,7 +2,7 @@ import {
   canonicalVertex,
   parentVertices,
   type TerrainVertex,
-} from '../models/terrain/terrain';
+} from '../models/terrain/diamondSquareTerrain';
 
 export type TerrainDependencyEdge = {
   readonly child: TerrainVertex;

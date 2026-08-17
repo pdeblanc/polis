@@ -1,5 +1,12 @@
-import { Starfield, type StarfieldQueryStats } from '../models/starfield/starfield';
-import { TerrainField, type TerrainQueryStats, type TerrainVertex } from '../models/terrain/terrain';
+import {
+  HierarchicalStarfield,
+  type StarfieldQueryStats,
+} from '../models/starfield/hierarchicalStarfield';
+import {
+  DiamondSquareTerrain,
+  type TerrainQueryStats,
+  type TerrainVertex,
+} from '../models/terrain/diamondSquareTerrain';
 
 const BENCHMARK_SEED = 'Polis complexity benchmark';
 
@@ -35,7 +42,7 @@ export function measureTerrainPoint(
   family: TimedTerrainMeasurement['family'],
   depth: number,
 ): TimedTerrainMeasurement {
-  const terrain = new TerrainField(BENCHMARK_SEED);
+  const terrain = new DiamondSquareTerrain(BENCHMARK_SEED);
   const start = performance.now();
   terrain.queryVertex(terrainVertexAtDepth(family, depth));
   const elapsedMilliseconds = performance.now() - start;
@@ -49,7 +56,7 @@ export function measureStarfieldBox(
   if (!Number.isInteger(depth) || depth < 0 || depth > 48) {
     throw new RangeError('Starfield benchmark depth must be an integer from 0 through 48');
   }
-  const starfield = new Starfield(BENCHMARK_SEED);
+  const starfield = new HierarchicalStarfield(BENCHMARK_SEED);
   const scale = experiment === 'box-expansion' ? depth : -depth;
   const start = performance.now();
   starfield.queryCell({ minX: 0, minY: 0, edgeLength: 2 ** scale });
@@ -75,7 +82,7 @@ export function measureStarfieldViewport(
   if (columns <= 0 || rows <= 0) {
     throw new RangeError('Viewport dimensions must be positive');
   }
-  const starfield = new Starfield(BENCHMARK_SEED);
+  const starfield = new HierarchicalStarfield(BENCHMARK_SEED);
   const edgeLength = 2 ** scale;
   const totals = emptyStarfieldStats();
   const start = performance.now();
