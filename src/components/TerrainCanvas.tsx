@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
 import { useUrlSeed } from '../helpers/urlState';
 import { useFramePerformance } from '../helpers/useFramePerformance';
+import { terrainDependencyGraph } from '../helpers/terrainDependencies';
 import { TerrainModel } from '../models/terrain/terrainModel';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
@@ -18,16 +19,23 @@ export function TerrainCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
   const terrain = useMemo(() => new TerrainModel(seed), [seed]);
   const viewport = useViewport2D(INITIAL_VIEWPORT);
-  const { prepareContext, size, state, world } = viewport;
+  const { cursor, prepareContext, size, state, world } = viewport;
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => terrain.getCacheUsage());
+  const [showDependencies, setShowDependencies] = useState(true);
   const { measureFrame, performance } = useFramePerformance();
 
   useEffect(() => {
     const context = prepareContext();
     if (context === null) return;
-    measureFrame(() => drawTerrain(context, size, world, state, terrain));
+    measureFrame(() => {
+      const queries = drawTerrain(context, size, world, state, terrain);
+      if (showDependencies) {
+        drawTerrainDependencies(context, size, world, state, cursor);
+      }
+      return queries;
+    });
     updateCacheUsage(setCacheUsage, terrain.getCacheUsage());
-  }, [measureFrame, prepareContext, size, state, terrain, world]);
+  }, [cursor, measureFrame, prepareContext, showDependencies, size, state, terrain, world]);
 
   return (
     <>
@@ -45,6 +53,14 @@ export function TerrainCanvas() {
           }}
         />
         <PerformanceControl performance={performance} />
+        <label>
+          <input
+            type="checkbox"
+            checked={showDependencies}
+            onChange={(event) => setShowDependencies(event.target.checked)}
+          />{' '}
+          Dependencies
+        </label>
       </ViewportFrame>
     </>
   );
@@ -69,8 +85,7 @@ function drawTerrain(
   context.fillStyle = '#0b0e14';
   context.fillRect(0, 0, size.width, size.height);
 
-  const worldPerPixel = Math.max(world.width / size.width, world.height / size.height);
-  const spacing = 2 ** Math.ceil(Math.log2(worldPerPixel * SAMPLE_CELL_PIXELS));
+  const spacing = terrainSampleSpacing(size, world);
   if (!(spacing > 0) || !Number.isFinite(spacing)) return 0;
 
   const minX = viewport.centerX - world.width / 2;
@@ -92,6 +107,47 @@ function drawTerrain(
     }
   }
   return queries;
+}
+
+function drawTerrainDependencies(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+  world: Size2D,
+  viewport: ViewportState,
+  cursor: Point2D,
+) {
+  const spacing = terrainSampleSpacing(size, world);
+  if (!(spacing > 0) || !Number.isFinite(spacing)) return;
+  const requested = {
+    x: Math.round(cursor.x / spacing) * spacing,
+    y: Math.round(cursor.y / spacing) * spacing,
+  };
+  const graph = terrainDependencyGraph(requested);
+
+  context.strokeStyle = 'rgb(255 188 92 / 68%)';
+  context.lineWidth = 1;
+  context.beginPath();
+  for (const edge of graph.edges) {
+    const child = worldToScreen(edge.child, size, viewport);
+    const parent = worldToScreen(edge.parent, size, viewport);
+    context.moveTo(child.x, child.y);
+    context.lineTo(parent.x, parent.y);
+  }
+  context.stroke();
+
+  for (let index = graph.vertices.length - 1; index >= 0; index -= 1) {
+    const point = worldToScreen(graph.vertices[index], size, viewport);
+    const requestedVertex = index === 0;
+    context.fillStyle = requestedVertex ? '#fff4d6' : '#ffc46b';
+    context.beginPath();
+    context.arc(point.x, point.y, requestedVertex ? 4 : 2.5, 0, Math.PI * 2);
+    context.fill();
+  }
+}
+
+function terrainSampleSpacing(size: Size2D, world: Size2D): number {
+  const worldPerPixel = Math.max(world.width / size.width, world.height / size.height);
+  return 2 ** Math.ceil(Math.log2(worldPerPixel * SAMPLE_CELL_PIXELS));
 }
 
 function drawSampleCell(
