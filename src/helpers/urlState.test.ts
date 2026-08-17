@@ -28,4 +28,11 @@ describe("viewport URL state", () => {
     expect(window.location.search).toBe("?seed=new+value&debug=1&area=4&x=2&y=-3");
     expect(window.location.hash).toBe("#view");
   });
+
+  it("deletes parameters whose values are undefined", () => {
+    window.history.replaceState(null, "", "/starfield?seed=world&x=2&y=3&area=4");
+    replaceUrlParameters({ area: undefined, x: undefined });
+
+    expect(window.location.search).toBe("?seed=world&y=3");
+  });
 });

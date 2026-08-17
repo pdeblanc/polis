@@ -190,7 +190,7 @@ h1 {
 
 .viewport-help {
   position: absolute;
-  right: 0.75rem;
+  right: 3rem;
   bottom: 0.75rem;
   margin: 0;
   padding: 0.4rem 0.6rem;
@@ -199,6 +199,42 @@ h1 {
   background: rgb(11 14 20 / 78%);
   font-size: 0.75rem;
   pointer-events: none;
+}
+
+.viewport-home-button {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgb(133 157 199 / 38%);
+  border-radius: 50%;
+  color: #c7d5ef;
+  background: rgb(11 14 20 / 88%);
+  box-shadow: 0 0.2rem 0.8rem rgb(0 0 0 / 28%);
+  cursor: pointer;
+}
+
+.viewport-home-button:hover {
+  border-color: #7388b2;
+  background: rgb(30 37 51 / 94%);
+}
+
+.viewport-home-button:focus-visible {
+  outline: 2px solid #a9c7ff;
+  outline-offset: 2px;
+}
+
+.viewport-home-button svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
 }
 
 .viewport-page {

@@ -37,14 +37,16 @@ export type Viewport2D = {
   readonly onPointerMove: PointerEventHandler<HTMLCanvasElement>;
   readonly onPointerUp: PointerEventHandler<HTMLCanvasElement>;
   readonly prepareContext: () => CanvasRenderingContext2D | null;
+  readonly resetView: () => void;
   readonly size: Size2D;
   readonly state: ViewportState;
   readonly world: Size2D;
 };
 
 export function useViewport2D(initialState: ViewportState): Viewport2D {
+  const [defaultState] = useState(initialState);
   const [initialUrlState] = useState(() =>
-    viewportStateFromSearch(window.location.search, initialState),
+    viewportStateFromSearch(window.location.search, defaultState),
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef(initialUrlState);
@@ -66,6 +68,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     },
     [size],
   );
+  const resetView = useCallback(() => commitState(defaultState), [commitState, defaultState]);
 
   const world = worldDimensions(size, state.area);
   const cursor = screenToWorld(
@@ -92,13 +95,13 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       replaceUrlParameters({
-        area: state.area.toString(),
-        x: state.centerX.toString(),
-        y: state.centerY.toString(),
+        area: state.area === defaultState.area ? undefined : state.area.toString(),
+        x: state.centerX === defaultState.centerX ? undefined : state.centerX.toString(),
+        y: state.centerY === defaultState.centerY ? undefined : state.centerY.toString(),
       });
     }, URL_UPDATE_DELAY_MS);
     return () => window.clearTimeout(timeout);
-  }, [state]);
+  }, [defaultState, state]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -291,6 +294,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     onPointerMove,
     onPointerUp: onPointerEnd,
     prepareContext,
+    resetView,
     size,
     state,
     world,

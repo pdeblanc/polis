@@ -29,9 +29,14 @@ export function useUrlSeed(defaultSeed: string): readonly [string, (seed: string
   return [seed, setSeed] as const;
 }
 
-export function replaceUrlParameters(values: Readonly<Record<string, string>>): void {
+export function replaceUrlParameters(
+  values: Readonly<Record<string, string | undefined>>,
+): void {
   const url = new URL(window.location.href);
-  for (const [name, value] of Object.entries(values)) url.searchParams.set(name, value);
+  for (const [name, value] of Object.entries(values)) {
+    if (value === undefined) url.searchParams.delete(name);
+    else url.searchParams.set(name, value);
+  }
   if (url.href === window.location.href) return;
   window.history.replaceState(window.history.state, "", url);
 }

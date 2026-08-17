@@ -15,6 +15,7 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
     onPointerEnter,
     onPointerMove,
     onPointerUp,
+    resetView,
     world,
   } = viewport;
 
@@ -41,6 +42,18 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
         {children}
       </div>
       <p className="viewport-help">Drag or WASD/arrows to pan · Wheel or −/= to zoom</p>
+      <button
+        aria-label="Reset view to origin"
+        className="viewport-home-button"
+        onClick={resetView}
+        title="Reset view to origin"
+        type="button"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+      </button>
     </section>
   );
 }
