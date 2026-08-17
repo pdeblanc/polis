@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
+import { useFramePerformance } from '../helpers/useFramePerformance';
 import { useUrlSeed } from '../helpers/urlState';
 import { CacheControl, type CacheUsage } from './CacheControl';
 import { SeedControl } from './SeedControl';
 import { ViewportFrame } from './ViewportFrame';
+import { PerformanceControl } from './PerformanceControl';
 import {
   cellContainingPoint,
   dependencyAncestor,
@@ -26,17 +28,21 @@ export function StarfieldHierarchyCanvas() {
   const { cursor, prepareContext, size, state, world } = viewport;
   const [showHierarchy, setShowHierarchy] = useState(true);
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => starfield.getCacheUsage());
+  const { measureFrame, performance } = useFramePerformance();
 
   useEffect(() => {
     const context = prepareContext();
     if (context === null) return;
-    drawBackground(context, size, state);
-    drawStarfield(context, size, world, state, starfield);
-    if (showHierarchy) {
-      drawHierarchy(context, size, world, state, cursor);
-    }
+    measureFrame(() => {
+      drawBackground(context, size, state);
+      const queries = drawStarfield(context, size, world, state, starfield);
+      if (showHierarchy) {
+        drawHierarchy(context, size, world, state, cursor);
+      }
+      return queries;
+    });
     updateCacheUsage(setCacheUsage, starfield.getCacheUsage());
-  }, [cursor, prepareContext, showHierarchy, size, starfield, state, world]);
+  }, [cursor, measureFrame, prepareContext, showHierarchy, size, starfield, state, world]);
 
   return (
     <>
@@ -53,6 +59,7 @@ export function StarfieldHierarchyCanvas() {
             setCacheUsage(starfield.getCacheUsage());
           }}
         />
+        <PerformanceControl performance={performance} />
         <label>
           <input
             type="checkbox"
@@ -123,16 +130,17 @@ function drawStarfield(
   world: Size2D,
   viewport: ViewportState,
   starfield: Starfield,
-) {
+): number {
   const worldPerPixel = world.width / size.width;
   const edgeLength = 2 ** Math.ceil(Math.log2(worldPerPixel * RENDER_CELL_PIXELS));
-  if (!(edgeLength > 0) || !Number.isFinite(edgeLength)) return;
+  if (!(edgeLength > 0) || !Number.isFinite(edgeLength)) return 0;
   const maxX = viewport.centerX + world.width / 2;
   const maxY = viewport.centerY + world.height / 2;
   const startX = Math.floor((viewport.centerX - world.width / 2) / edgeLength) * edgeLength;
   const startY = Math.floor((viewport.centerY - world.height / 2) / edgeLength) * edgeLength;
   const columnCount = Math.max(0, Math.ceil((maxX - startX) / edgeLength));
   const rowCount = Math.max(0, Math.ceil((maxY - startY) / edgeLength));
+  let queries = 0;
 
   for (let column = 0; column < columnCount; column += 1) {
     const cellX = startX + column * edgeLength;
@@ -140,6 +148,7 @@ function drawStarfield(
       const cellY = startY + row * edgeLength;
       const cell = { minX: cellX, minY: cellY, edgeLength };
       const result = starfield.queryCell(cell);
+      queries += 1;
       if (result.positions === undefined) {
         drawAggregateCell(context, size, world, viewport, cell, result.count);
       } else {
@@ -147,6 +156,7 @@ function drawStarfield(
       }
     }
   }
+  return queries;
 }
 
 function drawPositions(

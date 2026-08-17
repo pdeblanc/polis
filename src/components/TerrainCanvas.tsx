@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
 import { useUrlSeed } from '../helpers/urlState';
+import { useFramePerformance } from '../helpers/useFramePerformance';
 import { TerrainModel } from '../models/terrain/terrainModel';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { SeedControl } from './SeedControl';
 import { CacheControl, type CacheUsage } from './CacheControl';
 import { ViewportFrame } from './ViewportFrame';
+import { PerformanceControl } from './PerformanceControl';
 
 const SAMPLE_CELL_PIXELS = 8;
 const DEFAULT_SEED = 'Polis 2';
@@ -18,13 +20,14 @@ export function TerrainCanvas() {
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { prepareContext, size, state, world } = viewport;
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => terrain.getCacheUsage());
+  const { measureFrame, performance } = useFramePerformance();
 
   useEffect(() => {
     const context = prepareContext();
     if (context === null) return;
-    drawTerrain(context, size, world, state, terrain);
+    measureFrame(() => drawTerrain(context, size, world, state, terrain));
     updateCacheUsage(setCacheUsage, terrain.getCacheUsage());
-  }, [prepareContext, size, state, terrain, world]);
+  }, [measureFrame, prepareContext, size, state, terrain, world]);
 
   return (
     <>
@@ -41,6 +44,7 @@ export function TerrainCanvas() {
             setCacheUsage(terrain.getCacheUsage());
           }}
         />
+        <PerformanceControl performance={performance} />
       </ViewportFrame>
     </>
   );
@@ -61,13 +65,13 @@ function drawTerrain(
   world: Size2D,
   viewport: ViewportState,
   terrain: TerrainModel,
-) {
+): number {
   context.fillStyle = '#0b0e14';
   context.fillRect(0, 0, size.width, size.height);
 
   const worldPerPixel = Math.max(world.width / size.width, world.height / size.height);
   const spacing = 2 ** Math.ceil(Math.log2(worldPerPixel * SAMPLE_CELL_PIXELS));
-  if (!(spacing > 0) || !Number.isFinite(spacing)) return;
+  if (!(spacing > 0) || !Number.isFinite(spacing)) return 0;
 
   const minX = viewport.centerX - world.width / 2;
   const maxX = viewport.centerX + world.width / 2;
@@ -77,14 +81,17 @@ function drawTerrain(
   const finalColumn = Math.ceil(maxX / spacing + 0.5);
   const firstRow = Math.floor(minY / spacing + 0.5);
   const finalRow = Math.ceil(maxY / spacing + 0.5);
+  let queries = 0;
 
   for (let row = firstRow; row < finalRow; row += 1) {
     for (let column = firstColumn; column < finalColumn; column += 1) {
       const vertex = { x: column * spacing, y: row * spacing };
       const { height } = terrain.sampleNearest(vertex, spacing);
+      queries += 1;
       drawSampleCell(context, size, viewport, vertex, spacing, height);
     }
   }
+  return queries;
 }
 
 function drawSampleCell(

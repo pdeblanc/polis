@@ -252,6 +252,13 @@ h1 {
   stroke-width: 1.5;
 }
 
+.performance-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
 .viewport-help {
   position: absolute;
   right: 3rem;
