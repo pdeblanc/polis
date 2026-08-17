@@ -1,5 +1,7 @@
 # Polis
 
+See the [documentation index](./docs/README.md) for technical references and design records.
+
 ## Requirements
 
 - Node.js 22 or later
