@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
+import { ViewportFrame } from './ViewportFrame';
 import {
   cellContainingPoint,
   dependencyAncestor,
@@ -17,20 +18,8 @@ const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 64 };
 
 export function StarfieldHierarchyCanvas() {
   const starfield = useMemo(() => new Starfield(DEFAULT_SEED), []);
-  const {
-    canvasRef,
-    cursor,
-    onPointerCancel,
-    onPointerDown,
-    onPointerEnter,
-    onPointerMove,
-    onPointerUp,
-    onWheel,
-    prepareContext,
-    size,
-    state,
-    world,
-  } = useViewport2D(INITIAL_VIEWPORT);
+  const viewport = useViewport2D(INITIAL_VIEWPORT);
+  const { cursor, prepareContext, size, state, world } = viewport;
   const [showHierarchy, setShowHierarchy] = useState(true);
 
   useEffect(() => {
@@ -44,37 +33,19 @@ export function StarfieldHierarchyCanvas() {
   }, [cursor, prepareContext, showHierarchy, size, starfield, state, world]);
 
   return (
-    <section className="hierarchy-demo" aria-label="Starfield hierarchy explorer">
-      <canvas
-        aria-label="Pannable and zoomable starfield hierarchy viewport"
-        className="hierarchy-canvas"
-        ref={canvasRef}
-        onPointerCancel={onPointerCancel}
-        onPointerDown={onPointerDown}
-        onPointerEnter={onPointerEnter}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onWheel={onWheel}
-      />
-      <div className="hierarchy-readout">
-        <span>
-          x {formatCoordinateAtScale(cursor.x, world.width)} · y{' '}
-          {formatCoordinateAtScale(cursor.y, world.height)}
-        </span>
-        <span>
-          width {formatCoordinate(world.width)} · height {formatCoordinate(world.height)}
-        </span>
-        <label>
-          <input
-            type="checkbox"
-            checked={showHierarchy}
-            onChange={(event) => setShowHierarchy(event.target.checked)}
-          />{' '}
-          Hierarchy
-        </label>
-      </div>
-      <p className="viewport-help">Drag or WASD/arrows to pan · Wheel or −/= to zoom</p>
-    </section>
+    <ViewportFrame
+      canvasLabel="Pannable and zoomable starfield hierarchy viewport"
+      viewport={viewport}
+    >
+      <label>
+        <input
+          type="checkbox"
+          checked={showHierarchy}
+          onChange={(event) => setShowHierarchy(event.target.checked)}
+        />{' '}
+        Hierarchy
+      </label>
+    </ViewportFrame>
   );
 }
 
@@ -241,14 +212,4 @@ function drawCell(
     Math.round(southeast.x - northwest.x),
     Math.round(southeast.y - northwest.y),
   );
-}
-
-function formatCoordinate(value: number): string {
-  if (value !== 0 && Math.abs(value) < 0.001) return value.toExponential(3);
-  return value.toFixed(3).replace('-0.000', '0.000');
-}
-
-function formatCoordinateAtScale(value: number, span: number): string {
-  const decimalPlaces = Math.max(0, Math.ceil(-Math.log10(span)) + 3);
-  return value.toFixed(decimalPlaces).replace(/^-0(?:\.0+)?$/, (zero) => zero.slice(1));
 }
