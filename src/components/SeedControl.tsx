@@ -20,7 +20,7 @@ export function SeedControl({ seed, setSeed }: SeedControlProps) {
   return (
     <form className="seed-control" onSubmit={onSubmit}>
       <label>
-        seed{' '}
+        Seed{' '}
         <input
           aria-label="World seed"
           value={draft}
