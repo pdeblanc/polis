@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
+import { useUrlSeed } from '../helpers/urlState';
+import { SeedControl } from './SeedControl';
 import { ViewportFrame } from './ViewportFrame';
 import {
   cellContainingPoint,
@@ -17,7 +19,8 @@ const DEFAULT_SEED = 'polis-demo-1';
 const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 64 };
 
 export function StarfieldHierarchyCanvas() {
-  const starfield = useMemo(() => new Starfield(DEFAULT_SEED), []);
+  const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
+  const starfield = useMemo(() => new Starfield(seed), [seed]);
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { cursor, prepareContext, size, state, world } = viewport;
   const [showHierarchy, setShowHierarchy] = useState(true);
@@ -37,6 +40,7 @@ export function StarfieldHierarchyCanvas() {
       canvasLabel="Pannable and zoomable starfield hierarchy viewport"
       viewport={viewport}
     >
+      <SeedControl seed={seed} setSeed={setSeed} />
       <label>
         <input
           type="checkbox"

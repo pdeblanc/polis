@@ -1,8 +1,10 @@
 import { useEffect, useMemo } from 'react';
 import { useViewport2D } from '../helpers/useViewport2D';
+import { useUrlSeed } from '../helpers/urlState';
 import { TerrainModel } from '../models/terrain/terrainModel';
 import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
+import { SeedControl } from './SeedControl';
 import { ViewportFrame } from './ViewportFrame';
 
 const SAMPLE_CELL_PIXELS = 8;
@@ -10,7 +12,8 @@ const DEFAULT_SEED = 'polis-terrain-1';
 const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16 };
 
 export function TerrainCanvas() {
-  const terrain = useMemo(() => new TerrainModel(DEFAULT_SEED), []);
+  const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
+  const terrain = useMemo(() => new TerrainModel(seed), [seed]);
   const viewport = useViewport2D(INITIAL_VIEWPORT);
   const { prepareContext, size, state, world } = viewport;
 
@@ -24,7 +27,9 @@ export function TerrainCanvas() {
     <ViewportFrame
       canvasLabel="Pannable and zoomable nearest-neighbor terrain viewport"
       viewport={viewport}
-    />
+    >
+      <SeedControl seed={seed} setSeed={setSeed} />
+    </ViewportFrame>
   );
 }
 

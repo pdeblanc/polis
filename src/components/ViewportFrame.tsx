@@ -15,7 +15,6 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
     onPointerEnter,
     onPointerMove,
     onPointerUp,
-    onWheel,
     world,
   } = viewport;
 
@@ -30,7 +29,6 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
         onPointerEnter={onPointerEnter}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onWheel={onWheel}
       />
       <div className="hierarchy-readout">
         <span>

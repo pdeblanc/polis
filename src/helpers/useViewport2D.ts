@@ -5,7 +5,6 @@ import {
   useState,
   type PointerEventHandler,
   type RefObject,
-  type WheelEventHandler,
 } from "react";
 import type { Point2D } from "../utils/geometry/point2d";
 import {
@@ -16,9 +15,11 @@ import {
   type Size2D,
   type ViewportState,
 } from "../utils/geometry/viewport2d";
+import { replaceUrlParameters, viewportStateFromSearch } from "./urlState";
 
 const KEYBOARD_PAN_RATE = 1.2;
 const KEYBOARD_ZOOM_RATE = 1.5;
+const URL_UPDATE_DELAY_MS = 250;
 const WHEEL_ZOOM_RATE = 0.0033;
 
 type Pinch = {
@@ -35,7 +36,6 @@ export type Viewport2D = {
   readonly onPointerEnter: PointerEventHandler<HTMLCanvasElement>;
   readonly onPointerMove: PointerEventHandler<HTMLCanvasElement>;
   readonly onPointerUp: PointerEventHandler<HTMLCanvasElement>;
-  readonly onWheel: WheelEventHandler<HTMLCanvasElement>;
   readonly prepareContext: () => CanvasRenderingContext2D | null;
   readonly size: Size2D;
   readonly state: ViewportState;
@@ -43,13 +43,16 @@ export type Viewport2D = {
 };
 
 export function useViewport2D(initialState: ViewportState): Viewport2D {
+  const [initialUrlState] = useState(() =>
+    viewportStateFromSearch(window.location.search, initialState),
+  );
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef(initialState);
+  const stateRef = useRef(initialUrlState);
   const pointersRef = useRef(new Map<number, Point2D>());
   const pinchRef = useRef<Pinch | undefined>(undefined);
   const pressedKeysRef = useRef(new Set<string>());
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
-  const [state, setState] = useState(initialState);
+  const [state, setState] = useState(initialUrlState);
   const [cursorPosition, setCursorPosition] = useState<Point2D>({
     x: 0.5,
     y: 0.5,
@@ -85,6 +88,44 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     observer.observe(canvas);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      replaceUrlParameters({
+        area: state.area.toString(),
+        x: state.centerX.toString(),
+        y: state.centerY.toString(),
+      });
+    }, URL_UPDATE_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [state]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const point = localPointer({
+        currentTarget: canvas,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+      setCursorPosition({ x: point.x / size.width, y: point.y / size.height });
+      const current = stateRef.current;
+      commitState(
+        zoomAround(
+          current,
+          size,
+          point,
+          Math.exp(wheelDeltaInPixels(event, size.height) * WHEEL_ZOOM_RATE),
+        ),
+      );
+    };
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [commitState, size]);
 
   useEffect(() => {
     let animationFrame: number | undefined;
@@ -230,21 +271,6 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     updateCursor(localPointer(event));
   };
 
-  const onWheel: WheelEventHandler<HTMLCanvasElement> = (event) => {
-    event.preventDefault();
-    const point = localPointer(event);
-    updateCursor(point);
-    const current = stateRef.current;
-    commitState(
-      zoomAround(
-        current,
-        size,
-        point,
-        Math.exp(wheelDeltaInPixels(event, size.height) * WHEEL_ZOOM_RATE),
-      ),
-    );
-  };
-
   const prepareContext = () => {
     const canvas = canvasRef.current;
     if (canvas === null) return null;
@@ -264,7 +290,6 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     onPointerEnter,
     onPointerMove,
     onPointerUp: onPointerEnd,
-    onWheel,
     prepareContext,
     size,
     state,
