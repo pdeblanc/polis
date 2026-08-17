@@ -20,6 +20,10 @@ import { replaceUrlParameters, viewportStateFromSearch } from "./urlState";
 
 const KEYBOARD_PAN_RATE = 1.2;
 const KEYBOARD_ZOOM_RATE = 1.5;
+const MAX_MOMENTUM_APPARENT_SPEED = 3;
+const MIN_MOMENTUM_APPARENT_SPEED = 0.01;
+const MOMENTUM_TIME_CONSTANT = 0.2;
+const PAN_VELOCITY_SMOOTHING_TIME = 0.05;
 const URL_UPDATE_DELAY_MS = 250;
 const WHEEL_ZOOM_RATE = 0.0033;
 
@@ -27,6 +31,12 @@ type Pinch = {
   readonly area: number;
   readonly distance: number;
   readonly anchor: Point2D;
+};
+
+type PanVelocity = {
+  x: number;
+  y: number;
+  time: number;
 };
 
 export type Viewport2D = {
@@ -54,6 +64,8 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const pointersRef = useRef(new Map<number, Point2D>());
   const pinchRef = useRef<Pinch | undefined>(undefined);
   const pressedKeysRef = useRef(new Set<string>());
+  const momentumAnimationRef = useRef<number | undefined>(undefined);
+  const panVelocityRef = useRef<PanVelocity | undefined>(undefined);
   const resetAnimationRef = useRef<number | undefined>(undefined);
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialUrlState);
@@ -67,6 +79,11 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     cancelAnimationFrame(resetAnimationRef.current);
     resetAnimationRef.current = undefined;
   }, []);
+  const cancelMomentum = useCallback(() => {
+    if (momentumAnimationRef.current === undefined) return;
+    cancelAnimationFrame(momentumAnimationRef.current);
+    momentumAnimationRef.current = undefined;
+  }, []);
   const applyState = useCallback(
     (next: ViewportState) => {
       const constrained = constrainViewport(next, size);
@@ -78,12 +95,14 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   const commitState = useCallback(
     (next: ViewportState) => {
       cancelResetAnimation();
+      cancelMomentum();
       applyState(next);
     },
-    [applyState, cancelResetAnimation],
+    [applyState, cancelMomentum, cancelResetAnimation],
   );
   const resetView = useCallback(() => {
     cancelResetAnimation();
+    cancelMomentum();
     pressedKeysRef.current.clear();
     const target = constrainViewport(defaultState, size);
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
@@ -104,7 +123,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       }
     };
     resetAnimationRef.current = requestAnimationFrame(animate);
-  }, [applyState, cancelResetAnimation, defaultState, size]);
+  }, [applyState, cancelMomentum, cancelResetAnimation, defaultState, size]);
 
   const world = worldDimensions(size, state.area);
   const cursor = screenToWorld(
@@ -128,14 +147,27 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => cancelResetAnimation, [cancelResetAnimation]);
+  useEffect(
+    () => () => {
+      cancelResetAnimation();
+      cancelMomentum();
+    },
+    [cancelMomentum, cancelResetAnimation],
+  );
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       replaceUrlParameters({
-        area: state.area === defaultState.area ? undefined : state.area.toString(),
-        x: state.centerX === defaultState.centerX ? undefined : state.centerX.toString(),
-        y: state.centerY === defaultState.centerY ? undefined : state.centerY.toString(),
+        area:
+          state.area === defaultState.area ? undefined : state.area.toString(),
+        x:
+          state.centerX === defaultState.centerX
+            ? undefined
+            : state.centerX.toString(),
+        y:
+          state.centerY === defaultState.centerY
+            ? undefined
+            : state.centerY.toString(),
       });
     }, URL_UPDATE_DELAY_MS);
     return () => window.clearTimeout(timeout);
@@ -212,6 +244,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       if (action === undefined) return;
       event.preventDefault();
       cancelResetAnimation();
+      cancelMomentum();
       pressedKeysRef.current.add(action);
       if (animationFrame === undefined)
         animationFrame = requestAnimationFrame(animate);
@@ -235,7 +268,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
-  }, [cancelResetAnimation, commitState, size]);
+  }, [cancelMomentum, cancelResetAnimation, commitState, size]);
 
   function updateCursor(point: Point2D) {
     setCursorPosition({ x: point.x / size.width, y: point.y / size.height });
@@ -243,9 +276,11 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
 
   const onPointerDown: PointerEventHandler<HTMLCanvasElement> = (event) => {
     cancelResetAnimation();
+    cancelMomentum();
     const point = localPointer(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     pointersRef.current.set(event.pointerId, point);
+    panVelocityRef.current = { x: 0, y: 0, time: event.timeStamp };
     updateCursor(point);
 
     if (pointersRef.current.size === 2) {
@@ -270,14 +305,25 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     if (pointersRef.current.size === 1) {
       const current = stateRef.current;
       const dimensions = worldDimensions(size, current.area);
+      const centerDeltaX =
+        -((point.x - previous.x) / size.width) * dimensions.width;
+      const centerDeltaY =
+        ((point.y - previous.y) / size.height) * dimensions.height;
+      const velocity = panVelocityRef.current;
+      const elapsed = Math.max(
+        0.001,
+        (event.timeStamp - (velocity?.time ?? event.timeStamp)) / 1_000,
+      );
+      const smoothing = 1 - Math.exp(-elapsed / PAN_VELOCITY_SMOOTHING_TIME);
+      panVelocityRef.current = {
+        x: lerp(velocity?.x ?? 0, centerDeltaX / elapsed, smoothing),
+        y: lerp(velocity?.y ?? 0, centerDeltaY / elapsed, smoothing),
+        time: event.timeStamp,
+      };
       commitState({
         ...current,
-        centerX:
-          current.centerX -
-          ((point.x - previous.x) / size.width) * dimensions.width,
-        centerY:
-          current.centerY +
-          ((point.y - previous.y) / size.height) * dimensions.height,
+        centerX: current.centerX + centerDeltaX,
+        centerY: current.centerY + centerDeltaY,
       });
       return;
     }
@@ -305,9 +351,18 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     }
   };
 
-  const onPointerEnd: PointerEventHandler<HTMLCanvasElement> = (event) => {
+  const onPointerUp: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    const wasSinglePointer = pointersRef.current.size === 1;
     pointersRef.current.delete(event.pointerId);
     pinchRef.current = undefined;
+    if (wasSinglePointer) startMomentum(event.timeStamp);
+    else panVelocityRef.current = undefined;
+  };
+
+  const onPointerCancel: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    pointersRef.current.delete(event.pointerId);
+    pinchRef.current = undefined;
+    panVelocityRef.current = undefined;
   };
 
   const onPointerEnter: PointerEventHandler<HTMLCanvasElement> = (event) => {
@@ -325,14 +380,63 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     return context;
   };
 
+  function startMomentum(releaseTime: number) {
+    const velocity = panVelocityRef.current;
+    panVelocityRef.current = undefined;
+    if (velocity === undefined) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    const current = stateRef.current;
+    const scale = Math.sqrt(current.area);
+    const ageDecay = Math.exp(-Math.max(0, releaseTime - velocity.time) / 80);
+    const apparentSpeed = Math.hypot(velocity.x, velocity.y) / scale;
+    if (apparentSpeed * ageDecay < MIN_MOMENTUM_APPARENT_SPEED) return;
+    const speedLimit = MAX_MOMENTUM_APPARENT_SPEED * scale;
+    const speedScale = Math.min(
+      1,
+      speedLimit / Math.hypot(velocity.x, velocity.y),
+    );
+    let velocityX = velocity.x * speedScale * ageDecay;
+    let velocityY = velocity.y * speedScale * ageDecay;
+    let previousTime: number | undefined;
+
+    const animate = (time: number) => {
+      const elapsed =
+        previousTime === undefined
+          ? 0
+          : Math.min((time - previousTime) / 1_000, 0.05);
+      previousTime = time;
+      const decay = Math.exp(-elapsed / MOMENTUM_TIME_CONSTANT);
+      const distanceFactor = MOMENTUM_TIME_CONSTANT * (1 - decay);
+      const state = stateRef.current;
+      applyState({
+        ...state,
+        centerX: state.centerX + velocityX * distanceFactor,
+        centerY: state.centerY + velocityY * distanceFactor,
+      });
+      velocityX *= decay;
+      velocityY *= decay;
+
+      if (
+        Math.hypot(velocityX, velocityY) / Math.sqrt(state.area) >=
+        MIN_MOMENTUM_APPARENT_SPEED
+      ) {
+        momentumAnimationRef.current = requestAnimationFrame(animate);
+      } else {
+        momentumAnimationRef.current = undefined;
+      }
+    };
+    momentumAnimationRef.current = requestAnimationFrame(animate);
+  }
+
   return {
     canvasRef,
     cursor,
-    onPointerCancel: onPointerEnd,
+    onPointerCancel,
     onPointerDown,
     onPointerEnter,
     onPointerMove,
-    onPointerUp: onPointerEnd,
+    onPointerUp,
     prepareContext,
     resetView,
     size,
@@ -366,6 +470,10 @@ function midpointOf(first: Point2D, second: Point2D): Point2D {
 
 function distanceBetween(first: Point2D, second: Point2D): number {
   return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+function lerp(start: number, end: number, progress: number): number {
+  return start + (end - start) * progress;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
