@@ -218,7 +218,7 @@ An address describes the identity of a random variable in the implicit world. Fo
 ```text
 starfield / cell / edges (-4, -2, -2, 0) / count
 
-terrain / level 12 / vertex (938, 421) / displacement
+terrain / vertex (0.25, 0.125) / displacement
 ```
 
 The RNG accepts an address prefix general enough for each model to describe its random-variable identities. Address components may be strings, finite JavaScript numbers, `bigint` values, or byte arrays. The canonical encoder uses explicit type tags and lengths, normalizes `-0`, rejects malformed Unicode and non-finite numbers, and produces a `Uint8Array` for hashing. Arbitrary JavaScript object serialization is not acceptable.
@@ -407,10 +407,38 @@ Repeated dependencies should be memoized in a model-scoped cache using the share
 Each newly introduced terrain value gets a random displacement determined from:
 
 - the world seed;
-- its hierarchical level; and
-- its canonical vertex coordinates.
+- its canonical vertex coordinates; and
+- the common Euclidean distance from that vertex to each of its four parents.
 
-The displacement scale decreases with refinement level.
+The vertex does not carry a semantic hierarchy-level identifier. Its dyadic world
+coordinates determine its parents and their distance. Displacement variance scales
+linearly with that physical distance, so displacement standard deviation scales with
+the square root of distance. Square- and diamond-step vertices at the same dyadic
+spacing may therefore have different displacement variances because diagonal and axial
+parent distances differ.
+
+To keep marginal terrain variance approximately independent of the queried vertex,
+multiply the four-parent mean by a deterministic weight based only on parent distance.
+The prototype weights through the eighth refinement were calibrated by computing the
+exact parent-mean variance for every spatial phase in one coarse unit cell and averaging
+within each distance. Finer distances use the observed asymptotic linear form. Exhaustive
+measurements through refinement eight put the worst marginal-variance error at about
+`0.5%`, with the error decreasing rapidly at finer spacing.
+
+The exact position-dependent weight for target variance `V`, displacement variance
+`q`, and parent-mean variance `M` is `sqrt((V - q) / M)`. `M` includes all six pairwise
+parent covariances; treating the parents as independent is incorrect. Computing those
+covariances recursively is retained as possible future work if exact second-moment
+normalization becomes valuable. The measured implementation took roughly `0.8--15.5`
+milliseconds for one cold vertex over refinements 1--14, compared with constant-time
+selection of a calibrated distance-only weight.
+
+With exact Gaussian innovations this linear recurrence would preserve the complete
+Gaussian marginal distribution. The bounded six-sigma normal utility is not exactly
+Gaussian, and the distance-only weight also approximates marginal variance, so the
+prototype only approximately preserves the full marginal distribution. These small
+distortions are accepted initially and should be revisited if exact marginal equality
+becomes a hard requirement.
 
 The random variable should preferably use the bounded/truncated distribution infrastructure established under `utils/`.
 
@@ -429,7 +457,7 @@ For each explicit terrain API call, instrumentation should be able to report:
 
 This will allow empirical plots of query cost versus hierarchy depth and can later support a formal complexity analysis.
 
-The public terrain API is consumer-driven and may later add regular grids, aligned tiles, or arbitrary-coordinate samples. An off-lattice sample uses the nearest vertex on a specified lattice level; the level is required because the union of all dyadic refinement lattices is dense. The visualization derives this level from viewport area and pixel dimensions, subject to a maximum supported terrain refinement level.
+The public terrain API is consumer-driven and may later add regular grids, aligned tiles, or arbitrary-coordinate samples. An off-lattice sample uses the nearest vertex at a specified dyadic spacing; a spacing is required because the union of all dyadic refinement lattices is dense. The visualization derives this sampling spacing from viewport area and pixel dimensions, subject to a minimum supported terrain spacing.
 
 ### 10.5 Demo
 

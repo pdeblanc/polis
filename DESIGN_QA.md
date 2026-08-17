@@ -183,14 +183,20 @@ power-of-two subdivision remains exact within documented magnitude and refinemen
 limits. Addressing must normalize `-0`, reject non-finite values, and hash a canonical
 representation rather than incidental decimal formatting.
 
-**Still to specify:** The exact interpolation formula and displacement scale by level;
-the canonical representation of coarse-scale and dyadic coordinates; and worked
-examples confirming the parent rules and termination condition.
+**Implementation conclusion:** Vertices are identified directly by finite dyadic world
+coordinates rather than a semantic level. A vertex averages its four parents and adds a
+bounded normal displacement whose variance is proportional to their common Euclidean
+distance. The parent average is multiplied by a distance-only normalization weight.
 
-These details are deferred to the terrain implementation experiment. The proposal is
-accepted as the starting construction; implementation must satisfy the stated DAG,
-boundary-consistency, canonical-coordinate, and termination requirements before Q4 can
-be marked validated.
+An exact normalization would depend on the six correlations among the four parents and
+therefore on the vertex's spatial phase relative to the coarse lattice. A recursive
+covariance implementation was measured at roughly `0.8--15.5` milliseconds for one
+cold vertex over refinements 1--14, making it unattractive for viewport sampling.
+Calibrating one weight per distance from phase-averaged exact covariance calculations
+gave at most about `0.5%` marginal-variance error through refinement eight, decreasing
+rapidly with finer spacing. The prototype uses those calibrated weights and an
+asymptotic continuation. Retain exact covariance normalization, broader calibration,
+and a proof or stronger bound on approximation error as possible future work.
 
 ### Q5. Is literal diamond-square the right terrain requirement?
 
@@ -500,11 +506,11 @@ initial natural recursion has no proven hard depth bound; a nonempty cell can in
 principle remain above the threshold through arbitrarily many random splits. A future
 hard-bound requirement would require a capacity schedule or bounded fallback.
 
-Terrain API queries at off-lattice coordinates use nearest-neighbor sampling on a
-specified lattice level. A level or lattice spacing is required because the union of
-all dyadic refinement lattices is dense and therefore has no nearest vertex to a
-general coordinate. The visualization derives the requested level from its world area
-and pixel dimensions. The terrain model may clamp this to a maximum refinement level.
+Terrain API queries at off-lattice coordinates use nearest-neighbor sampling at a
+specified dyadic lattice spacing. A spacing is required because the union of all dyadic
+refinement lattices is dense and therefore has no nearest vertex to a general
+coordinate. The visualization derives the requested spacing from its world area and
+pixel dimensions. The terrain model may clamp this to a minimum supported spacing.
 
 ---
 
@@ -731,7 +737,7 @@ comparisons remain future work.
   coordinates, with documented prototype magnitude and refinement limits.
 - **Q12:** Share world units but keep model hierarchy addresses private. Identify
   starfield boxes geometrically, preserve viewport world area across resize, and sample
-  off-lattice terrain at a requested nearest-neighbor lattice level.
+  off-lattice terrain at a requested nearest-neighbor dyadic spacing.
 - **Q13:** Bound each query's encoded output size polynomially in its encoded input size;
   large populations return scalar counts, while viewport work may scale with pixels.
 - **Q14:** Use model-scoped, correctness-independent caches with `clearCache()` for cold
