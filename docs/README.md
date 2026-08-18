@@ -14,6 +14,8 @@ This directory contains the project's technical reference material and design re
   implementation, including justified departures and issues retained for review.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary technical design for
   the birds model, the next major model under consideration.
+- [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) tracks open questions and accepted decisions
+  from the birds design review.
 
 For an introduction to the existing code, start with `PROJECT.md`. For work on the birds
 model, read `BIRDS_MODEL_DESIGN.md` before beginning its detailed review.
