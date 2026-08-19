@@ -1678,25 +1678,18 @@ unreliable. The old design remains historical input rather than a normative spec
 
 ---
 
-## Initial review summary
+## Completed review summary
 
-The exact conservation construction in the spatial stages is the strongest part of the
-proposal. In particular, joint source and destination hypergeometric batches followed by
-per-flow contingency-table reconciliation provide compatible row sums, column sums, and
-parent totals.
+All review questions have accepted conclusions. The resulting plan combines deterministic
+coarse initialization, bridge-only temporal kernels, a finite fixed-point motion support,
+exact spatial conservation, geometry-derived entity classification, unique stochastic
+ownership, an acyclic query graph, and bounded resolution-aware public APIs.
 
-The largest correctness risk is the ordinary-flow support rule: the direct bounded
-Brownian increment envelope is not evidently preserved by the model's own temporal and
-spatial refinement operations. The largest implementation blockers are the unspecified
-coarse kernel, count and dyadic representations, midpoint probability calculation, and
-finite-support sampler algorithms.
+The standalone revised proposal is [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md).
+This Q&A remains the decision history and contains experiments and alternatives that are
+too detailed for the normative proposal.
 
-Suggested discussion order:
-
-1. parameter and numeric domains;
-2. coarse initialization;
-3. hierarchy-closed support;
-4. midpoint probabilities and boundary enumeration;
-5. canonical batch ordering and samplers;
-6. legal-entity predicates and acyclicity;
-7. public API and experiments.
+The required post-implementation work remains part of project completion: characterize
+the model against the Poisson–Brownian reference, investigate likelihood-ratio-monotone
+multinomial coupling, measure end-to-end performance before adding approximate fast
+paths, and audit Starfield and Terrain for applicable structural classifiers.

@@ -16,6 +16,8 @@ This directory contains the project's technical reference material and design re
   the birds model, the next major model under consideration.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) tracks open questions and accepted decisions
   from the birds design review.
+- [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the standalone revised birds
+  proposal produced from that review.
 
-For an introduction to the existing code, start with `PROJECT.md`. For work on the birds
-model, read `BIRDS_MODEL_DESIGN.md` before beginning its detailed review.
+For an introduction to the existing code, start with `PROJECT.md`. For current birds work,
+start with `BIRDS_DESIGN_PROPOSAL.md`; the older birds design and Q&A remain review history.
