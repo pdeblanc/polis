@@ -1,4 +1,4 @@
-import { NORMAL_MAX_DEVIATIONS } from '../utils/distributions/normal';
+import { roundedNormal } from '../utils/distributions/roundedNormal';
 
 export interface BirdsFlowSupport {
   readonly coarseOffsets: ReadonlySet<number>;
@@ -101,20 +101,7 @@ export function roundedNormalSupport(
   mean: number,
   standardDeviation: number,
 ): ReadonlySet<number> {
-  if (!Number.isFinite(mean) || !Number.isFinite(standardDeviation) || standardDeviation < 0) {
-    throw new RangeError('Rounded-normal parameters must be finite with nonnegative spread');
-  }
-
-  const radius = NORMAL_MAX_DEVIATIONS * standardDeviation;
-  const first = roundToPositiveInfinity(mean - radius);
-  const last = roundToPositiveInfinity(mean + radius);
-  const result = new Set<number>();
-  for (let value = first; value <= last; value += 1) result.add(value);
-  return result;
-}
-
-function roundToPositiveInfinity(value: number): number {
-  return Math.floor(value + 0.5);
+  return new Set(roundedNormal(mean, standardDeviation).map(({ value }) => value));
 }
 
 function symmetrize(values: ReadonlySet<number>): Set<number> {
