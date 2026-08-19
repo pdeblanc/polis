@@ -1,9 +1,12 @@
 # Polis Birds Design Q&A and Decision Log
 
+> **Status: Historical decision log.** The review is complete. The canonical Birds design
+> currently being implemented is
+> [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md).
+
 This document records questions, feedback, and decisions from the review of
-[`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md). The design remains preliminary while
-these questions are open. Accepted conclusions should be recorded here and incorporated
-into the design when they change the model specification.
+[`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md). It preserves the reasoning, experiments,
+and alternatives that led to the canonical design; it is not itself normative.
 
 ## Status key
 
@@ -510,6 +513,13 @@ spatial precision, requested temporal step, and duration or step count. Because 
 amount of disambiguating refinement is not known in advance, it should also accept a
 work or refinement budget and report an unresolved step rather than pretending that a
 non-unique continuation is a sampled model fact.
+
+**Post-proposal review amendment:** The simple continuation description above is
+insufficient when a populated outflow reaches a destination containing multiple birds.
+The canonical tracker instead maintains singleton committed waypoints, rejects and
+locally refines ambiguous candidate segments, and coarsens wherever a parent remains a
+singleton. The complete singleton-spacetime-tube algorithm and its proof obligations are
+specified in the canonical design.
 
 Trajectory characterization should measure increment mean and variance, Gaussian
 increment error, independence of disjoint increments, conditional midpoint or bridge
@@ -1643,7 +1653,8 @@ Normative tests cover:
 - determinism across query order and cache state;
 - decreasing dependency rank and finite heterogeneous ancestry;
 - public resolution selection, snapping disclosure, and result-size limits;
-- unique tagged-bird continuation after isolation; and
+- singleton-waypoint tracking, local refinement of ambiguous segments, and safe
+  coarsening; and
 - measured query complexity over epoch depth, density, diffusion, and separation.
 
 After the main model and initial UI, complete the multinomial coupling investigation
@@ -1685,9 +1696,9 @@ coarse initialization, bridge-only temporal kernels, a finite fixed-point motion
 exact spatial conservation, geometry-derived entity classification, unique stochastic
 ownership, an acyclic query graph, and bounded resolution-aware public APIs.
 
-The standalone revised proposal is [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md).
-This Q&A remains the decision history and contains experiments and alternatives that are
-too detailed for the normative proposal.
+The canonical design currently being implemented is
+[`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md). This Q&A remains decision history
+and contains experiments and alternatives that are too detailed for the normative design.
 
 The required post-implementation work remains part of project completion: characterize
 the model against the Poisson–Brownian reference, investigate likelihood-ratio-monotone

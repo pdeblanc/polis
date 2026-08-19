@@ -1,3 +1,7 @@
+> **Status: Incorporated review record.** Its revisions are reflected in the canonical
+> Birds design currently being implemented:
+> [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md).
+
 I reviewed the revised Birds design and Q&A. I think the design is now in good shape to implement. The Q&A resolved most of the issues that were underspecified in the earlier version, especially support closure, construction vs. subdivision capability, stochastic ownership, legality/classification, and the interpretation of the diffusion parameter.
 
 A few comments and revisions:

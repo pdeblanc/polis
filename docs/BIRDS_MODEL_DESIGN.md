@@ -1,5 +1,8 @@
 # Polis Birds Model — Preliminary 1+1D Technical Design
 
+> **Status: Historical preliminary design.** The canonical Birds design currently being
+> implemented is [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md).
+
 ## 1. Purpose
 
 This document specifies a preliminary one-dimensional moving-population model for Polis.

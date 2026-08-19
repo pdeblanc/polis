@@ -12,12 +12,15 @@ This directory contains the project's technical reference material and design re
   the starter design.
 - [`DESIGN_CHANGES.md`](./DESIGN_CHANGES.md) compares the starter design with the resulting
   implementation, including justified departures and issues retained for review.
-- [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary technical design for
-  the birds model, the next major model under consideration.
-- [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) tracks open questions and accepted decisions
-  from the birds design review.
-- [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the standalone revised birds
-  proposal produced from that review.
+- [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical design now
+  being implemented** for the birds model.
+- [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
+  retained as historical review input.
+- [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced
+  the canonical birds design.
+- [`BIRDS_MODEL_PROPOSAL_FEEDBACK.md`](./BIRDS_MODEL_PROPOSAL_FEEDBACK.md) records the review
+  feedback incorporated after the revised proposal was drafted.
 
-For an introduction to the existing code, start with `PROJECT.md`. For current birds work,
-start with `BIRDS_DESIGN_PROPOSAL.md`; the older birds design and Q&A remain review history.
+For an introduction to the existing code, start with `PROJECT.md`. For birds implementation
+work, use `BIRDS_DESIGN_PROPOSAL.md` as the normative specification. The other birds
+documents are review history and do not override it.

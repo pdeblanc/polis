@@ -1,4 +1,10 @@
-# Birds: Revised Design Proposal
+# Birds Model Design
+
+> **Status: Canonical — currently being implemented.**
+>
+> This document is the normative design for the current Birds implementation. Earlier
+> Birds design, Q&A, and review-feedback documents are historical context. If they
+> conflict with this document, this document controls.
 
 ## 1. Purpose
 
@@ -15,7 +21,7 @@ invariants:
 2. population is conserved exactly at every subdivision and aggregation;
 3. every stochastic fact has one canonical owner and addressed-random identity;
 4. results are independent of query order and cache state;
-5. recursive queries use finite, explicit dependency sets;
+5. recursive queries use finite, explicit dependency sets for fixed model parameters;
 6. the query graph is acyclic and terminates at deterministic coarse data; and
 7. public queries return bounded data and hide hierarchy mechanics.
 
@@ -56,6 +62,11 @@ Model methods are synchronous. Each instance owns bounded LRU caches and exposes
 usage and `clearCache()`. Cache contents affect work only, never semantics.
 Each distinct cache type initially has a capacity defined by a named global constant;
 constructor-level tuning may be added only when a concrete consumer needs it.
+
+“Bounded” does not mean bounded by one parameter-independent constant. For fixed model
+parameters, stochastic support and dependency enumeration are finite; their sizes may
+grow with `diffusionRate`, approximately as `sqrt(D)`. Public result ceilings may reject
+requests whose complete finite result would be impractically large.
 
 ## 4. Numeric representation and scales
 
@@ -328,8 +339,11 @@ F(A_1, B_0) = c_0 - x
 F(A_1, B_1) = N - r_0 - c_0 + x
 ```
 
-The containing flow owns this `2 x 2` reconciliation. The result reproduces both margins
-and becomes epoch `n+1` entry flow data.
+The hypergeometric law makes an explicit exchangeability approximation: conditional on
+the G1 row margins and G2 column margins, source-child and destination-child memberships
+inside the coarse flow are coupled by a uniformly random matching. The containing flow
+owns this `2 x 2` reconciliation. The result reproduces both margins and becomes epoch
+`n+1` entry flow data.
 
 ## 10. Finite-support samplers and addressing
 
@@ -492,7 +506,8 @@ counts—never hierarchy addresses, owners, stages, epochs, or ranks.
 
 ### 13.1 Resolution capabilities
 
-Consumers obtain opaque, model-instance-scoped capabilities through:
+Consumers obtain model-instance-scoped resolution capabilities through operations
+conceptually like:
 
 ```ts
 resolvePopulationResolution({ targetCellWidth, targetTimeStep })
@@ -504,6 +519,12 @@ Resolvers select the coarsest supported resolution at least as fine as each supp
 bound and report exact widths, duration, and temporal lattice. A flow resolver returns
 `undefined` when no equal- or adjacent-resolution flow fits. Nearby enumeration is finite
 and intended for controls.
+
+The semantic contract above is normative; these method names, argument objects, and the
+decision to use branded capability objects are provisional. Actual visualization and
+tracker consumers may motivate a simpler syntax. Any syntax must still let consumers
+request an approximate resolution, learn the exact legal resolution selected, and
+continue from that exact lattice without independently snapping again.
 
 Capabilities expose supported refinement relationships, or model methods return finer
 population and compatible flow capabilities. Consumers never reproduce scale formulas.
@@ -531,20 +552,50 @@ Exact TypeScript names and result unions may evolve while preserving these seman
 ## 14. Tagged-bird helper
 
 Birds have no persistent model identity. The helper selects one exchangeable unit and
-constructs a trajectory from conserved counts.
+searches already-determined hierarchy facts for a **singleton spacetime tube** around it.
+Its fundamental invariant is:
 
-Its only random choice is one starting population rank. Cumulative child counts map that
-rank deterministically through spatial refinement until its cell population is one.
-Conservation then guarantees one populated outflow. Temporal and spatial subdivisions
-preserve the unit, so one populated descendant continues without further random routing.
+> Every committed waypoint is a cell containing exactly one bird.
 
-When a destination contains other birds, compatible finer population and flow
-capabilities identify the child containing the unit. The helper may refine below output
-precision and omit disambiguation steps from its result.
+The helper's only independent random choice is one starting population rank. Cumulative
+child counts map that rank through spatial refinement until it reaches a singleton cell,
+which becomes the first committed waypoint.
 
-Inputs include starting-selection seed, starting region and time, spatial precision,
-temporal step, duration or step count, and a work/refinement budget. Exhausting the budget
-returns an explicit unresolved step. The variable-work helper is not a model method.
+From a committed singleton source, conservation guarantees exactly one populated
+outflow at any chosen legal flow resolution. The helper first proposes the coarsest cell
+and longest legal segment allowed by the consumer's requested precision. If the unique
+populated flow reaches a singleton destination, it commits that destination and
+continues.
+
+If the destination population is at least two, the proposed segment does not preserve
+recoverable identity: the model stores no incoming-to-outgoing correspondence among
+multiple exchangeable birds. The helper discards that candidate segment, returns to its
+last committed singleton source, and refines only the uncommitted segment. It may:
+
+- request an asymmetric flow with a finer destination and follow the unique populated
+  child flow;
+- subdivide the singleton source, select its unique populated child, and request a
+  compatible finer flow;
+- temporally subdivide the segment; or
+- combine these operations as allowed by public resolution semantics.
+
+The search continues until the destination is singleton. It should never need to
+backtrack across two committed waypoints: failure says only that the segment leaving the
+most recent singleton was too coarse. This is a proof obligation, not an assumption to
+embed without tests.
+
+The helper also coarsens aggressively. If a parent of a singleton cell has population
+one, both cells identify the same unique unit, so unnecessary spatial refinement is
+removed. Subject to requested output precision, the returned tube uses the coarsest
+singleton cells and longest legal singleton-to-singleton segments it can establish. It
+may omit finer internal search steps from the returned trajectory.
+
+Refinement, backtracking, and coarsening query addressed facts already defined by Birds;
+they introduce no traversal-dependent randomness. Inputs include starting-selection
+seed, starting region and time, requested spatial precision and temporal step, duration
+or step count, and a work/refinement budget. Exhausting the budget returns an explicit
+unresolved step. The variable-work helper is not a model method and should be implemented
+only after real population and flow consumers have exercised the public resolution API.
 
 ## 15. Visualization and diagnostics
 
@@ -574,7 +625,10 @@ Version 1 tests:
 - determinism across query order, cache state, and inverse paths;
 - decreasing dependency rank and finite heterogeneous ancestry;
 - public resolution selection, snapping disclosure, and result ceilings;
-- unique tagged continuation after isolation; and
+- the singleton-waypoint invariant throughout tagged tracking;
+- local backtracking without crossing two committed waypoints;
+- asymmetric refinement paths that recover a singleton destination;
+- aggressive coarsening without changing the selected unit; and
 - query complexity over epoch depth, density, diffusion, and separation.
 
 Early epochs and alignment residues receive exhaustive tests. Seeded generated ancestry
@@ -633,7 +687,8 @@ part of stochastic semantics and may be disabled or simplified after the model i
 10. Add order, cache, ownership, ancestry, and complexity tests.
 11. Implement resolution capabilities and bounded public queries.
 12. Add the spacetime view and early dependency overlays.
-13. Implement tagged tracking and trajectory display.
+13. After the public API has been exercised by the visualization, implement singleton-
+    tube tracking and trajectory display.
 14. Run Poisson–Brownian characterization.
 15. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
     why sequential binomials remain.
@@ -648,7 +703,7 @@ remain deterministic across order and caches, have one owner per stochastic batc
 structural and acyclicity tests, expose bounded hierarchy-free APIs, and support a working
 spacetime visualization with debug overlays.
 
-The broader Birds project additionally requires a budgeted tagged-bird helper,
+The broader Birds project additionally requires a budgeted singleton-tube tracker,
 Poisson–Brownian characterization, end-to-end performance measurements, the completed
 multinomial monotonicity investigation, and the documented Starfield/Terrain classifier
 audit.
