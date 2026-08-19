@@ -33,7 +33,7 @@ When resolving these questions, prefer:
 
 ### Q1. What are the supported parameter ranges?
 
-**Status:** Proposed
+**Status:** Decided
 
 The design exposes `populationDensity` and `diffusionRate`, but does not define their
 legal numeric ranges. A single temporal subdivision enumerates approximately
@@ -47,15 +47,17 @@ The specification should still decide:
 - the legal density range; and
 - the validation rules for finite JavaScript-number parameters.
 
-**Current conclusion:** Model parameters are fixed when evaluating asymptotic query
+**Conclusion:** Model parameters are fixed when evaluating asymptotic query
 complexity. There is therefore no requirement that work be polynomial in the encoded
 size or precision of `populationDensity` or `diffusionRate`, and the API should not impose
 an artificial performance-derived maximum on either parameter. Semantically valid
 parameters should be accepted and their practical limits discovered experimentally.
 
 Parameters are expressed in world units and use JavaScript numbers in the prototype.
-The exact semantic domain remains open, most notably whether zero diffusion is legal and
-whether the approximation requires a positive minimum diffusion rate.
+`populationDensity` and `diffusionRate` accept every finite nonnegative number, including
+zero. Reject negative values, infinities, and `NaN`. There is no artificial maximum or
+positive minimum. A density whose coarse-cell population rounds to zero produces an
+empty initial model. Zero diffusion uses the midpoint semantics decided in Q6 and Q8.
 
 ### Q2. How is the deterministic coarse-flow kernel defined?
 
@@ -444,7 +446,7 @@ motion.
 
 ### Q7. What approximation-quality criterion is sufficient?
 
-**Status:** Open
+**Status:** Decided
 
 The design correctly rejects a claim of exact Brownian trajectories, but “better for
 larger diffusion” needs a measurable interpretation.
@@ -460,7 +462,60 @@ Candidate observables include:
 Tests should distinguish errors that persist at every scale from finite-resolution errors
 that shrink under refinement.
 
-**Conclusion:** Pending.
+**Conclusion:** Treat the intended process as a Poisson population undergoing Brownian
+motion and compare version 1 against that external reference without tuning version 1 to
+improve the measurements retroactively.
+
+For a spatial cell `A` at any time, the reference marginal is:
+
+```text
+N(A) ~ Poisson(populationDensity * width(A))
+```
+
+For a flow from `A` to `B` over duration `T`, the reference marginal is Poisson with
+mean:
+
+```text
+populationDensity * width(A)
+  * P(X_T in B | X_0 is uniform on A)
+```
+
+Calculate that Brownian transition probability by integrating over the complete source
+and destination intervals in the continuous reference model, even when the implementation
+uses a different cell-center or hierarchical approximation. Measure marginal means,
+variances, probability masses, and relevant correlations over several scales.
+
+These are characterization tests, not exact version-1 invariants. Deterministic rounded
+coarse populations and flows prevent exact Poisson marginals at the coarse scale, and
+conditional binomial or multinomial refinement of a fixed total does not restore exact
+Poisson marginals. Record the discrepancy so it can guide a later stochastic
+initialization or model version.
+
+Also build a higher-level **tagged-bird tracker** for trajectory measurements and the
+GUI. It is a helper, not part of the `Birds` model API. Its only random choice selects one
+starting bird uniformly from a populated starting cell. This can be represented by a
+single random population rank. Canonical cumulative child counts then map that rank
+deterministically through spatial refinements until its cell population is one.
+
+Once a cell has population one, conservation guarantees that exactly one outgoing flow
+is populated. The tracker follows that flow without another random choice. Temporal and
+spatial flow subdivisions conserve its unit count, so exactly one descendant remains
+populated at each refinement. At the destination, the helper may refine further than the
+requested output precision until the bird is again isolated from other birds, then
+continues through its unique outgoing flow. It may omit these internal disambiguation
+steps from the returned trajectory.
+
+The tracker should accept a starting-selection seed, starting cell and time, requested
+spatial precision, requested temporal step, and duration or step count. Because the
+amount of disambiguating refinement is not known in advance, it should also accept a
+work or refinement budget and report an unresolved step rather than pretending that a
+non-unique continuation is a sampled model fact.
+
+Trajectory characterization should measure increment mean and variance, Gaussian
+increment error, independence of disjoint increments, conditional midpoint or bridge
+behavior, multi-step displacement, and how these errors vary with scale and diffusion
+rate. The results inform version 2; they do not authorize changing the already specified
+version-1 hierarchy merely to improve a score.
 
 ---
 
@@ -711,6 +766,46 @@ and required throughput. At that point its error, feasible-output bounds, determ
 addressing, bounded work, and dispatch threshold must be stated and tested explicitly.
 The initial implementation does not need to anticipate a particular approximation.
 
+For arbitrary-probability binomial sampling, use
+`@stdlib/stats-base-dists-binomial-quantile` with one addressed uniform quantile in the
+initial implementation. Sequential conditional binomial draws then implement the
+multinomial distribution in canonical category order, with the final category receiving
+the conserved remainder.
+
+An inverse-CDF benchmark over probabilities `0.001`, `0.01`, `0.1`, `0.5`, `0.9`,
+`0.99`, and `0.999` found:
+
+- at `n = 1,000`, approximately 816,000 samples per second in the balanced case and up
+  to 1.9 million in the most skewed cases;
+- at `n = 1,000,000`, approximately 254,000 balanced samples per second and 644,000 to
+  674,000 at the most extreme probabilities; and
+- at `n = 1,000,000,000`, approximately 26,000 balanced samples per second, 73,000 to
+  78,000 at probabilities `0.1` and `0.9`, and 184,000 to 189,000 at probabilities
+  `0.001` and `0.999`.
+
+This is adequate as the exact initial algorithm, particularly because most model counts
+may be far below one billion. The balanced large-count case is a plausible future
+performance bottleneck. As with hypergeometric sampling, defer an approximate binomial
+fast path until end-to-end model profiling establishes actual count and probability
+regimes. Preserve the inverse-CDF implementation as a reference and as a useful
+monotone coupling for parameter changes where inverse-quantile ordering applies.
+
+The canonical sequential-binomial multinomial construction is not claimed to satisfy
+global likelihood-ratio monotonicity when its probability vector changes. After the main
+Birds model and initial UI are complete, the project must investigate alternative
+multinomial couplings with that property. This is a required research milestone but not
+a blocker for version-1 model implementation.
+
+The investigation should begin with exact constructions such as shared Gumbel-max or
+exponential-race coupling over categorical trials, then look for more efficient batched
+or count-space algorithms. For each candidate, establish whether the global
+likelihood-ratio condition actually follows; monotonicity of local conditional binomial
+draws is insufficient. Measure work and memory as functions of population and category
+count, benchmark representative Birds parameters, and document the interaction with
+addressed determinism and conservation. The milestone is complete only when the project
+either adopts a practical sampler or explicitly records why the investigated constructions
+are unsuitable and retains the sequential sampler.
+
 Monotonicity for multivariate samplers means an addressed coupling across related calls,
 not merely monotonicity of their expectations. Require or investigate it only for
 parameter changes that define a coherent partial order:
@@ -780,9 +875,12 @@ than silently claiming it.
 **Conclusion:** Use canonical sequential scalar draws for multivariate hypergeometric
 sampling and the addressed H2PE implementation for the initial exact scalar sampler.
 Keep the `@stdlib` HIN implementation only as a small-count reference or optional safe
-fast path. Monotonic coupling remains desirable rather than mandatory. Defer approximate
-sampling until end-to-end performance measurements demonstrate a need and provide the
-parameter regimes against which to evaluate it.
+fast path. Use the `@stdlib` inverse CDF for initial exact arbitrary-probability binomial
+sampling and canonical sequential binomial draws for multinomial sampling. Monotonic
+coupling is not mandatory for the initial implementation, but the required post-UI
+multinomial investigation must evaluate global likelihood-ratio monotonicity. Defer
+approximate sampling until end-to-end performance measurements demonstrate a need and
+provide the parameter regimes against which to evaluate it.
 
 ### Q11. What canonical ordering and addressing does each batch use?
 
@@ -865,7 +963,7 @@ literals.
 
 ### Q13. What are the executable legal-entity predicates?
 
-**Status:** Proposed
+**Status:** Decided
 
 Section 33 describes legal cells and flows but does not yet provide complete predicates.
 The implementation needs pure structural rules for:
@@ -1257,7 +1355,29 @@ Auxiliary subdivision-query classifiers should be thin projections of these resu
 If those projections need additional geometry, add it to the primary classifier result
 instead of deriving it from `epoch` or `stage` in the query method.
 
-**Conclusion:** Pending.
+**Conclusion:** Adopt the constructive sets and classifier interfaces above. Entities
+store raw geometry rather than epoch or stage labels. `classifyCell`, `classifyFlow`, and
+`classifyTwoStageFlow` invert that geometry into one unique construction case and return
+every parent, owner, alignment, search input, and related entity required by recursive
+queries. Queries must not reconstruct those facts by calculating with epoch or stage
+numbers.
+
+Return `undefined` for structurally invalid geometry or alignment. A structurally legal
+entity excluded by the configured stochastic support remains valid and has count zero;
+do not conflate it with a nonexistent hierarchy entity. Negative-time classification
+uses Euclidean residues. Numeric precision limits remain outside these predicates unless
+experiments identify a practical boundary.
+
+Construction and subdivision-owner capability are independent classifications. Every
+legal length-`L_n` cell occurs at a `T_(n+1)`-aligned time and owns its epoch-`n` Stage-F
+cell subdivision and Stage-G1/G2 incidence subdivisions, whether the cell itself was
+constructed by coarse initialization, Stage `E_n`, or Stage `F_(n-1)`. Owner projections
+must return these capabilities directly.
+
+Likewise, an equal-resolution flow may own a temporal subdivision because of its geometry
+even when its own construction case is coarse initialization or the preceding epoch's
+Stage H. The owner-projection classifiers must not infer capability merely by matching
+the entity's construction-stage label.
 
 ### Q14. What rank proves that recursive queries are acyclic?
 
@@ -1391,9 +1511,11 @@ Two-stage-flow ownership is similarly unique after width is fixed:
 - total duration `T_n` is an entry of its parent flow's Stage-A subdivision; and
 - total duration `T_n / 2` is an entry of its parent flow's Stage-C subdivision.
 
-The exact arithmetic midpoint time and the midpoint cell identify the entry. Midpoint
-cell boundaries use `Math.round` semantics, so a continuous boundary value belongs to
-the positive/right cell rather than to two cells.
+The exact arithmetic midpoint time and the midpoint cell identify the entry. For positive
+variance, midpoint-cell boundaries use the `Math.round` semantics decided in Q8. At zero
+diffusion, the cell-boundary kernel instead has two distinct categories with probability
+`1 / 2` each. Each category is still a different midpoint cell owned by the same unique
+parent subdivision; the exception does not duplicate a stochastic fact or owner.
 
 Entity ownership and subdivision ownership must remain distinct in classifier metadata.
 For example, a Stage-B flow is constructed by temporal aggregation but then owns a
@@ -1423,7 +1545,7 @@ boundary assigns the same stochastic fact to two owners.
 
 ### Q16. What is the consumer-facing `Birds` API?
 
-**Status:** Open
+**Status:** Decided
 
 The design lists internal stochastic queries but does not define the public model wrapper.
 The public API should be motivated by the first visualization and should not expose epochs,
@@ -1437,11 +1559,62 @@ Possible consumer operations include:
 
 The output contract needs a hard size limit analogous to the starfield tile limit.
 
-**Conclusion:** Pending.
+The tagged-bird tracker decided in Q7 is intentionally not a `Birds` model method. It is
+a higher-level helper that may perform an unpredictable amount of refinement and owns
+the one random choice used to select its starting bird. The public model API only needs
+to expose bounded aggregate queries sufficient for that helper and for visualizations.
+
+**Conclusion:** The initial public API exposes bounded instantaneous population and flow
+queries:
+
+```ts
+queryPopulation(...)
+queryFlow(...)
+queryOutflows(...)
+queryInflows(...)
+```
+
+`queryPopulation` returns an ordered population profile at one explicit sampled time. A
+spacetime visualization builds a two-dimensional display from a sequence of such
+timestamped profiles. Do not expose a rectangular population query whose entries could
+be misread as occupancy throughout a time interval.
+
+`queryFlow` returns the count between one canonical source and destination.
+`queryOutflows` and `queryInflows` discover the complete motion envelope internally and
+return all nonzero incident flows in canonical spatial order. Consumers never enumerate
+the envelope themselves. Every plural query has a hard result limit and reports that the
+complete result is too large rather than returning a partial list that appears to violate
+conservation.
+
+Supported space/time combinations are model semantics and are exposed through resolution
+capabilities rather than a separate utility:
+
+```ts
+resolvePopulationResolution({ targetCellWidth, targetTimeStep })
+resolveFlowResolution({ targetSourceWidth, targetDestinationWidth, targetDuration })
+getNearbyResolutions(request)
+```
+
+The resolvers select the coarsest supported resolution at least as fine as every supplied
+bound and return the exact world-unit widths, duration, and temporal lattice. A flow
+resolver returns `undefined` when no structural flow type satisfies incompatible bounds.
+It understands equal-resolution and adjacent mixed-resolution flows without exposing the
+corresponding epochs or stages. `getNearbyResolutions` may return a finite set around a
+requested scale for UI controls; it does not enumerate the unbounded hierarchy.
+
+Population and flow queries accept only capabilities produced by the same model instance.
+The capability values expose world-space facts such as cell widths, time steps, and flow
+duration, but no hierarchy addresses, owners, stages, or epoch identifiers. Queries
+report actual snapped times and resolutions in their results.
+
+The higher-level tagged-bird helper uses these public methods and requests progressively
+finer capabilities when it must disambiguate a conserved unit. It does not call internal
+hierarchy queries or reproduce resolution formulas. Exact TypeScript names and result
+union shapes may evolve during implementation while preserving these semantics.
 
 ### Q17. Which tests can be written only after earlier decisions?
 
-**Status:** Open
+**Status:** Decided
 
 The conservation identities are already well specified. Other planned tests depend on
 unresolved model choices:
@@ -1455,21 +1628,53 @@ unresolved model choices:
 This dependency order should shape the implementation sequence so tests do not silently
 codify provisional behavior as model semantics.
 
-**Conclusion:** Pending.
+**Conclusion:** The prerequisite decisions are now complete. Divide validation into
+normative tests that version 1 must pass and non-gating characterization measurements.
+
+Normative tests cover:
+
+- parameter validation;
+- entity classification and invalid-geometry rejection;
+- unique ownership at positive and negative time alignments;
+- finite fixed-point support and agreement of forward and inverse enumeration;
+- mid-cell, cell-boundary, and zero-diffusion kernel semantics;
+- exact conservation through every subdivision and aggregation stage;
+- sampler feasibility bounds and exact batch remainders;
+- determinism across query order and cache state;
+- decreasing dependency rank and finite heterogeneous ancestry;
+- public resolution selection, snapping disclosure, and result-size limits;
+- unique tagged-bird continuation after isolation; and
+- measured query complexity over epoch depth, density, diffusion, and separation.
+
+After the main model and initial UI, complete the multinomial coupling investigation
+specified in Q10. This is part of the Birds project success criteria even though it does
+not gate the first working implementation. It must end with either a tested practical
+likelihood-ratio-monotone sampler or an explicit documented decision to retain the
+sequential sampler after evaluating the alternatives.
+
+Characterization measurements cover cell and flow error relative to the Poisson reference,
+Brownian increment and bridge error, correlations between disjoint increments, tagged
+trajectories across scales, and sensitivity to density and diffusion rate. These results
+inform version 2 and do not gate the version-1 hierarchy.
+
+Per Q12, do not invent speculative overflow tests or numeric limits. Record observed
+failure boundaries and add focused regression tests or API restrictions only when an
+experiment demonstrates a real boundary. The Starfield and Terrain classifier audit
+remains an explicit implementation success criterion.
 
 ### Q18. How should the mathematical notation be repaired?
 
-**Status:** Proposed
+**Status:** Decided
 
 Many formulas currently contain malformed Markdown or LaTeX-like notation, including
 `L*n`, `T*{n+1}`, underline-style `====` sequences, and broken matrix row separators.
 This makes some scale and recurrence formulas ambiguous.
 
-**Proposed direction:** Normalize the document to one supported math notation before it
-becomes normative. At minimum, preserve literal subscripts such as `L_n` and `T_{n+1}` in
-plain code spans where the renderer cannot reliably display mathematical markup.
-
-**Conclusion:** Pending.
+**Conclusion:** Do not repair the pre-Q&A design document in place. Write a new revised
+design proposal from the accepted Q&A conclusions and submit that coherent document for
+review. Use whichever Markdown and mathematical notation renders most clearly, keeping
+literal forms such as `L_n` and `T_{n+1}` in code spans when mathematical rendering is
+unreliable. The old design remains historical input rather than a normative specification.
 
 ---
 

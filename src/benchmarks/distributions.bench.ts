@@ -76,6 +76,16 @@ describe('exact quantile scaling', () => {
   }
 });
 
+describe('@stdlib binomial inverse-CDF parameter scaling', () => {
+  for (const count of [1_000, 1_000_000, LARGE_COUNT]) {
+    for (const probability of [0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999]) {
+      bench(`n ${count}, p ${probability}`, () => {
+        sink = binomialQuantile(nextQuantile(), count, probability);
+      });
+    }
+  }
+});
+
 describe('hybrid addressed sampler scaling', () => {
   for (const count of [1_001, 1_000_000, LARGE_COUNT]) {
     bench(`Poisson, mean ${count}`, () => {
