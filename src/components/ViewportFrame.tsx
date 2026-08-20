@@ -1,14 +1,27 @@
-import type { PropsWithChildren } from 'react';
+import { useState, type PropsWithChildren } from 'react';
 import type { Viewport2D } from '../helpers/useViewport2D';
 import { CoordinateControl } from './CoordinateControl';
 
 type ViewportFrameProps = PropsWithChildren<{
   readonly axisLabels?: { readonly x: string; readonly y: string };
   readonly canvasLabel: string;
+  readonly coordinateDisplay?: {
+    readonly formattedX: string;
+    readonly formattedY: string;
+    readonly xOperator?: string;
+    readonly yOperator?: string;
+  };
   readonly viewport: Viewport2D;
 }>;
 
-export function ViewportFrame({ axisLabels, canvasLabel, children, viewport }: ViewportFrameProps) {
+export function ViewportFrame({
+  axisLabels,
+  canvasLabel,
+  children,
+  coordinateDisplay,
+  viewport,
+}: ViewportFrameProps) {
+  const [coordinateWidgetHovered, setCoordinateWidgetHovered] = useState(false);
   const {
     canvasRef,
     cursor,
@@ -35,13 +48,26 @@ export function ViewportFrame({ axisLabels, canvasLabel, children, viewport }: V
         onPointerUp={onPointerUp}
       />
       <div className="viewport-top-widgets">
-        <div className="hierarchy-readout">
+        <div
+          className="hierarchy-readout"
+          onMouseEnter={() => setCoordinateWidgetHovered(true)}
+          onMouseLeave={() => setCoordinateWidgetHovered(false)}
+        >
           <CoordinateControl
-            formattedX={formatCoordinateAtScale(cursor.x, world.width)}
-            formattedY={formatCoordinateAtScale(cursor.y, world.height)}
+            editableX={formatCoordinateAtScale(cursor.x, world.width)}
+            editableY={formatCoordinateAtScale(cursor.y, world.height)}
+            formattedX={
+              coordinateDisplay?.formattedX ?? formatCoordinateAtScale(cursor.x, world.width)
+            }
+            formattedY={
+              coordinateDisplay?.formattedY ?? formatCoordinateAtScale(cursor.y, world.height)
+            }
+            revealEditable={coordinateWidgetHovered}
             setCoordinates={setCursorWorldPosition}
             xLabel={axisLabels?.x}
+            xOperator={coordinateDisplay?.xOperator}
             yLabel={axisLabels?.y}
+            yOperator={coordinateDisplay?.yOperator}
           />
           <span className="viewport-area-readout">
             A = {formatSpan(world.width)} × {formatSpan(world.height)}

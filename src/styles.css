@@ -223,11 +223,18 @@ h1 {
   border: 1px solid transparent;
   border-radius: 0.25rem;
   color: #dce7fa;
-  background: rgb(4 7 12 / 36%);
+  background: transparent;
   font: inherit;
   transition:
     border-color 120ms ease,
     background 120ms ease;
+}
+
+.hierarchy-readout:hover .coordinate-control input,
+.coordinate-control:hover input,
+.coordinate-control:focus-within input,
+.coordinate-control[data-dirty] input {
+  background: rgb(4 7 12 / 36%);
 }
 
 .coordinate-control input:hover,

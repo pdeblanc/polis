@@ -7,6 +7,7 @@ import {
   type BirdsPopulationResolution,
   type BirdsPopulationSample,
 } from '../models/birds/birds';
+import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { CacheControl, type CacheUsage } from './CacheControl';
 import { PerformanceControl } from './PerformanceControl';
@@ -23,6 +24,12 @@ const MAX_RENDER_SAMPLES = 1_000;
 const TIME_ZOOM_EXPONENT = 2;
 const TIME_WORLD_SCALE = 1 / 64;
 
+interface HoveredPopulationCell {
+  readonly max: number;
+  readonly min: number;
+  readonly time: number;
+}
+
 export function BirdsCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
   const birds = useMemo(
@@ -33,10 +40,14 @@ export function BirdsCanvas() {
     verticalScale: TIME_WORLD_SCALE,
     verticalZoomExponent: TIME_ZOOM_EXPONENT,
   });
-  const { prepareContext, size, state, world } = viewport;
+  const { cursor, prepareContext, size, state, world } = viewport;
   const resolution = useMemo(
     () => birdsRenderResolution(birds, size, world, state),
     [birds, size, state, world],
+  );
+  const hoveredCell = useMemo(
+    () => (resolution === undefined ? undefined : populationCellAt(cursor, resolution)),
+    [cursor, resolution],
   );
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => birds.getCacheUsage());
   const { measureFrame, performance } = useFramePerformance();
@@ -44,9 +55,11 @@ export function BirdsCanvas() {
   useEffect(() => {
     const context = prepareContext();
     if (context === null) return;
-    measureFrame(() => drawBirds(context, size, world, state, birds, resolution));
+    measureFrame(() =>
+      drawBirds(context, size, world, state, birds, resolution, hoveredCell),
+    );
     updateCacheUsage(setCacheUsage, birds.getCacheUsage());
-  }, [birds, measureFrame, prepareContext, resolution, size, state, world]);
+  }, [birds, hoveredCell, measureFrame, prepareContext, resolution, size, state, world]);
 
   return (
     <>
@@ -54,6 +67,15 @@ export function BirdsCanvas() {
       <ViewportFrame
         axisLabels={{ x: 'x', y: 't' }}
         canvasLabel="Pannable spacetime population view with future upward"
+        coordinateDisplay={
+          hoveredCell === undefined
+            ? undefined
+            : {
+                formattedX: `[${formatResolution(hoveredCell.min)}, ${formatResolution(hoveredCell.max)})`,
+                formattedY: formatResolution(hoveredCell.time),
+                xOperator: '∈',
+              }
+        }
         viewport={viewport}
       >
         <SeedControl seed={seed} setSeed={setSeed} />
@@ -83,6 +105,7 @@ function drawBirds(
   viewport: ViewportState,
   birds: Birds,
   resolution: BirdsPopulationResolution | undefined,
+  hoveredCell: HoveredPopulationCell | undefined,
 ): number {
   drawBackground(context, size, viewport);
   const bounds = {
@@ -133,8 +156,23 @@ function drawBirds(
       queries += 1;
     }
   }
+  if (hoveredCell !== undefined) {
+    drawHoveredCell(context, size, viewport, resolution, hoveredCell);
+  }
   drawDirection(context);
   return queries;
+}
+
+function populationCellAt(
+  point: Point2D,
+  resolution: BirdsPopulationResolution,
+): HoveredPopulationCell {
+  const min = Math.floor(point.x / resolution.cellWidth) * resolution.cellWidth;
+  return {
+    min,
+    max: min + resolution.cellWidth,
+    time: Math.round(point.y / resolution.timeStep) * resolution.timeStep,
+  };
 }
 
 function birdsRenderResolution(
@@ -225,6 +263,37 @@ function drawPopulationSample(
   context.fillRect(left.x, left.y - thickness / 2, Math.max(1, right.x - left.x), thickness);
 }
 
+function drawHoveredCell(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+  viewport: ViewportState,
+  resolution: BirdsPopulationResolution,
+  cell: HoveredPopulationCell,
+): void {
+  const topLeft = worldToScreen(
+    { x: cell.min, y: cell.time + resolution.timeStep / 2 },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  const bottomRight = worldToScreen(
+    { x: cell.max, y: cell.time - resolution.timeStep / 2 },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  context.strokeStyle = '#fff0bd';
+  context.lineWidth = 2;
+  context.strokeRect(
+    Math.round(topLeft.x) + 0.5,
+    Math.round(topLeft.y) + 0.5,
+    Math.round(bottomRight.x - topLeft.x),
+    Math.round(bottomRight.y - topLeft.y),
+  );
+}
+
 function drawDirection(context: CanvasRenderingContext2D): void {
   const x = 18;
   const top = 66;
@@ -261,6 +330,9 @@ function updateCacheUsage(
 
 function formatResolution(value: number | undefined): string {
   if (value === undefined) return '—';
-  if (value < 0.001 || value >= 10_000) return value.toExponential(2);
+  if (value === 0) return '0';
+  if (Math.abs(value) < 0.001 || Math.abs(value) >= 10_000) {
+    return value.toExponential(2);
+  }
   return String(value);
 }

@@ -5,6 +5,35 @@ import { CoordinateControl } from './CoordinateControl';
 afterEach(cleanup);
 
 describe('CoordinateControl', () => {
+  it('switches from a passive snapped display to editable scalar coordinates', () => {
+    const view = render(
+      <CoordinateControl
+        editableX="1.25"
+        editableY="-2.5"
+        formattedX="[0, 2)"
+        formattedY="-4"
+        setCoordinates={vi.fn()}
+        xOperator="∈"
+        yLabel="t"
+      />,
+    );
+    const x = view.getByRole('textbox', { name: 'Cursor x coordinate' });
+    const time = view.getByRole('textbox', { name: 'Cursor t coordinate' });
+
+    expect(x).toHaveValue('[0, 2)');
+    expect(time).toHaveValue('-4');
+    fireEvent.mouseEnter(x.closest('form')!);
+    expect(x).toHaveValue('1.25');
+    expect(time).toHaveValue('-2.5');
+    fireEvent.mouseLeave(x.closest('form')!);
+    expect(x).toHaveValue('[0, 2)');
+    expect(time).toHaveValue('-4');
+    fireEvent.focus(x);
+    expect(x).toHaveValue('1.25');
+    expect(time).toHaveValue('-2.5');
+    expect(view.container.querySelector('label')).toHaveTextContent('x ∈');
+  });
+
   it('applies both edited coordinates together', () => {
     const setCoordinates = vi.fn();
     const view = render(

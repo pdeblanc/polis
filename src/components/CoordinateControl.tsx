@@ -2,11 +2,16 @@ import { useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent }
 import type { Point2D } from '../utils/geometry/point2d';
 
 type CoordinateControlProps = {
+  readonly editableX?: string;
+  readonly editableY?: string;
   readonly formattedX: string;
   readonly formattedY: string;
+  readonly revealEditable?: boolean;
   readonly setCoordinates: (point: Point2D, onComplete?: () => void) => void;
   readonly xLabel?: string;
+  readonly xOperator?: string;
   readonly yLabel?: string;
+  readonly yOperator?: string;
 };
 
 type CoordinateDraft = {
@@ -19,15 +24,21 @@ type CoordinateDraft = {
 export function CoordinateControl({
   formattedX,
   formattedY,
+  editableX = formattedX,
+  editableY = formattedY,
+  revealEditable = false,
   setCoordinates,
   xLabel = 'x',
+  xOperator = '=',
   yLabel = 'y',
+  yOperator = '=',
 }: CoordinateControlProps) {
   const [draft, setDraft] = useState<CoordinateDraft>();
   const [applying, setApplying] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const ignoreNextBlur = useRef(false);
-  const displayedX = draft?.x ?? formattedX;
-  const displayedY = draft?.y ?? formattedY;
+  const displayedX = draft?.x ?? (hovered || revealEditable ? editableX : formattedX);
+  const displayedY = draft?.y ?? (hovered || revealEditable ? editableY : formattedY);
   const dirty =
     draft !== undefined && (draft.x !== draft.originalX || draft.y !== draft.originalY);
 
@@ -81,17 +92,19 @@ export function CoordinateControl({
         setDraft(
           (current) =>
             current ?? {
-              originalX: formattedX,
-              originalY: formattedY,
-              x: formattedX,
-              y: formattedY,
+              originalX: editableX,
+              originalY: editableY,
+              x: editableX,
+              y: editableY,
             },
         )
       }
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onSubmit={onSubmit}
     >
       <label>
-        {xLabel} ={' '}
+        {xLabel} {xOperator}{' '}
         <input
           aria-label={`Cursor ${xLabel} coordinate`}
           inputMode="decimal"
@@ -100,16 +113,16 @@ export function CoordinateControl({
           onKeyDown={onKeyDown}
           onChange={(event) =>
             setDraft((current) => ({
-              originalX: current?.originalX ?? formattedX,
-              originalY: current?.originalY ?? formattedY,
+              originalX: current?.originalX ?? editableX,
+              originalY: current?.originalY ?? editableY,
               x: event.target.value,
-              y: current?.y ?? formattedY,
+              y: current?.y ?? editableY,
             }))
           }
         />
       </label>
       <label>
-        {yLabel} ={' '}
+        {yLabel} {yOperator}{' '}
         <input
           aria-label={`Cursor ${yLabel} coordinate`}
           inputMode="decimal"
@@ -118,9 +131,9 @@ export function CoordinateControl({
           onKeyDown={onKeyDown}
           onChange={(event) =>
             setDraft((current) => ({
-              originalX: current?.originalX ?? formattedX,
-              originalY: current?.originalY ?? formattedY,
-              x: current?.x ?? formattedX,
+              originalX: current?.originalX ?? editableX,
+              originalY: current?.originalY ?? editableY,
+              x: current?.x ?? editableX,
               y: event.target.value,
             }))
           }
