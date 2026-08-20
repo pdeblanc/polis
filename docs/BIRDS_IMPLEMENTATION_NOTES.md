@@ -19,11 +19,11 @@ and dependency overlays, the tagged-bird helper, statistical characterization, a
 final complexity suite have not yet been implemented. Initial cold-cache flow
 measurements cover epoch depth and diffusion-dependent support width.
 
-The visualization draws population samples as narrow horizontal marks rather than filled
-spacetime rectangles, because a sampled population does not describe occupancy throughout
-the interval before the next sample. It reports the selected `Δx` and `Δt`, limits each
-frame to a fixed sample budget, and coarsens through public resolution capabilities when
-necessary.
+The visualization presents each population sample as a filled temporal band centered on
+its exact sampled time, with adjacent bands touching. This is a display convention for a
+dense readable grid, not a claim that the population remained fixed throughout the band.
+It reports the selected `Δx` and `Δt`, limits each frame to a fixed sample budget, and
+coarsens through public resolution capabilities when necessary.
 
 Birds uses parabolic viewport zoom: if the visible spatial span changes by a factor `s`,
 the visible time span changes by `s²`. The URL's `area` parameter remains the literal

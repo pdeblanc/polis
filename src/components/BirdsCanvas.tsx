@@ -185,8 +185,6 @@ function drawBackground(
   context.beginPath();
   context.moveTo(origin.x, 0);
   context.lineTo(origin.x, size.height);
-  context.moveTo(0, origin.y);
-  context.lineTo(size.width, origin.y);
   context.stroke();
 }
 
@@ -220,7 +218,7 @@ function drawPopulationSample(
     TIME_WORLD_SCALE,
   );
   const rowSpacing = Math.abs(nextTime.y - left.y);
-  const thickness = Math.max(2, Math.min(8, rowSpacing * 0.22));
+  const thickness = Math.max(1, Math.ceil(rowSpacing) + 1);
   const expected = POPULATION_DENSITY * resolution.cellWidth;
   const intensity = expected === 0 ? 0 : 1 - Math.exp(-sample.count / expected);
   context.fillStyle = `rgb(105 215 255 / ${0.08 + 0.92 * intensity})`;
