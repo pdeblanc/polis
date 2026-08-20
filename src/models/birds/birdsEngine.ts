@@ -88,6 +88,7 @@ export interface BirdsEngineStats {
   readonly flowReconciliationsEvaluated: number;
   readonly flowsEvaluated: number;
   readonly maximumDepth: number;
+  readonly samplerCalls: number;
   readonly temporalBatchesEvaluated: number;
   readonly twoStageEntriesEvaluated: number;
 }
@@ -115,6 +116,7 @@ interface MutableStats {
   flowReconciliationsEvaluated: number;
   flowsEvaluated: number;
   maximumDepth: number;
+  samplerCalls: number;
   temporalBatchesEvaluated: number;
   twoStageEntriesEvaluated: number;
   readonly dependencyPath: BirdsDependencyNode[];
@@ -187,21 +189,21 @@ export class BirdsEngine {
   queryCell(cell: BirdCell): number {
     const stats = emptyStats();
     const count = this.#queryCell(cell, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return count;
   }
 
   queryFlow(flow: BirdFlow): number {
     const stats = emptyStats();
     const count = this.#queryFlow(flow, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return count;
   }
 
   queryTwoStageFlow(flow: BirdTwoStageFlow): number {
     const stats = emptyStats();
     const count = this.#queryTwoStageFlow(flow, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return count;
   }
 
@@ -211,7 +213,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryFlowTimeSubdivision(flow, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return result;
   }
 
@@ -221,7 +223,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellSubdivision(cell, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return result;
   }
 
@@ -231,7 +233,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellOutflowSubdivision(cell, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return result;
   }
 
@@ -241,7 +243,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellInflowSubdivision(cell, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return result;
   }
 
@@ -251,7 +253,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryFlowSpaceSubdivision(flow, stats, 0);
-    this.#lastQueryStats = stats;
+    this.#lastQueryStats = publicStats(stats);
     return result;
   }
 
@@ -463,18 +465,19 @@ export class BirdsEngine {
     stats.temporalBatchesEvaluated += 1;
     const parentCount = this.#queryFlow(flow, stats, depth + 1);
     const categories = midpointCellProbabilities(flow, this.#diffusionRate);
-    const counts =
-      categories.length === 0
-        ? []
-        : multinomial(
-            this.#random,
-            temporalBatchAddress(flow, owner.stage),
-            parentCount,
-            categories.map(({ cell, probability }) => ({
-              probability,
-              address: ['midpoint-cell', cell.min, cell.max, cell.time],
-            })),
-          );
+    let counts: readonly number[] = [];
+    if (categories.length > 0) {
+      stats.samplerCalls += 1;
+      counts = multinomial(
+        this.#random,
+        temporalBatchAddress(flow, owner.stage),
+        parentCount,
+        categories.map(({ cell, probability }) => ({
+          probability,
+          address: ['midpoint-cell', cell.min, cell.max, cell.time],
+        })),
+      );
+    }
     const result: TemporalSubdivisionResult = {
       parentCount,
       entries: categories.map(({ cell }, index) => ({
@@ -507,6 +510,7 @@ export class BirdsEngine {
 
     stats.cellSubdivisionsEvaluated += 1;
     const parentCount = this.#queryCell(cell, stats, depth + 1);
+    stats.samplerCalls += 1;
     const leftCount = binomial(
       this.#random,
       ['birds.cell-subdivision', cell.min, cell.max, cell.time, 'left-child'],
@@ -553,6 +557,7 @@ export class BirdsEngine {
       .map((destination) => ({ source: cell, destination }));
     const capacities = parentFlows.map((flow) => this.#queryFlow(flow, stats, depth + 1));
     const subdivision = this.#queryCellSubdivision(cell, stats, depth + 1);
+    stats.samplerCalls += 1;
     const leftCounts = multivariateHypergeometric(
       this.#random,
       ['birds.cell-outflow-subdivision', cell.min, cell.max, cell.time],
@@ -607,6 +612,7 @@ export class BirdsEngine {
       .map((source) => ({ source, destination: cell }));
     const capacities = parentFlows.map((flow) => this.#queryFlow(flow, stats, depth + 1));
     const subdivision = this.#queryCellSubdivision(cell, stats, depth + 1);
+    stats.samplerCalls += 1;
     const leftCounts = multivariateHypergeometric(
       this.#random,
       ['birds.cell-inflow-subdivision', cell.min, cell.max, cell.time],
@@ -663,6 +669,7 @@ export class BirdsEngine {
       source: flow.source,
       destination: owner.destinationChildren[0],
     });
+    stats.samplerCalls += 1;
     const upperLeft = hypergeometric(
       this.#random,
       [
@@ -699,7 +706,8 @@ export class BirdsEngine {
   }
 
   #visitDependency(stats: MutableStats, depth: number, node: BirdsDependencyNode): void {
-    if (this.#observeDependency !== undefined && depth > 0) {
+    if (this.#observeDependency === undefined) return;
+    if (depth > 0) {
       const dependent = stats.dependencyPath[depth - 1];
       if (dependent !== undefined) this.#observeDependency({ dependent, dependency: node });
     }
@@ -757,8 +765,24 @@ function emptyStats(): MutableStats {
     flowReconciliationsEvaluated: 0,
     flowsEvaluated: 0,
     maximumDepth: 0,
+    samplerCalls: 0,
     temporalBatchesEvaluated: 0,
     twoStageEntriesEvaluated: 0,
     dependencyPath: [],
+  };
+}
+
+function publicStats(stats: MutableStats): BirdsEngineStats {
+  return {
+    cacheHits: stats.cacheHits,
+    cellsEvaluated: stats.cellsEvaluated,
+    cellSubdivisionsEvaluated: stats.cellSubdivisionsEvaluated,
+    incidenceBatchesEvaluated: stats.incidenceBatchesEvaluated,
+    flowReconciliationsEvaluated: stats.flowReconciliationsEvaluated,
+    flowsEvaluated: stats.flowsEvaluated,
+    maximumDepth: stats.maximumDepth,
+    samplerCalls: stats.samplerCalls,
+    temporalBatchesEvaluated: stats.temporalBatchesEvaluated,
+    twoStageEntriesEvaluated: stats.twoStageEntriesEvaluated,
   };
 }

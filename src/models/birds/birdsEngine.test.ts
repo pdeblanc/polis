@@ -469,6 +469,35 @@ describe('BirdsEngine spatial flow Stages G1-G2-H', () => {
       ),
     ).toEqual(forward);
   });
+
+  it('is deterministic under continuous LRU eviction', () => {
+    const options = {
+      flowCacheCapacity: 1,
+      temporalBatchCacheCapacity: 1,
+      cellCacheCapacity: 1,
+      cellSubdivisionCacheCapacity: 1,
+      cellIncidenceCacheCapacity: 1,
+      flowReconciliationCacheCapacity: 1,
+    } as const;
+    const scale = birdsScale(1)!;
+    const sources = [-3, 0, 4].map((index) => cell(1, index, 0));
+    const flows = sources.flatMap((source) =>
+      possibleFlowDestinations(source, scale.flowDuration, DIFFUSION_RATE)
+        .filter((destination) => destination.max - destination.min === scale.cellLength)
+        .slice(0, 3)
+        .map((destination) => ({ source, destination })),
+    );
+    const baseline = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const evicting = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE, options);
+    const expected = new Map(
+      flows.map((candidate) => [JSON.stringify(candidate), baseline.queryFlow(candidate)]),
+    );
+
+    for (const candidate of [...flows].reverse()) {
+      expect(evicting.queryFlow(candidate)).toBe(expected.get(JSON.stringify(candidate)));
+    }
+    expect(evicting.getCacheUsage().entries).toBeLessThanOrEqual(7);
+  });
 });
 
 function matchingCount(

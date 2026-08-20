@@ -23,18 +23,26 @@ describe('Birds dependency tracing and conceptual ranks', () => {
       observeDependency: (edge) => edges.push(edge),
     });
 
-    for (const epoch of [0, 1, 2]) {
+    for (const epoch of [0, 1, 2, 3]) {
       const scale = birdsScale(epoch)!;
-      const source = cell(epoch, epoch - 1, 0);
-      const destination = possibleFlowDestinations(
-        source,
-        scale.flowDuration,
-        DIFFUSION_RATE,
-      ).find((candidate) => candidate.min === source.min)!;
-      engine.clearCache();
-      engine.queryFlow({ source, destination });
-      engine.clearCache();
-      engine.queryCell(source);
+      const samples = [
+        [-5, -3],
+        [-1, 0],
+        [4, 2],
+      ] as const;
+      for (const [spatialIndex, timeIndex] of epoch === 3 ? samples.slice(1, 2) : samples) {
+        const source = cell(epoch, spatialIndex, timeIndex * scale.flowDuration);
+        const destinations = possibleFlowDestinations(
+          source,
+          scale.flowDuration,
+          DIFFUSION_RATE,
+        );
+        const destination = destinations[(spatialIndex + timeIndex + destinations.length * 2) % destinations.length];
+        engine.clearCache();
+        engine.queryFlow({ source, destination });
+        engine.clearCache();
+        engine.queryCell(source);
+      }
     }
 
     expect(edges.length).toBeGreaterThan(0);

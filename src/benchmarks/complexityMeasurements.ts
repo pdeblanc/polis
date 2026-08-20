@@ -7,6 +7,9 @@ import {
   type TerrainQueryStats,
   type TerrainVertex,
 } from '../models/terrain/diamondSquareTerrain';
+import { BirdsEngine, type BirdsEngineStats } from '../models/birds/birdsEngine';
+import { possibleFlowDestinations } from '../models/birds/motionSupport';
+import { birdsScale } from '../models/birds/scales';
 
 const BENCHMARK_SEED = 'Polis complexity benchmark';
 
@@ -23,6 +26,53 @@ export type TimedStarfieldMeasurement = StarfieldQueryStats & {
   readonly queries: number;
   readonly scale: number;
 };
+
+export type TimedBirdsMeasurement = BirdsEngineStats & {
+  readonly diffusionRate: number;
+  readonly elapsedMilliseconds: number;
+  readonly epoch: number;
+  readonly recursiveCalls: number;
+};
+
+export function measureBirdsFlow(
+  epoch: number,
+  diffusionRate = 0.5,
+): TimedBirdsMeasurement {
+  const scale = birdsScale(epoch);
+  if (scale === undefined) throw new RangeError('Invalid Birds benchmark epoch');
+  if (!Number.isFinite(diffusionRate) || diffusionRate < 0) {
+    throw new RangeError('Invalid Birds benchmark diffusion rate');
+  }
+
+  const source = { min: 0, max: scale.cellLength, time: 0 };
+  const destination = possibleFlowDestinations(
+    source,
+    scale.flowDuration,
+    diffusionRate,
+  ).find((candidate) => candidate.min === source.min);
+  if (destination === undefined) throw new Error('Birds benchmark flow is unsupported');
+
+  const engine = new BirdsEngine(BENCHMARK_SEED, 2, diffusionRate);
+  const start = performance.now();
+  engine.queryFlow({ source, destination });
+  const elapsedMilliseconds = performance.now() - start;
+  const stats = engine.getLastQueryStats();
+  return {
+    diffusionRate,
+    elapsedMilliseconds,
+    epoch,
+    recursiveCalls:
+      stats.cacheHits +
+      stats.cellsEvaluated +
+      stats.cellSubdivisionsEvaluated +
+      stats.incidenceBatchesEvaluated +
+      stats.flowReconciliationsEvaluated +
+      stats.flowsEvaluated +
+      stats.temporalBatchesEvaluated +
+      stats.twoStageEntriesEvaluated,
+    ...stats,
+  };
+}
 
 export function terrainVertexAtDepth(
   family: TimedTerrainMeasurement['family'],

@@ -13,7 +13,8 @@ The internal `BirdsEngine` implements the complete inward recurrence from determ
 coarse cells and flows through Stages A–H. Queries compose through multiple epochs. The
 consumer-facing `Birds` API, resolution capabilities, result ceilings, visualization,
 tagged-bird helper, statistical characterization, and final complexity suite have not yet
-been implemented.
+been implemented. Initial cold-cache flow measurements now cover epoch depth and
+diffusion-dependent support width.
 
 ## Structural geometry
 
@@ -104,15 +105,26 @@ The implementation tests currently cover:
 - exact conservation through A/C, F, G1, G2, and H owner batches;
 - incoming/outgoing conservation for Stage-E and fine entry cells;
 - H row and column margin reconciliation;
-- deterministic results across query order and cache clearing; and
-- recursive evaluation through epoch 2; and
+- deterministic results across query order, cache clearing, and continuous LRU eviction;
+- recursive evaluation through epoch 3; and
 - diagnostic tracing of the actual recursive call graph through all eight query roles,
-  with every observed edge through epoch 2 checked against the conceptual rank order.
+  with sampled positive and negative spacetime positions through epoch 3 checked against
+  the conceptual rank order.
 
 Conceptual ranks are implemented in a separate diagnostic module. The engine's optional
 dependency observer reports caller/dependency nodes using the recursion depth already
 carried for statistics; production construction and dependency selection do not consult
 ranks.
 
-Broader heterogeneous-ancestry sampling, complexity, public-API, and statistical
-characterization tests remain future implementation milestones.
+The CLI complexity report includes cold-cache flow ancestry by epoch and diffusion rate.
+It reports recursive calls, owned/entity evaluations, cache hits, sampler calls, maximum
+depth, and elapsed time. The current guardrail checks linear maximum depth; broader query
+families, parameter sweeps, and throughput characterization remain future work alongside
+the public API and statistical characterization.
+
+The initial flow measurements show maximum dependency depth growing by roughly nine per
+epoch. Total work is much more sensitive to support width: for the benchmark's centered
+epoch-3 entry flow, diffusion rates `0`, `0.5`, and `2` produced approximately 920,
+24,500, and 118,000 recursive calls respectively. These figures are observations rather
+than complexity guarantees, but they identify diffusion/support width as an important
+parameter for the public query budgets and later performance work.

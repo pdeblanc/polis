@@ -1,10 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
+  measureBirdsFlow,
   measureStarfieldBox,
   measureStarfieldViewport,
   measureTerrainPoint,
   terrainVertexAtDepth,
 } from './complexityMeasurements';
+
+describe('Birds complexity measurements', () => {
+  it('measures cold-cache entry-flow ancestry over increasing epochs', () => {
+    const measurements = [0, 1, 2, 3].map((epoch) => measureBirdsFlow(epoch));
+
+    expect(measurements[0].recursiveCalls).toBe(1);
+    for (const measurement of measurements) {
+      expect(measurement.recursiveCalls).toBeGreaterThan(0);
+      expect('dependencyPath' in measurement).toBe(false);
+      // One epoch can traverse H, both incidence margins, F, E, D, C, B, and A.
+      expect(measurement.maximumDepth).toBeLessThanOrEqual(10 * measurement.epoch + 1);
+    }
+  });
+
+  it('exposes diffusion-dependent support cost', () => {
+    const narrow = measureBirdsFlow(1, 0);
+    const wide = measureBirdsFlow(1, 2);
+
+    expect(wide.recursiveCalls).toBeGreaterThanOrEqual(narrow.recursiveCalls);
+  });
+});
 
 describe('terrain complexity guardrails', () => {
   for (const family of ['square', 'diamond'] as const) {
