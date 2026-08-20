@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Sighting,
   SightingBudgetExceededError,
+  SightingResolutionLimitError,
 } from "../helpers/birdsSighting";
 import { useFramePerformance } from "../helpers/useFramePerformance";
 import { useUrlNumberParameter, useUrlSeed } from "../helpers/urlState";
@@ -51,7 +52,7 @@ interface HoveredPopulationCell {
 
 interface TrackedTrajectory {
   readonly flows: BirdsFlowListResult;
-  readonly partial: boolean;
+  readonly partial: false | "budget" | "numeric-resolution";
 }
 
 export function BirdsCanvas() {
@@ -210,7 +211,11 @@ export function BirdsCanvas() {
                 : `Population = ${hoveredPopulation}`}
             </span>
             {trackedTrajectory?.partial ? (
-              <span className="birds-sighting-status">Partial track (budget reached)</span>
+              <span className="birds-sighting-status">
+                {trackedTrajectory.partial === "budget"
+                  ? "Partial track (budget reached)"
+                  : "Partial track (numeric resolution reached)"}
+              </span>
             ) : null}
           </span>
         }
@@ -300,7 +305,7 @@ function buildTrackedTrajectory(
 
   const before: BirdsFlowSample[] = [];
   const after: BirdsFlowSample[] = [];
-  let partial = false;
+  let partial: TrackedTrajectory["partial"] = false;
   let current = origin;
   for (let index = 0; index < TRACKED_STEPS_PER_DIRECTION; index += 1) {
     try {
@@ -308,8 +313,9 @@ function buildTrackedTrajectory(
       before.unshift({ count: 1, source: previous.cell, destination: current.cell });
       current = previous;
     } catch (error) {
-      if (!(error instanceof SightingBudgetExceededError)) throw error;
-      partial = true;
+      if (error instanceof SightingBudgetExceededError) partial = "budget";
+      else if (error instanceof SightingResolutionLimitError) partial = "numeric-resolution";
+      else throw error;
       break;
     }
   }
@@ -321,8 +327,9 @@ function buildTrackedTrajectory(
       after.push({ count: 1, source: current.cell, destination: next.cell });
       current = next;
     } catch (error) {
-      if (!(error instanceof SightingBudgetExceededError)) throw error;
-      partial = true;
+      if (error instanceof SightingBudgetExceededError) partial = "budget";
+      else if (error instanceof SightingResolutionLimitError) partial = "numeric-resolution";
+      else throw error;
       break;
     }
   }

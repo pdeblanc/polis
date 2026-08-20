@@ -222,12 +222,12 @@ export class Birds {
   }
 
   /** Returns the canonical flow incidence whose total is this cell's population. */
-  #incidentFlowResolution(
-    cellEndpoint: BirdsFlowEndpoint,
-    populationResolution: BirdsPopulationResolution,
-  ): BirdsFlowResolution {
-    const facts = this.#populationResolutionFacts(populationResolution);
-    const cell = exactCell(cellEndpoint, populationResolution.cellWidth, 'Population cell');
+  resolveIncidentFlowResolution(request: {
+    readonly cell: BirdsFlowEndpoint;
+    readonly resolution: BirdsPopulationResolution;
+  }): BirdsFlowResolution {
+    const facts = this.#populationResolutionFacts(request.resolution);
+    const cell = exactCell(request.cell, request.resolution.cellWidth, 'Population cell');
     const construction = classifyCell(cell);
     if (construction === undefined) {
       throw new RangeError('Population cell does not lie in the Birds hierarchy');
@@ -306,7 +306,7 @@ export class Birds {
     readonly resolution: BirdsPopulationResolution;
   }): BirdsIncidentFlowResult {
     validatePositiveFinite(request.maximumDuration, 'Maximum incident-flow duration');
-    const resolution = this.#incidentFlowResolution(request.cell, request.resolution);
+    const resolution = this.resolveIncidentFlowResolution(request);
     if (resolution.duration > request.maximumDuration) {
       return {
         kind: 'duration-limit',

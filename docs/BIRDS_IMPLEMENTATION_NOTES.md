@@ -250,3 +250,11 @@ If the resulting bound becomes practically small beyond a parameter-dependent ep
 may support materializing every bird at sufficiently fine scales instead of checking a
 population threshold at each cell. This task records the bound and its limitations only;
 the materialization-policy decision belongs to planning the next major Birds revision.
+
+Tracker termination now distinguishes computational resolution from mathematical
+ambiguity. Before refining a cell or querying an incident flow, the helper checks whether
+the resulting spatial midpoint or temporal endpoint remains separated from its neighbor
+by a conservative binary64 error margin at that coordinate magnitude. If not, it throws
+a structured `SightingResolutionLimitError` without asserting that the apparent meeting
+is intrinsically unresolvable. The Birds page labels this separately from query or
+refinement budget exhaustion, and tracker benchmarks record it as `numeric-resolution`.

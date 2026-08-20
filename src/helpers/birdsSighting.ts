@@ -169,6 +169,13 @@ export class Sighting {
 
   #move(direction: 1 | -1, budget: QueryBudget): Sighting {
     const targetTime = this.cell.time + direction * this.resolution.timeStep;
+    if (!hasTemporalResolution(this.cell.time, this.resolution.timeStep, direction)) {
+      throw new SightingResolutionLimitError(
+        "temporal",
+        this.resolution.cellWidth,
+        this.resolution.timeStep,
+      );
+    }
     let singleton = this.#atSingleton();
     while (singleton.cell.time !== targetTime) {
       singleton = singleton.#moveSingletonToward(targetTime, direction, budget);
@@ -185,6 +192,20 @@ export class Sighting {
     let source = this.#atSingleton();
     for (;;) {
       const remaining = Math.abs(targetTime - source.cell.time);
+      const incidentResolution = source.#birds.resolveIncidentFlowResolution({
+        cell: source.cell,
+        resolution: source.resolution,
+      });
+      if (
+        incidentResolution.duration <= remaining &&
+        !hasTemporalResolution(source.cell.time, incidentResolution.duration, direction)
+      ) {
+        throw new SightingResolutionLimitError(
+          "temporal",
+          source.resolution.cellWidth,
+          incidentResolution.duration,
+        );
+      }
       budget.take();
       const result = source.#birds.queryIncidentFlows({
         cell: source.cell,
@@ -338,6 +359,13 @@ export class Sighting {
     if (this.#publicIndex + 1 < this.#tube.length) {
       return new Sighting(this.#birds, this.#tube, this.#publicIndex + 1);
     }
+    if (!hasSpatialResolution(publicEntry.cell.min, publicEntry.cell.max)) {
+      throw new SightingResolutionLimitError(
+        "spatial",
+        publicEntry.resolution.cellWidth,
+        publicEntry.resolution.timeStep,
+      );
+    }
     budget.takeRefinement();
     budget.take();
     const subdivision = this.#birds.refinePopulationCell({
@@ -370,6 +398,33 @@ export class Sighting {
       this.#publicIndex + 1,
     );
   }
+}
+
+export class SightingResolutionLimitError extends Error {
+  constructor(
+    readonly dimension: "spatial" | "temporal",
+    readonly cellWidth: number,
+    readonly timeStep: number,
+  ) {
+    super(
+      `Sighting reached the numeric ${dimension} resolution limit ` +
+        `(cell width ${cellWidth}, time step ${timeStep})`,
+    );
+    this.name = "SightingResolutionLimitError";
+  }
+}
+
+function hasTemporalResolution(time: number, duration: number, direction: 1 | -1): boolean {
+  const next = time + direction * duration;
+  const errorMargin = 2 * Number.EPSILON * Math.abs(time);
+  return duration > errorMargin && next !== time && Math.abs(next - time) === duration;
+}
+
+function hasSpatialResolution(min: number, max: number): boolean {
+  const width = max - min;
+  const errorMargin = 2 * Number.EPSILON * Math.max(Math.abs(min), Math.abs(max));
+  const midpoint = min + width / 2;
+  return width > errorMargin && midpoint !== min && midpoint !== max;
 }
 
 function freezeEntry(entry: TubeEntry): TubeEntry {

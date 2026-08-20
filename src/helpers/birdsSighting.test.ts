@@ -7,6 +7,7 @@ import {
   createSightingDiagnostics,
   Sighting,
   SightingBudgetExceededError,
+  SightingResolutionLimitError,
 } from "./birdsSighting";
 
 function coarseSighting(seed = "selection") {
@@ -93,6 +94,66 @@ describe("Sighting selection and rescaling", () => {
 });
 
 describe("Sighting motion", () => {
+  it("reports temporal coordinates that cannot advance distinctly", () => {
+    const resolution = Object.freeze({
+      cellWidth: 1,
+      timeOrigin: 0 as const,
+      timeStep: Number.EPSILON,
+    });
+    const birds = {
+      queryPopulationCell: ({ cell }: { cell: { min: number; max: number; time: number } }) => ({
+        cell,
+        count: 1,
+        resolution,
+      }),
+    } as unknown as Birds;
+    const sighting = Sighting.select({
+      birds,
+      cell: { min: 0, max: 1, time: 2 },
+      resolution,
+      seed: "numeric limit",
+    });
+
+    expect(() => sighting.next()).toThrow(SightingResolutionLimitError);
+    try {
+      sighting.next();
+    } catch (error) {
+      expect(error).toMatchObject({ dimension: "temporal" });
+    }
+  });
+
+  it("stops before querying an incident duration near the timestamp precision limit", () => {
+    const resolution = Object.freeze({ cellWidth: 1, timeOrigin: 0 as const, timeStep: 1 });
+    let incidentQueries = 0;
+    const birds = {
+      queryPopulationCell: ({ cell }: { cell: { min: number; max: number; time: number } }) => ({
+        cell,
+        count: 1,
+        resolution,
+      }),
+      resolveIncidentFlowResolution: () => ({
+        sourceCellWidth: 1,
+        destinationCellWidth: 1,
+        duration: Number.EPSILON,
+        timeOrigin: 0 as const,
+        timeStep: Number.EPSILON,
+      }),
+      queryIncidentFlows: () => {
+        incidentQueries += 1;
+        throw new Error("ill-conditioned incidence should not be queried");
+      },
+    } as unknown as Birds;
+    const sighting = Sighting.select({
+      birds,
+      cell: { min: 0, max: 1, time: 2 },
+      resolution,
+      seed: "incident numeric limit",
+    });
+
+    expect(() => sighting.next()).toThrow(SightingResolutionLimitError);
+    expect(incidentQueries).toBe(0);
+  });
+
   it("narrows the destination asymmetrically before refining the singleton source", () => {
     const coarse = Object.freeze({ cellWidth: 2, timeOrigin: 0 as const, timeStep: 4 });
     const fine = Object.freeze({ cellWidth: 1, timeOrigin: 0 as const, timeStep: 1 });
@@ -120,6 +181,7 @@ describe("Sighting motion", () => {
           count: 1,
         }],
       }),
+      resolveIncidentFlowResolution: () => asymmetric,
       refinePopulationResolution: () => fine,
       resolveFlowResolution: () => asymmetric,
       queryOutflows: () => {

@@ -2,6 +2,7 @@ import {
   createSightingDiagnostics,
   Sighting,
   SightingBudgetExceededError,
+  SightingResolutionLimitError,
 } from '../helpers/birdsSighting';
 import { Birds, type BirdsPopulationResolution } from '../models/birds/birds';
 import type { BirdsEngineStats } from '../models/birds/birdsEngine';
@@ -31,7 +32,12 @@ export interface TrackerMeasurement extends BirdsEngineStats {
   readonly outcomeDetail: string;
   readonly recursiveCalls: number;
   readonly spatialRefinements: number;
-  readonly status: 'complete' | 'query-budget' | 'refinement-budget' | 'error';
+  readonly status:
+    | 'complete'
+    | 'query-budget'
+    | 'refinement-budget'
+    | 'numeric-resolution'
+    | 'error';
   readonly stepsCompleted: number;
 }
 
@@ -117,11 +123,12 @@ function measureWithModel(
       });
     }
   } catch (error) {
-    status =
-      error instanceof SightingBudgetExceededError
-        ? error.budget === 'query'
-          ? 'query-budget'
-          : 'refinement-budget'
+    status = error instanceof SightingBudgetExceededError
+      ? error.budget === 'query'
+        ? 'query-budget'
+        : 'refinement-budget'
+      : error instanceof SightingResolutionLimitError
+        ? 'numeric-resolution'
         : 'error';
     outcomeDetail = error instanceof Error ? error.message : String(error);
   }
