@@ -14,6 +14,12 @@ const experiments = [
     path: '/terrain',
     title: 'Diamond-square terrain',
   },
+  {
+    description:
+      'A conserved population refined through deterministic stochastic flows in spacetime.',
+    path: '/birds',
+    title: 'Diffusing birds',
+  },
 ] as const;
 
 export function HomePage() {

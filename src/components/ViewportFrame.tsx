@@ -3,11 +3,12 @@ import type { Viewport2D } from '../helpers/useViewport2D';
 import { CoordinateControl } from './CoordinateControl';
 
 type ViewportFrameProps = PropsWithChildren<{
+  readonly axisLabels?: { readonly x: string; readonly y: string };
   readonly canvasLabel: string;
   readonly viewport: Viewport2D;
 }>;
 
-export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrameProps) {
+export function ViewportFrame({ axisLabels, canvasLabel, children, viewport }: ViewportFrameProps) {
   const {
     canvasRef,
     cursor,
@@ -39,6 +40,8 @@ export function ViewportFrame({ canvasLabel, children, viewport }: ViewportFrame
             formattedX={formatCoordinateAtScale(cursor.x, world.width)}
             formattedY={formatCoordinateAtScale(cursor.y, world.height)}
             setCoordinates={setCursorWorldPosition}
+            xLabel={axisLabels?.x}
+            yLabel={axisLabels?.y}
           />
           <span className="viewport-area-readout">
             A = {formatSpan(world.width)} × {formatSpan(world.height)}

@@ -5,6 +5,8 @@ type CoordinateControlProps = {
   readonly formattedX: string;
   readonly formattedY: string;
   readonly setCoordinates: (point: Point2D, onComplete?: () => void) => void;
+  readonly xLabel?: string;
+  readonly yLabel?: string;
 };
 
 type CoordinateDraft = {
@@ -18,6 +20,8 @@ export function CoordinateControl({
   formattedX,
   formattedY,
   setCoordinates,
+  xLabel = 'x',
+  yLabel = 'y',
 }: CoordinateControlProps) {
   const [draft, setDraft] = useState<CoordinateDraft>();
   const [applying, setApplying] = useState(false);
@@ -87,9 +91,9 @@ export function CoordinateControl({
       onSubmit={onSubmit}
     >
       <label>
-        x ={' '}
+        {xLabel} ={' '}
         <input
-          aria-label="Cursor x coordinate"
+          aria-label={`Cursor ${xLabel} coordinate`}
           inputMode="decimal"
           readOnly={applying}
           value={displayedX}
@@ -105,9 +109,9 @@ export function CoordinateControl({
         />
       </label>
       <label>
-        y ={' '}
+        {yLabel} ={' '}
         <input
-          aria-label="Cursor y coordinate"
+          aria-label={`Cursor ${yLabel} coordinate`}
           inputMode="decimal"
           readOnly={applying}
           value={displayedY}

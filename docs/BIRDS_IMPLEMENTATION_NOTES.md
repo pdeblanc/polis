@@ -13,10 +13,17 @@ The internal `BirdsEngine` implements the complete inward recurrence from determ
 coarse cells and flows through Stages A–H. Queries compose through multiple epochs. The
 consumer-facing `Birds` API now provides model-scoped resolution capabilities,
 population profiles, singular flows, complete nonzero inflow/outflow lists, explicit
-result ceilings, cache controls, and query statistics. Visualization, the tagged-bird
-helper, statistical characterization, and the final complexity suite have not yet been
-implemented. Initial cold-cache flow measurements cover epoch depth and
-diffusion-dependent support width.
+result ceilings, cache controls, and query statistics. An initial spacetime visualization
+renders discrete population profiles with space horizontal and future time upward. Flow
+and dependency overlays, the tagged-bird helper, statistical characterization, and the
+final complexity suite have not yet been implemented. Initial cold-cache flow
+measurements cover epoch depth and diffusion-dependent support width.
+
+The visualization draws population samples as narrow horizontal marks rather than filled
+spacetime rectangles, because a sampled population does not describe occupancy throughout
+the interval before the next sample. It reports the selected `Δx` and `Δt`, limits each
+frame to a fixed sample budget, and coarsens through public resolution capabilities when
+necessary.
 
 ## Public API boundary
 

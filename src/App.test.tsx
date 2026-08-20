@@ -17,6 +17,10 @@ describe('App routing', () => {
       'href',
       '/starfield',
     );
+    expect(screen.getByRole('link', { name: /Diffusing birds/ })).toHaveAttribute(
+      'href',
+      '/birds',
+    );
   });
 
   it('renders a model page', () => {
@@ -32,5 +36,21 @@ describe('App routing', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset cache' })).toBeInTheDocument();
+  });
+
+  it('renders the Birds spacetime page with its time axis identified', () => {
+    window.history.replaceState({}, '', '/birds');
+    render(
+      <MemoryRouter initialEntries={['/birds']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(document.title).toBe('Birds (Polis 3)');
+    expect(screen.getByRole('heading', { level: 1, name: 'Diffusing birds' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cursor t coordinate')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Pannable spacetime population view with future upward'),
+    ).toBeInTheDocument();
   });
 });
