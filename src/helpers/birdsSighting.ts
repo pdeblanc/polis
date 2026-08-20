@@ -224,12 +224,14 @@ export class Sighting {
   ): Sighting {
     let sighting = this.#atSingleton();
     while (sighting.#tube[0].resolution.cellWidth < maximumResolution.cellWidth) {
-      try {
-        sighting = sighting.#extendCoarser(budget);
-      } catch (error) {
-        if (error instanceof RangeError && /sighting time/.test(error.message)) break;
-        throw error;
+      const coarser = sighting.#coarserResolution();
+      if (
+        coarser === undefined ||
+        !Number.isInteger(sighting.#tube[0].cell.time / coarser.timeStep)
+      ) {
+        break;
       }
+      sighting = sighting.#extendCoarser(coarser, budget);
       if (sighting.#tube[0].count !== 1) return sighting.#atSingleton();
       sighting = new Sighting(sighting.#birds, sighting.#tube, 0);
     }
@@ -240,7 +242,11 @@ export class Sighting {
     validateResolution(this.#birds, target);
     let sighting = new Sighting(this.#birds, this.#tube, this.#publicIndex);
     while (sighting.#tube[0].resolution.cellWidth < target.cellWidth) {
-      sighting = sighting.#extendCoarser(budget);
+      const coarser = sighting.#coarserResolution();
+      if (coarser === undefined) {
+        throw new RangeError("No coarser population resolution is available");
+      }
+      sighting = sighting.#extendCoarser(coarser, budget);
     }
     while (sighting.#tube.at(-1)!.resolution.cellWidth > target.cellWidth) {
       sighting = sighting.#atSingleton().#refineSingleton(budget);
@@ -290,12 +296,18 @@ export class Sighting {
     return new Sighting(this.#birds, tube, tube.length - 1);
   }
 
-  #extendCoarser(budget: QueryBudget): Sighting {
+  #coarserResolution(): BirdsPopulationResolution | undefined {
     const root = this.#tube[0];
-    const coarser = this.#birds
+    return this.#birds
       .getNearbyPopulationResolutions(root.resolution, 1)
       .find(({ cellWidth }) => cellWidth === root.resolution.cellWidth * 2);
-    if (coarser === undefined) throw new RangeError("No coarser population resolution is available");
+  }
+
+  #extendCoarser(
+    coarser: BirdsPopulationResolution,
+    budget: QueryBudget,
+  ): Sighting {
+    const root = this.#tube[0];
     if (!Number.isInteger(root.cell.time / coarser.timeStep)) {
       throw new RangeError("No coarser population cell exists at this sighting time");
     }
