@@ -21,6 +21,7 @@ const TARGET_CELL_PIXELS = 64;
 const TARGET_TIME_STEP_PIXELS = 128;
 const MAX_RENDER_SAMPLES = 1_000;
 const TIME_ZOOM_EXPONENT = 2;
+const TIME_WORLD_SCALE = 1 / 64;
 
 export function BirdsCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
@@ -29,6 +30,7 @@ export function BirdsCanvas() {
     [seed],
   );
   const viewport = useViewport2D(INITIAL_VIEWPORT, {
+    verticalScale: TIME_WORLD_SCALE,
     verticalZoomExponent: TIME_ZOOM_EXPONENT,
   });
   const { prepareContext, size, state, world } = viewport;
@@ -171,7 +173,13 @@ function drawBackground(
 ): void {
   context.fillStyle = '#080d13';
   context.fillRect(0, 0, size.width, size.height);
-  const origin = worldToScreen({ x: 0, y: 0 }, size, viewport, TIME_ZOOM_EXPONENT);
+  const origin = worldToScreen(
+    { x: 0, y: 0 },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
   context.strokeStyle = '#29394a';
   context.lineWidth = 1;
   context.beginPath();
@@ -195,18 +203,21 @@ function drawPopulationSample(
     size,
     viewport,
     TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
   );
   const right = worldToScreen(
     { x: sample.interval.max, y: time },
     size,
     viewport,
     TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
   );
   const nextTime = worldToScreen(
     { x: 0, y: time + resolution.timeStep },
     size,
     viewport,
     TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
   );
   const rowSpacing = Math.abs(nextTime.y - left.y);
   const thickness = Math.max(2, Math.min(8, rowSpacing * 0.22));

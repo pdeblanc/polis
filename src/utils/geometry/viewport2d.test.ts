@@ -50,6 +50,19 @@ describe('viewport2d geometry', () => {
     expect(screenToWorld(anchorScreen, size, zoomed, exponent).y).toBeCloseTo(anchorWorld.y);
   });
 
+  it('calibrates parabolic world units independently of the zoom exponent', () => {
+    const dimensions = worldDimensions(
+      { width: 800, height: 400 },
+      16_384,
+      2,
+      1 / 64,
+    );
+
+    expect(dimensions.width).toBeCloseTo(128);
+    expect(dimensions.height).toBeCloseTo(128);
+    expect(dimensions.width * dimensions.height).toBeCloseTo(16_384);
+  });
+
   it('prevents zooming below floating-point resolution at the center', () => {
     const constrained = constrainViewport({ centerX: 100, centerY: -20, area: 0 }, size);
     const world = worldDimensions(size, constrained.area);

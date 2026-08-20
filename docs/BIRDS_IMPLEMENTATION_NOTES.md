@@ -28,7 +28,10 @@ necessary.
 Birds uses parabolic viewport zoom: if the visible spatial span changes by a factor `s`,
 the visible time span changes by `s²`. The URL's `area` parameter remains the literal
 visible spacetime area, so an area factor `q` corresponds to spatial factor `q^(1/3)` and
-time factor `q^(2/3)`. Other Polis views retain isotropic zoom.
+time factor `q^(2/3)`. Its world-unit calibration uses `time span = space span² / (64 ×
+screen aspect ratio)`, which makes the initial view approximately 128 space units by 128
+time units and keeps the rendered spatial/time grid spacing comparable. Other Polis views
+retain isotropic zoom.
 
 ## Public API boundary
 
