@@ -1,4 +1,10 @@
-import { useState, type PropsWithChildren, type ReactNode } from 'react';
+import {
+  useRef,
+  useState,
+  type PointerEventHandler,
+  type PropsWithChildren,
+  type ReactNode,
+} from 'react';
 import type { Viewport2D } from '../helpers/useViewport2D';
 import { CoordinateControl } from './CoordinateControl';
 
@@ -12,6 +18,7 @@ type ViewportFrameProps = PropsWithChildren<{
     readonly yOperator?: string;
   };
   readonly coordinateFooter?: ReactNode;
+  readonly onCanvasClick?: PointerEventHandler<HTMLCanvasElement>;
   readonly viewport: Viewport2D;
 }>;
 
@@ -21,9 +28,13 @@ export function ViewportFrame({
   children,
   coordinateDisplay,
   coordinateFooter,
+  onCanvasClick,
   viewport,
 }: ViewportFrameProps) {
   const [coordinateWidgetHovered, setCoordinateWidgetHovered] = useState(false);
+  const clickCandidate = useRef<
+    { readonly pointerId: number; readonly x: number; readonly y: number } | undefined
+  >(undefined);
   const {
     canvasRef,
     cursor,
@@ -37,17 +48,50 @@ export function ViewportFrame({
     world,
   } = viewport;
 
+  const handlePointerDown: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    if (event.button === 0 && clickCandidate.current === undefined) {
+      clickCandidate.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    } else {
+      clickCandidate.current = undefined;
+    }
+    onPointerDown(event);
+  };
+  const handlePointerMove: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    const candidate = clickCandidate.current;
+    if (
+      candidate?.pointerId === event.pointerId &&
+      Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y) > 4
+    ) {
+      clickCandidate.current = undefined;
+    }
+    onPointerMove(event);
+  };
+  const handlePointerUp: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    const shouldClick = clickCandidate.current?.pointerId === event.pointerId;
+    clickCandidate.current = undefined;
+    onPointerUp(event);
+    if (shouldClick) onCanvasClick?.(event);
+  };
+  const handlePointerCancel: PointerEventHandler<HTMLCanvasElement> = (event) => {
+    clickCandidate.current = undefined;
+    onPointerCancel(event);
+  };
+
   return (
     <section className="hierarchy-demo">
       <canvas
         aria-label={canvasLabel}
         className="hierarchy-canvas"
         ref={canvasRef}
-        onPointerCancel={onPointerCancel}
-        onPointerDown={onPointerDown}
+        onPointerCancel={handlePointerCancel}
+        onPointerDown={handlePointerDown}
         onPointerEnter={onPointerEnter}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
       />
       <div className="viewport-top-widgets">
         <div

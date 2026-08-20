@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Sighting,
+  SightingBudgetExceededError,
+} from "../helpers/birdsSighting";
 import { useFramePerformance } from "../helpers/useFramePerformance";
 import { useUrlNumberParameter, useUrlSeed } from "../helpers/urlState";
 import { useViewport2D } from "../helpers/useViewport2D";
@@ -10,6 +14,7 @@ import {
   type BirdsPopulationSample,
 } from "../models/birds/birds";
 import {
+  screenToWorld,
   worldToScreen,
   type Size2D,
   type ViewportState,
@@ -34,11 +39,19 @@ const MAX_RENDER_SAMPLES = 1_000;
 const TIME_ZOOM_EXPONENT = 2;
 const TIME_WORLD_SCALE = 1 / 64;
 const FLOW_REFERENCE_STEP_PIXELS = 50;
+const TRACKED_STEPS_PER_DIRECTION = 3;
+const TRACKED_STEP_QUERY_BUDGET = 256;
+const TRACKED_STEP_REFINEMENT_BUDGET = 16;
 
 interface HoveredPopulationCell {
   readonly max: number;
   readonly min: number;
   readonly time: number;
+}
+
+interface TrackedTrajectory {
+  readonly flows: BirdsFlowListResult;
+  readonly partial: boolean;
 }
 
 export function BirdsCanvas() {
@@ -125,6 +138,18 @@ export function BirdsCanvas() {
     },
     [birds, flowResolution, hoveredCell, showFlows],
   );
+  const [tracked, setTracked] = useState<{
+    readonly birds: Birds;
+    readonly sighting: Sighting;
+  }>();
+  const trackedSighting = tracked?.birds === birds ? tracked.sighting : undefined;
+  const trackedTrajectory = useMemo(
+    () =>
+      trackedSighting === undefined
+        ? undefined
+        : buildTrackedTrajectory(birds, trackedSighting),
+    [birds, trackedSighting],
+  );
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() =>
     birds.getCacheUsage(),
   );
@@ -143,6 +168,7 @@ export function BirdsCanvas() {
         resolution,
         hoveredCell,
         hoveredFlows,
+        trackedTrajectory,
         populationDensity,
       ),
     );
@@ -157,6 +183,7 @@ export function BirdsCanvas() {
     resolution,
     size,
     state,
+    trackedTrajectory,
     world,
   ]);
 
@@ -176,10 +203,50 @@ export function BirdsCanvas() {
               }
         }
         coordinateFooter={
-          hoveredPopulation === undefined
-            ? "Population = —"
-            : `Population = ${hoveredPopulation}`
+          <span className="birds-sighting-control">
+            <span>
+              {hoveredPopulation === undefined
+                ? "Population = —"
+                : `Population = ${hoveredPopulation}`}
+            </span>
+            {trackedTrajectory?.partial ? (
+              <span className="birds-sighting-status">Partial track (budget reached)</span>
+            ) : null}
+          </span>
         }
+        onCanvasClick={(event) => {
+          if (resolution === undefined) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const point = screenToWorld(
+            {
+              x: ((event.clientX - bounds.left) / bounds.width) * size.width,
+              y: ((event.clientY - bounds.top) / bounds.height) * size.height,
+            },
+            size,
+            state,
+            TIME_ZOOM_EXPONENT,
+            TIME_WORLD_SCALE,
+          );
+          const cell = populationCellAt(
+            Math.floor(point.x / resolution.cellWidth),
+            Math.round(point.y / resolution.timeStep),
+            resolution,
+          );
+          if (trajectoryContainsCell(trackedTrajectory, trackedSighting, cell)) {
+            setTracked(undefined);
+            return;
+          }
+          if (populationAt(birds, cell, resolution) === 0) return;
+          setTracked({
+            birds,
+            sighting: Sighting.select({
+              birds,
+              cell,
+              resolution,
+              seed: `${seed} · sighting`,
+            }),
+          });
+        }}
         viewport={viewport}
       >
         <SeedControl seed={seed} setSeed={setSeed} />
@@ -220,6 +287,80 @@ export function BirdsCanvas() {
   );
 }
 
+function buildTrackedTrajectory(
+  birds: Birds,
+  origin: Sighting,
+): TrackedTrajectory | undefined {
+  const resolution = birds.resolveFlowResolution({
+    targetSourceWidth: origin.resolution.cellWidth,
+    targetDestinationWidth: origin.resolution.cellWidth,
+    targetDuration: origin.resolution.timeStep,
+  });
+  if (resolution === undefined) return undefined;
+
+  const before: BirdsFlowSample[] = [];
+  const after: BirdsFlowSample[] = [];
+  let partial = false;
+  let current = origin;
+  for (let index = 0; index < TRACKED_STEPS_PER_DIRECTION; index += 1) {
+    try {
+      const previous = current.prev(trackedStepOptions());
+      before.unshift({ count: 1, source: previous.cell, destination: current.cell });
+      current = previous;
+    } catch (error) {
+      if (!(error instanceof SightingBudgetExceededError)) throw error;
+      partial = true;
+      break;
+    }
+  }
+
+  current = origin;
+  for (let index = 0; index < TRACKED_STEPS_PER_DIRECTION; index += 1) {
+    try {
+      const next = current.next(trackedStepOptions());
+      after.push({ count: 1, source: current.cell, destination: next.cell });
+      current = next;
+    } catch (error) {
+      if (!(error instanceof SightingBudgetExceededError)) throw error;
+      partial = true;
+      break;
+    }
+  }
+
+  return {
+    flows: { flows: [...before, ...after], kind: "flows", resolution },
+    partial,
+  };
+}
+
+function trackedStepOptions() {
+  return {
+    maxQueries: TRACKED_STEP_QUERY_BUDGET,
+    maxRefinements: TRACKED_STEP_REFINEMENT_BUDGET,
+  } as const;
+}
+
+function trajectoryContainsCell(
+  trajectory: TrackedTrajectory | undefined,
+  origin: Sighting | undefined,
+  cell: HoveredPopulationCell,
+): boolean {
+  if (origin !== undefined && cellContainsEndpoint(cell, origin.cell)) return true;
+  if (trajectory?.flows.kind !== "flows") return false;
+  return trajectory.flows.flows.some(
+    ({ source, destination }) =>
+      cellContainsEndpoint(cell, source) || cellContainsEndpoint(cell, destination),
+  );
+}
+
+function cellContainsEndpoint(
+  cell: HoveredPopulationCell,
+  endpoint: BirdsFlowSample["source"],
+): boolean {
+  const center = (endpoint.min + endpoint.max) / 2;
+  return endpoint.time === cell.time && center >= cell.min && center < cell.max;
+}
+
 function drawBirds(
   context: CanvasRenderingContext2D,
   size: Size2D,
@@ -229,6 +370,7 @@ function drawBirds(
   resolution: BirdsPopulationResolution | undefined,
   hoveredCell: HoveredPopulationCell | undefined,
   hoveredFlows: BirdsFlowListResult | undefined,
+  trackedTrajectory: TrackedTrajectory | undefined,
   populationDensity: number,
 ): number {
   drawBackground(context, size, viewport);
@@ -293,6 +435,9 @@ function drawBirds(
     queries += hoveredFlows.flows.length;
   } else if (hoveredFlows?.kind === "size-limit") {
     drawFlowLimitMessage(context, size);
+  }
+  if (trackedTrajectory?.flows.kind === "flows") {
+    drawFlows(context, size, viewport, trackedTrajectory.flows);
   }
   drawDirection(context);
   return queries;
