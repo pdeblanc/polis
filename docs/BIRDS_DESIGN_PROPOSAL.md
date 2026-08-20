@@ -685,6 +685,21 @@ measurements, including cache hits, recursive entities and owned batches evaluat
 sampler calls, maximum dependency depth, and public result size. Instrumentation is not
 part of stochastic semantics and may be disabled or simplified after the model is stable.
 
+### 16.4 Population bounds and materialization
+
+Derive, or determine that there is no useful derivation of, a deterministic upper bound
+on a cell population as a function of cell width or epoch, `populationDensity`,
+`diffusionRate`, and every distribution truncation constant used by the construction.
+The analysis must follow the actual finite-support dependency and conservation rules,
+including concentration caused by temporal incidence and flow-space reconciliation; a
+marginal Poisson quantile is not by itself a valid worst-case bound.
+
+Record the bound, its domain, and its looseness, or document why no useful bound could be
+obtained. A bound that falls to a practical constant after some parameter-dependent epoch
+could later support materializing every population beyond that epoch instead of using a
+population cutoff. Choosing between those policies is explicitly deferred to planning
+the next major Birds revision.
+
 ## 17. Implementation sequence
 
 1. Implement `roundedNormal` tables and both midpoint alignments.
@@ -703,9 +718,11 @@ part of stochastic semantics and may be disabled or simplified after the model i
     tube tracking and trajectory display.
 14. Run Poisson–Brownian characterization, including the finite-population quotient-space
     tracker comparison.
-15. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
+15. Analyze deterministic cell-population bounds as input to a future materialization
+    design.
+16. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
     why sequential binomials remain.
-16. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
+17. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
     changes or document why not.
 
 ## 18. Acceptance criteria
@@ -718,8 +735,9 @@ spacetime visualization with debug overlays.
 
 The broader Birds project additionally requires a budgeted singleton-tube tracker,
 Poisson–Brownian characterization including the reference tracker comparison,
-end-to-end performance measurements, the completed multinomial monotonicity
-investigation, and the documented Starfield/Terrain classifier audit.
+end-to-end performance measurements, a documented population-bound analysis, the
+completed multinomial monotonicity investigation, and the documented Starfield/Terrain
+classifier audit.
 
 Any later approximate sampler requires a separate specification and tests. Any follow-up
 not implemented must be closed by an explicit documented decision rather than silently

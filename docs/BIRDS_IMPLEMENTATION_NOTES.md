@@ -241,3 +241,12 @@ calls. The dense case and known meeting both reach binary64-scale durations: res
 about 1.76 million and 1.19 million recursive calls before numeric failure in these
 seeded runs. This confirms a qualitatively separate collision-path cost from ordinary
 tracking and gives performance work a reproducible baseline.
+
+A late-project analysis task will seek a deterministic maximum cell population as a
+function of scale, population density, diffusion rate, and the samplers' truncation
+constants. The derivation must account for the model's actual support, conservation, and
+possible concentration mechanisms rather than substituting a marginal tail estimate.
+If the resulting bound becomes practically small beyond a parameter-dependent epoch, it
+may support materializing every bird at sufficiently fine scales instead of checking a
+population threshold at each cell. This task records the bound and its limitations only;
+the materialization-policy decision belongs to planning the next major Birds revision.
