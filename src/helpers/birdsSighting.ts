@@ -15,6 +15,25 @@ export type SightingCell = BirdsCell;
 export interface SightingOptions {
   readonly maxQueries?: number;
   readonly maxRefinements?: number;
+  readonly diagnostics?: SightingDiagnostics;
+}
+
+export interface SightingDiagnostics {
+  asymmetricNarrowingAttempts: number;
+  minimumCellWidth: number;
+  minimumFlowDuration: number;
+  modelQueries: number;
+  spatialRefinements: number;
+}
+
+export function createSightingDiagnostics(): SightingDiagnostics {
+  return {
+    asymmetricNarrowingAttempts: 0,
+    minimumCellWidth: Number.POSITIVE_INFINITY,
+    minimumFlowDuration: Number.POSITIVE_INFINITY,
+    modelQueries: 0,
+    spatialRefinements: 0,
+  };
 }
 
 export interface SightingSelection {
@@ -65,6 +84,7 @@ export class Sighting {
 
   static select(selection: SightingSelection, options?: SightingOptions): Sighting {
     const budget = new QueryBudget(options);
+    budget.observeCell(selection.resolution.cellWidth);
     budget.take();
     const count = selection.birds.queryPopulationCell({
       cell: selection.cell,
@@ -141,6 +161,7 @@ export class Sighting {
         count: selected.count,
         resolution: subdivision.resolution,
       });
+      budget.observeCell(subdivision.resolution.cellWidth);
       tube.push(entry);
     }
     return new Sighting(birds, tube, 0);
@@ -171,6 +192,7 @@ export class Sighting {
         maximumDuration: remaining,
         resolution: source.resolution,
       });
+      budget.observeFlow(result.resolution.duration);
       if (result.kind === "duration-limit") {
         source = source.#refineSingleton(budget);
         continue;
@@ -207,6 +229,7 @@ export class Sighting {
   ): Sighting | undefined {
     const fineResolution = this.#birds.refinePopulationResolution(this.resolution);
     if (fineResolution === undefined) return undefined;
+    budget.takeAsymmetricNarrowing();
     const flowResolution = this.#birds.resolveFlowResolution({
       targetSourceWidth:
         direction === 1 ? this.resolution.cellWidth : fineResolution.cellWidth,
@@ -223,6 +246,8 @@ export class Sighting {
     ) {
       return undefined;
     }
+    budget.observeCell(fineResolution.cellWidth);
+    budget.observeFlow(flowResolution.duration);
 
     budget.take();
     const result =
@@ -332,6 +357,7 @@ export class Sighting {
       count: 1,
       resolution: subdivision.resolution,
     });
+    budget.observeCell(subdivision.resolution.cellWidth);
     const tube = [...this.#tube, child];
     return new Sighting(this.#birds, tube, tube.length - 1);
   }
@@ -359,6 +385,7 @@ class QueryBudget {
   readonly maxRefinements: number;
   #remainingQueries: number;
   #remainingRefinements: number;
+  readonly #diagnostics: SightingDiagnostics | undefined;
 
   constructor(options: SightingOptions = {}) {
     const maxQueries = options.maxQueries ?? DEFAULT_SIGHTING_QUERY_BUDGET;
@@ -374,6 +401,7 @@ class QueryBudget {
     this.maxRefinements = maxRefinements;
     this.#remainingQueries = maxQueries;
     this.#remainingRefinements = maxRefinements;
+    this.#diagnostics = options.diagnostics;
   }
 
   take(): void {
@@ -381,6 +409,7 @@ class QueryBudget {
       throw new SightingBudgetExceededError("query", this.maxQueries);
     }
     this.#remainingQueries -= 1;
+    if (this.#diagnostics !== undefined) this.#diagnostics.modelQueries += 1;
   }
 
   takeRefinement(): void {
@@ -388,6 +417,31 @@ class QueryBudget {
       throw new SightingBudgetExceededError("refinement", this.maxRefinements);
     }
     this.#remainingRefinements -= 1;
+    if (this.#diagnostics !== undefined) this.#diagnostics.spatialRefinements += 1;
+  }
+
+  takeAsymmetricNarrowing(): void {
+    if (this.#diagnostics !== undefined) {
+      this.#diagnostics.asymmetricNarrowingAttempts += 1;
+    }
+  }
+
+  observeCell(width: number): void {
+    if (this.#diagnostics !== undefined) {
+      this.#diagnostics.minimumCellWidth = Math.min(
+        this.#diagnostics.minimumCellWidth,
+        width,
+      );
+    }
+  }
+
+  observeFlow(duration: number): void {
+    if (this.#diagnostics !== undefined) {
+      this.#diagnostics.minimumFlowDuration = Math.min(
+        this.#diagnostics.minimumFlowDuration,
+        duration,
+      );
+    }
   }
 }
 

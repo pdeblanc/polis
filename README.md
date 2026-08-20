@@ -49,6 +49,18 @@ Run the distribution throughput benchmarks:
 npm run benchmark:distributions
 ```
 
+Print tracker diagnostics for the ordinary, dense, and known-collision cases:
+
+```sh
+npm run benchmark:birds-tracker
+```
+
+Pass one or more case names to run a subset, such as:
+
+```sh
+npm run benchmark:birds-tracker -- known-polis-3-meeting
+```
+
 ## Build and preview
 
 Create a production build:

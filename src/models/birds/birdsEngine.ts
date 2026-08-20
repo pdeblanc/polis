@@ -147,6 +147,7 @@ export class BirdsEngine {
   readonly #flowSpaceSubdivisionCache: LRUCache<string, FlowSpaceSubdivisionResult>;
   readonly #observeDependency: ((edge: BirdsDependencyEdge) => void) | undefined;
   #lastQueryStats: BirdsEngineStats = emptyStats();
+  #totalQueryStats: BirdsEngineStats = emptyStats();
 
   constructor(
     seed: Seed,
@@ -189,21 +190,21 @@ export class BirdsEngine {
   queryCell(cell: BirdCell): number {
     const stats = emptyStats();
     const count = this.#queryCell(cell, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return count;
   }
 
   queryFlow(flow: BirdFlow): number {
     const stats = emptyStats();
     const count = this.#queryFlow(flow, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return count;
   }
 
   queryTwoStageFlow(flow: BirdTwoStageFlow): number {
     const stats = emptyStats();
     const count = this.#queryTwoStageFlow(flow, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return count;
   }
 
@@ -213,7 +214,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryFlowTimeSubdivision(flow, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return result;
   }
 
@@ -223,7 +224,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellSubdivision(cell, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return result;
   }
 
@@ -233,7 +234,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellOutflowSubdivision(cell, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return result;
   }
 
@@ -243,7 +244,7 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryCellInflowSubdivision(cell, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return result;
   }
 
@@ -253,12 +254,22 @@ export class BirdsEngine {
     }
     const stats = emptyStats();
     const result = this.#queryFlowSpaceSubdivision(flow, stats, 0);
-    this.#lastQueryStats = publicStats(stats);
+    this.#recordStats(stats);
     return result;
   }
 
   getLastQueryStats(): BirdsEngineStats {
     return this.#lastQueryStats;
+  }
+
+  getTotalQueryStats(): BirdsEngineStats {
+    return this.#totalQueryStats;
+  }
+
+  #recordStats(stats: MutableStats): void {
+    const next = publicStats(stats);
+    this.#lastQueryStats = next;
+    this.#totalQueryStats = addPublicStats(this.#totalQueryStats, next);
   }
 
   getCacheUsage(): {
@@ -784,5 +795,25 @@ function publicStats(stats: MutableStats): BirdsEngineStats {
     samplerCalls: stats.samplerCalls,
     temporalBatchesEvaluated: stats.temporalBatchesEvaluated,
     twoStageEntriesEvaluated: stats.twoStageEntriesEvaluated,
+  };
+}
+
+function addPublicStats(left: BirdsEngineStats, right: BirdsEngineStats): BirdsEngineStats {
+  return {
+    cacheHits: left.cacheHits + right.cacheHits,
+    cellsEvaluated: left.cellsEvaluated + right.cellsEvaluated,
+    cellSubdivisionsEvaluated:
+      left.cellSubdivisionsEvaluated + right.cellSubdivisionsEvaluated,
+    incidenceBatchesEvaluated:
+      left.incidenceBatchesEvaluated + right.incidenceBatchesEvaluated,
+    flowReconciliationsEvaluated:
+      left.flowReconciliationsEvaluated + right.flowReconciliationsEvaluated,
+    flowsEvaluated: left.flowsEvaluated + right.flowsEvaluated,
+    maximumDepth: Math.max(left.maximumDepth, right.maximumDepth),
+    samplerCalls: left.samplerCalls + right.samplerCalls,
+    temporalBatchesEvaluated:
+      left.temporalBatchesEvaluated + right.temporalBatchesEvaluated,
+    twoStageEntriesEvaluated:
+      left.twoStageEntriesEvaluated + right.twoStageEntriesEvaluated,
   };
 }

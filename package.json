@@ -6,6 +6,7 @@
   "scripts": {
     "benchmark:distributions": "vitest bench --run src/benchmarks/distributions.bench.ts",
     "benchmark:complexity": "tsx src/benchmarks/modelComplexity.ts",
+    "benchmark:birds-tracker": "tsx src/benchmarks/birdsTracker.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
     "dev": "vite",
     "build": "tsc -b && vite build",

@@ -440,6 +440,10 @@ export class Birds {
     return this.#engine.getLastQueryStats();
   }
 
+  getTotalQueryStats(): BirdsEngineStats {
+    return this.#engine.getTotalQueryStats();
+  }
+
   getCacheUsage(): { readonly capacity: number; readonly entries: number } {
     return this.#engine.getCacheUsage();
   }

@@ -231,3 +231,13 @@ unit test requires this path to succeed with a zero source-refinement budget. Th
 `Polis 3` meeting still reaches binary64-scale durations after this change, so asymmetric
 narrowing improves the search order but does not by itself resolve that identity-ambiguous
 path.
+
+The tracker benchmark now reports public model-query and spatial-refinement counts,
+asymmetric attempts, minimum cell width and flow duration, elapsed time, cache growth,
+and cumulative recursive engine counters. Its initial cases cover sparse zero-diffusion
+motion, a denser moving population, and the known `Polis 3` meeting. On the current Node
+runtime, the sparse eight-step case completes with 23 model queries and 731 recursive
+calls. The dense case and known meeting both reach binary64-scale durations: respectively
+about 1.76 million and 1.19 million recursive calls before numeric failure in these
+seeded runs. This confirms a qualitatively separate collision-path cost from ordinary
+tracking and gives performance work a reproducible baseline.

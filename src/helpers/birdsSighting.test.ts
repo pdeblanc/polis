@@ -3,7 +3,11 @@ import {
   Birds,
   type BirdsPopulationResolution,
 } from "../models/birds/birds";
-import { Sighting, SightingBudgetExceededError } from "./birdsSighting";
+import {
+  createSightingDiagnostics,
+  Sighting,
+  SightingBudgetExceededError,
+} from "./birdsSighting";
 
 function coarseSighting(seed = "selection") {
   const birds = new Birds("sighting-model", 2, 0.5);
@@ -100,6 +104,7 @@ describe("Sighting motion", () => {
       timeStep: 4,
     });
     let asymmetricQueries = 0;
+    const diagnostics = createSightingDiagnostics();
     const birds = {
       queryPopulationCell: ({ cell }: { cell: { min: number; max: number; time: number } }) => ({
         cell,
@@ -146,9 +151,12 @@ describe("Sighting motion", () => {
       resolution: coarse as BirdsPopulationResolution,
       seed: "asymmetric narrowing",
     });
-    const next = sighting.next({ maxRefinements: 0 });
+    const next = sighting.next({ diagnostics, maxRefinements: 0 });
 
     expect(asymmetricQueries).toBe(1);
+    expect(diagnostics.asymmetricNarrowingAttempts).toBe(1);
+    expect(diagnostics.spatialRefinements).toBe(0);
+    expect(diagnostics.minimumFlowDuration).toBe(4);
     expect(next.cell).toEqual({ min: 0, max: 2, time: 4 });
     expect(next.resolution).toBe(coarse);
   });
