@@ -25,13 +25,15 @@ describe("Sighting selection and rescaling", () => {
       first.birds.refinePopulationResolution(first.resolution)!,
     )!;
 
-    const firstFine = first.sighting.rescale(fine);
+    const firstFine = first.sighting.rescale(fine, { maxRefinements: 0 });
     const secondFine = second.sighting.rescale(
       second.birds.refinePopulationResolution(
         second.birds.refinePopulationResolution(second.resolution)!,
       )!,
     );
-    const roundTrip = firstFine.rescale(first.resolution).rescale(fine);
+    const roundTrip = firstFine
+      .rescale(first.resolution, { maxRefinements: 0 })
+      .rescale(fine, { maxRefinements: 0 });
 
     expect(secondFine.cell).toEqual(firstFine.cell);
     expect(roundTrip.cell).toEqual(firstFine.cell);
@@ -62,15 +64,24 @@ describe("Sighting selection and rescaling", () => {
   });
 
   it("reports explicit budget exhaustion without changing the original sighting", () => {
-    const { birds, resolution, sighting } = coarseSighting();
+    const { sighting } = coarseSighting();
     const originalCell = sighting.cell;
 
     expect(() => sighting.next({ maxQueries: 1 })).toThrow(SightingBudgetExceededError);
-    const finer = birds.refinePopulationResolution(resolution)!;
-    expect(() => sighting.rescale(finer, { maxRefinements: 0 })).toThrow(
-      /refinement budget/,
-    );
     expect(sighting.cell).toBe(originalCell);
+
+    const sparseBirds = new Birds("refinement-budget", 1 / 16, 0);
+    const sparseResolution = sparseBirds.resolvePopulationResolution({
+      targetCellWidth: 16,
+      targetTimeStep: 64,
+    })!;
+    const sparse = Sighting.select({
+      birds: sparseBirds,
+      cell: { min: 0, max: 16, time: 0 },
+      resolution: sparseResolution,
+      seed: "only bird",
+    });
+    expect(() => sparse.next({ maxRefinements: 0 })).toThrow(/refinement budget/);
   });
 });
 

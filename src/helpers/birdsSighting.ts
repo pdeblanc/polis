@@ -29,6 +29,12 @@ export interface SightingSelection {
   readonly seed: Seed;
 }
 
+interface TubeEntry {
+  readonly cell: SightingCell;
+  readonly count: number;
+  readonly resolution: BirdsPopulationResolution;
+}
+
 export class SightingBudgetExceededError extends Error {
   constructor(
     readonly budget: "query" | "refinement",
@@ -39,24 +45,26 @@ export class SightingBudgetExceededError extends Error {
   }
 }
 
-/** An immutable observation of one exchangeable bird within a population cell. */
+/** An immutable observation backed by nested population cells ending in a singleton. */
 export class Sighting {
   readonly cell: SightingCell;
   readonly resolution: BirdsPopulationResolution;
 
   readonly #birds: Birds;
-  readonly #rank: number;
+  readonly #publicIndex: number;
+  readonly #tube: readonly TubeEntry[];
 
-  private constructor(
-    birds: Birds,
-    cell: SightingCell,
-    resolution: BirdsPopulationResolution,
-    rank: number,
-  ) {
+  private constructor(birds: Birds, tube: readonly TubeEntry[], publicIndex: number) {
+    const frozenTube = Object.freeze(tube.map(freezeEntry));
+    const publicEntry = frozenTube[publicIndex];
+    if (publicEntry === undefined || frozenTube.at(-1)?.count !== 1) {
+      throw new Error("A sighting tube must contain its public cell and end in a singleton");
+    }
     this.#birds = birds;
-    this.cell = Object.freeze({ ...cell });
-    this.resolution = resolution;
-    this.#rank = rank;
+    this.#tube = frozenTube;
+    this.#publicIndex = publicIndex;
+    this.cell = publicEntry.cell;
+    this.resolution = publicEntry.resolution;
     Object.freeze(this);
   }
 
@@ -80,7 +88,12 @@ export class Sighting {
         selection.resolution.timeStep,
       ]) * count,
     );
-    return new Sighting(selection.birds, selection.cell, selection.resolution, rank);
+    const root = freezeEntry({
+      cell: selection.cell,
+      count,
+      resolution: selection.resolution,
+    });
+    return Sighting.#isolate(selection.birds, root, rank, budget);
   }
 
   rescale(
@@ -98,11 +111,54 @@ export class Sighting {
     return this.#move(-1, new QueryBudget(options));
   }
 
+  static #isolate(
+    birds: Birds,
+    root: TubeEntry,
+    initialRank: number,
+    budget: QueryBudget,
+  ): Sighting {
+    const tube = [root];
+    let rank = initialRank;
+    let entry = root;
+    while (entry.count !== 1) {
+      budget.takeRefinement();
+      const finer = birds.refinePopulationResolution(entry.resolution);
+      if (finer === undefined) throw new RangeError("No finer population resolution is available");
+      const children = queryCells(
+        birds,
+        entry.cell.min,
+        entry.cell.max,
+        entry.cell.time,
+        finer,
+        budget,
+      );
+      let selected: (typeof children)[number] | undefined;
+      for (const child of children) {
+        if (rank < child.count) {
+          selected = child;
+          break;
+        }
+        rank -= child.count;
+      }
+      if (selected === undefined) {
+        throw new Error("Selection rank is inconsistent with refined populations");
+      }
+      entry = freezeEntry({
+        cell: { ...selected.interval, time: entry.cell.time },
+        count: selected.count,
+        resolution: finer,
+      });
+      tube.push(entry);
+    }
+    return new Sighting(birds, tube, 0);
+  }
+
   #move(direction: 1 | -1, budget: QueryBudget): Sighting {
     const targetTime = this.cell.time + direction * this.resolution.timeStep;
-    let singleton = this.#toSingleton(budget);
+    let singleton = this.#atSingleton();
     while (singleton.cell.time !== targetTime) {
       singleton = singleton.#moveSingletonToward(targetTime, direction, budget);
+      singleton = singleton.#coarsenSingletonToward(this.resolution, budget);
     }
     return singleton.#rescale(this.resolution, budget);
   }
@@ -112,7 +168,7 @@ export class Sighting {
     direction: 1 | -1,
     budget: QueryBudget,
   ): Sighting {
-    let source = new Sighting(this.#birds, this.cell, this.resolution, this.#rank);
+    let source = this.#atSingleton();
     for (;;) {
       const remaining = Math.abs(targetTime - source.cell.time);
       const flowResolution = source.#birds.getIncidentFlowResolution(
@@ -120,10 +176,16 @@ export class Sighting {
         source.resolution,
       );
       if (flowResolution.duration > remaining) {
-        source = source.#refine(budget);
+        source = source.#refineSingleton(budget);
         continue;
       }
-      const result = queryIncidentFlows(source.#birds, source.cell, flowResolution, direction, budget);
+      const result = queryIncidentFlows(
+        source.#birds,
+        source.cell,
+        flowResolution,
+        direction,
+        budget,
+      );
       const flow = singletonFlow(result);
       const endpoint = direction === 1 ? flow.destination : flow.source;
       const endpointResolution = populationResolutionAtWidth(
@@ -140,103 +202,128 @@ export class Sighting {
         budget,
       );
       if (endpointCount === 1) {
-        return new Sighting(source.#birds, endpoint, endpointResolution, 0);
+        return new Sighting(
+          source.#birds,
+          [{ cell: endpoint, count: 1, resolution: endpointResolution }],
+          0,
+        );
       }
-      source = source.#refine(budget);
+      source = source.#refineSingleton(budget);
     }
   }
 
-  #toSingleton(budget: QueryBudget): Sighting {
-    let sighting = new Sighting(this.#birds, this.cell, this.resolution, this.#rank);
-    for (;;) {
-      const count = queryCellCount(
-        sighting.#birds,
-        sighting.cell,
-        sighting.resolution,
-        budget,
-      );
-      if (sighting.#rank >= count) {
-        throw new Error("Sighting rank is inconsistent with the model population");
+  #atSingleton(): Sighting {
+    const singletonIndex = this.#tube.findIndex(({ count }) => count === 1);
+    if (singletonIndex < 0) throw new Error("A sighting tube has no singleton cell");
+    return new Sighting(this.#birds, this.#tube, singletonIndex);
+  }
+
+  #coarsenSingletonToward(
+    maximumResolution: BirdsPopulationResolution,
+    budget: QueryBudget,
+  ): Sighting {
+    let sighting = this.#atSingleton();
+    while (sighting.#tube[0].resolution.cellWidth < maximumResolution.cellWidth) {
+      try {
+        sighting = sighting.#extendCoarser(budget);
+      } catch (error) {
+        if (error instanceof RangeError && /sighting time/.test(error.message)) break;
+        throw error;
       }
-      if (count === 1) return sighting;
-      sighting = sighting.#refine(budget);
+      if (sighting.#tube[0].count !== 1) return sighting.#atSingleton();
+      sighting = new Sighting(sighting.#birds, sighting.#tube, 0);
     }
+    return sighting;
   }
 
   #rescale(target: BirdsPopulationResolution, budget: QueryBudget): Sighting {
     validateResolution(this.#birds, target);
-    let sighting = new Sighting(this.#birds, this.cell, this.resolution, this.#rank);
-    while (sighting.resolution.cellWidth > target.cellWidth) {
-      sighting = sighting.#refine(budget);
+    let sighting = new Sighting(this.#birds, this.#tube, this.#publicIndex);
+    while (sighting.#tube[0].resolution.cellWidth < target.cellWidth) {
+      sighting = sighting.#extendCoarser(budget);
     }
-    while (sighting.resolution.cellWidth < target.cellWidth) {
-      sighting = sighting.#coarsen(budget);
+    while (sighting.#tube.at(-1)!.resolution.cellWidth > target.cellWidth) {
+      sighting = sighting.#atSingleton().#refineSingleton(budget);
     }
-    if (
-      sighting.resolution.cellWidth !== target.cellWidth ||
-      !Number.isInteger(sighting.cell.time / target.timeStep)
-    ) {
+    const publicIndex = sighting.#tube.findIndex(
+      ({ resolution }) => resolution.cellWidth === target.cellWidth,
+    );
+    if (publicIndex < 0 || !Number.isInteger(sighting.cell.time / target.timeStep)) {
       throw new RangeError("Target resolution is not compatible with this sighting");
     }
-    return new Sighting(sighting.#birds, sighting.cell, target, sighting.#rank);
+    const tube = sighting.#tube.map((entry, index) =>
+      index === publicIndex ? freezeEntry({ ...entry, resolution: target }) : entry,
+    );
+    return new Sighting(sighting.#birds, tube, publicIndex);
   }
 
-  #refine(budget: QueryBudget): Sighting {
+  #refineSingleton(budget: QueryBudget): Sighting {
+    const publicEntry = this.#tube[this.#publicIndex];
+    if (publicEntry.count !== 1) {
+      throw new Error("Only a singleton sighting can refine its tracked tube");
+    }
+    if (this.#publicIndex + 1 < this.#tube.length) {
+      return new Sighting(this.#birds, this.#tube, this.#publicIndex + 1);
+    }
     budget.takeRefinement();
-    const finer = this.#birds.refinePopulationResolution(this.resolution);
+    const leaf = publicEntry;
+    const finer = this.#birds.refinePopulationResolution(leaf.resolution);
     if (finer === undefined) throw new RangeError("No finer population resolution is available");
-    const result = queryCells(
+    const children = queryCells(
       this.#birds,
-      this.cell.min,
-      this.cell.max,
-      this.cell.time,
+      leaf.cell.min,
+      leaf.cell.max,
+      leaf.cell.time,
       finer,
       budget,
     );
-    let rank = this.#rank;
-    for (const sample of result) {
-      if (rank < sample.count) {
-        return new Sighting(
-          this.#birds,
-          { ...sample.interval, time: this.cell.time },
-          finer,
-          rank,
-        );
-      }
-      rank -= sample.count;
+    const populated = children.filter(({ count }) => count !== 0);
+    if (populated.length !== 1 || populated[0].count !== 1) {
+      throw new Error("A singleton cell does not have exactly one singleton child");
     }
-    throw new Error("Sighting rank is inconsistent with refined populations");
+    const child = freezeEntry({
+      cell: { ...populated[0].interval, time: leaf.cell.time },
+      count: 1,
+      resolution: finer,
+    });
+    const tube = [...this.#tube, child];
+    return new Sighting(this.#birds, tube, tube.length - 1);
   }
 
-  #coarsen(budget: QueryBudget): Sighting {
+  #extendCoarser(budget: QueryBudget): Sighting {
+    const root = this.#tube[0];
     const coarser = this.#birds
-      .getNearbyPopulationResolutions(this.resolution, 1)
-      .find(({ cellWidth }) => cellWidth === this.resolution.cellWidth * 2);
+      .getNearbyPopulationResolutions(root.resolution, 1)
+      .find(({ cellWidth }) => cellWidth === root.resolution.cellWidth * 2);
     if (coarser === undefined) throw new RangeError("No coarser population resolution is available");
-    if (!Number.isInteger(this.cell.time / coarser.timeStep)) {
+    if (!Number.isInteger(root.cell.time / coarser.timeStep)) {
       throw new RangeError("No coarser population cell exists at this sighting time");
     }
-    const parentMin = Math.floor(this.cell.min / coarser.cellWidth) * coarser.cellWidth;
-    const siblings = queryCells(
-      this.#birds,
-      parentMin,
-      parentMin + coarser.cellWidth,
-      this.cell.time,
-      this.resolution,
-      budget,
-    );
-    let rank = this.#rank;
-    for (const sibling of siblings) {
-      if (sibling.interval.min === this.cell.min) break;
-      rank += sibling.count;
-    }
+    const parentMin = Math.floor(root.cell.min / coarser.cellWidth) * coarser.cellWidth;
+    const parent = freezeEntry({
+      cell: { min: parentMin, max: parentMin + coarser.cellWidth, time: root.cell.time },
+      count: queryCellCount(
+        this.#birds,
+        { min: parentMin, max: parentMin + coarser.cellWidth, time: root.cell.time },
+        coarser,
+        budget,
+      ),
+      resolution: coarser,
+    });
     return new Sighting(
       this.#birds,
-      { min: parentMin, max: parentMin + coarser.cellWidth, time: this.cell.time },
-      coarser,
-      rank,
+      [parent, ...this.#tube],
+      this.#publicIndex + 1,
     );
   }
+}
+
+function freezeEntry(entry: TubeEntry): TubeEntry {
+  return Object.freeze({
+    cell: Object.freeze({ ...entry.cell }),
+    count: entry.count,
+    resolution: entry.resolution,
+  });
 }
 
 class QueryBudget {
@@ -303,7 +390,9 @@ function queryCells(
 ) {
   budget.take();
   const result = birds.queryPopulation({ min, max, time, resolution });
-  if (result.kind === "size-limit") throw new Error("Sighting population query exceeded its result limit");
+  if (result.kind === "size-limit") {
+    throw new Error("Sighting population query exceeded its result limit");
+  }
   if (result.sampledTime !== time) {
     throw new RangeError("Sighting time does not lie on the population resolution lattice");
   }
@@ -352,7 +441,9 @@ function queryIncidentFlows(
 }
 
 function singletonFlow(result: BirdsFlowListResult) {
-  if (result.kind === "size-limit") throw new Error("Sighting flow query exceeded its result limit");
+  if (result.kind === "size-limit") {
+    throw new Error("Sighting flow query exceeded its result limit");
+  }
   const populated = result.flows.filter(({ count }) => count !== 0);
   const total = populated.reduce((sum, { count }) => sum + count, 0);
   if (total !== 1 || populated.length !== 1 || populated[0].count !== 1) {

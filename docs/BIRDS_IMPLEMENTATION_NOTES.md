@@ -170,11 +170,13 @@ parameter for the public query budgets and later performance work.
 
 ## Immutable sightings
 
-The helper-level `Sighting` represents one exchangeable bird by a population cell and a
-private rank within that cell. Initial selection is the helper's only independent random
-choice. Spatial refinement maps the rank through cumulative child populations, while
-coarsening restores its rank within the parent, so rescaling does not add model identity
-or randomness.
+The helper-level `Sighting` represents one exchangeable bird with an immutable stack of
+nested population cells and counts ending in a singleton. Its public cell and resolution
+select one presentation level from that private tube. Initial selection is the helper's
+only independent random choice: a temporary population rank chooses children until the
+singleton is found, then the rank is discarded. Rescaling within the retained tube needs
+no new model queries or randomness, and navigation reuses the singleton leaf instead of
+locating the bird again from its public aggregate cell.
 
 Movement first refines the sighting to a singleton. The public model method
 `getIncidentFlowResolution` supplies the equal-resolution flow capability whose complete
