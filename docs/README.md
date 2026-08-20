@@ -14,6 +14,9 @@ This directory contains the project's technical reference material and design re
   implementation, including justified departures and issues retained for review.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical design now
   being implemented** for the birds model.
+- [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md) is the active record
+  of Birds implementation discoveries, provisional limitations, and concrete internal
+  choices that do not override the canonical design.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
   retained as historical review input.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced
@@ -23,4 +26,4 @@ This directory contains the project's technical reference material and design re
 
 For an introduction to the existing code, start with `PROJECT.md`. For birds implementation
 work, use `BIRDS_DESIGN_PROPOSAL.md` as the normative specification. The other birds
-documents are review history and do not override it.
+documents are implementation context or review history and do not override it.

@@ -5,6 +5,9 @@
 > This document is the normative design for the current Birds implementation. Earlier
 > Birds design, Q&A, and review-feedback documents are historical context. If they
 > conflict with this document, this document controls.
+>
+> Active implementation discoveries and provisional limitations are recorded separately
+> in [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md).
 
 ## 1. Purpose
 
