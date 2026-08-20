@@ -178,11 +178,15 @@ singleton is found, then the rank is discarded. Rescaling within the retained tu
 no new model queries or randomness, and navigation reuses the singleton leaf instead of
 locating the bird again from its public aggregate cell.
 
-Movement first refines the sighting to a singleton. The public model method
-`getIncidentFlowResolution` supplies the equal-resolution flow capability whose complete
-incidence conserves that cell population; this keeps stage-dependent duration selection
-inside the model. A singleton has one incident unit flow. If its endpoint is not a
-singleton, the uncommitted segment is retried at finer resolution. `next`, `prev`, and
-`rescale` return new sightings, and all variable searches have explicit model-query and
-refinement budgets. Dense collision cases can still require deep, expensive refinement;
-measuring and improving that behavior remains part of the planned tracker benchmarks.
+Movement uses hierarchy-free continuation operations on the public model:
+`queryPopulationCell`, `refinePopulationCell`, `coarsenPopulationCell`, and
+`queryIncidentFlows`. These operations own exact geometry, capability relationships,
+stage-dependent duration selection, and complete subdivision or incidence results. The
+helper therefore contains no parent-coordinate construction, nearby-capability search,
+or flow-to-population resolution conversion.
+
+A singleton has one incident unit flow. If its endpoint is not a singleton, the
+uncommitted segment is retried at finer resolution. `next`, `prev`, and `rescale` return
+new sightings, and all variable searches have explicit model-query and refinement
+budgets. Dense collision cases can still require deep, expensive refinement; measuring
+and improving that behavior remains part of the planned tracker benchmarks.

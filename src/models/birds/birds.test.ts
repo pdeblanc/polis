@@ -119,6 +119,73 @@ describe('Birds population profiles', () => {
   });
 });
 
+describe('Birds population continuation', () => {
+  it('queries, refines, and coarsens canonical cells without exposing hierarchy stages', () => {
+    const birds = new Birds('population-continuation', 2, 0.5);
+    const resolution = birds.resolvePopulationResolution({
+      targetCellWidth: 16,
+      targetTimeStep: 64,
+    })!;
+    const cell = { min: 0, max: 16, time: 0 };
+    const sample = birds.queryPopulationCell({ cell, resolution });
+    const subdivision = birds.refinePopulationCell({ cell, resolution })!;
+
+    expect(sample.count).toBe(32);
+    expect(subdivision.parentCount).toBe(sample.count);
+    expect(subdivision.children.reduce((sum, child) => sum + child.count, 0)).toBe(
+      sample.count,
+    );
+    expect(
+      birds.coarsenPopulationCell({
+        cell: subdivision.children[0].cell,
+        resolution: subdivision.resolution,
+      }),
+    ).toEqual({ cell, count: sample.count, resolution });
+
+    const unalignedChild = {
+      ...subdivision.children[0].cell,
+      time: subdivision.resolution.timeStep,
+    };
+    expect(
+      birds.coarsenPopulationCell({
+        cell: unalignedChild,
+        resolution: subdivision.resolution,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('combines incidence resolution and bounded flow discovery', () => {
+    const birds = new Birds('incident-continuation', 2, 0.5);
+    const resolution = birds.resolvePopulationResolution({
+      targetCellWidth: 16,
+      targetTimeStep: 64,
+    })!;
+    const initial = { min: 0, max: 16, time: 0 };
+    expect(
+      birds.queryIncidentFlows({
+        cell: initial,
+        direction: 'outgoing',
+        maximumDuration: 64,
+        resolution,
+      }),
+    ).toMatchObject({ kind: 'duration-limit', maximumDuration: 64 });
+
+    const intermediate = { min: 0, max: 16, time: 64 };
+    const result = birds.queryIncidentFlows({
+      cell: intermediate,
+      direction: 'outgoing',
+      maximumDuration: 64,
+      resolution,
+    });
+    expect(result.kind).toBe('flows');
+    if (result.kind === 'flows') {
+      expect(result.flows.reduce((sum, flow) => sum + flow.count, 0)).toBe(
+        birds.queryPopulationCell({ cell: intermediate, resolution }).count,
+      );
+    }
+  });
+});
+
 describe('Birds flow queries', () => {
   it('exposes the canonical population-incidence capability at each cell stage', () => {
     const birds = new Birds('incident-capability', 2, 0.5);
@@ -127,15 +194,25 @@ describe('Birds flow queries', () => {
       targetTimeStep: 64,
     })!;
     const fine = birds.refinePopulationResolution(coarse)!;
+    const incidentResolution = (
+      cell: BirdsFlowEndpoint,
+      resolution: typeof coarse,
+    ) =>
+      birds.queryIncidentFlows({
+        cell,
+        direction: 'outgoing',
+        maximumDuration: 256,
+        resolution,
+      }).resolution;
 
     expect(
-      birds.getIncidentFlowResolution({ min: 0, max: 16, time: 0 }, coarse),
+      incidentResolution({ min: 0, max: 16, time: 0 }, coarse),
     ).toMatchObject({ sourceCellWidth: 16, destinationCellWidth: 16, duration: 256 });
     expect(
-      birds.getIncidentFlowResolution({ min: 0, max: 16, time: 64 }, coarse),
+      incidentResolution({ min: 0, max: 16, time: 64 }, coarse),
     ).toMatchObject({ sourceCellWidth: 16, destinationCellWidth: 16, duration: 64 });
     expect(
-      birds.getIncidentFlowResolution({ min: 0, max: 8, time: 0 }, fine),
+      incidentResolution({ min: 0, max: 8, time: 0 }, fine),
     ).toMatchObject({ sourceCellWidth: 8, destinationCellWidth: 8, duration: 64 });
 
     const child = { min: 0, max: 8, time: 0 };

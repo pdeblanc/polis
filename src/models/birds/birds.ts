@@ -28,6 +28,18 @@ export interface BirdsPopulationSample {
   readonly interval: { readonly max: number; readonly min: number };
 }
 
+export interface BirdsPopulationCellSample {
+  readonly cell: BirdsCell;
+  readonly count: number;
+  readonly resolution: BirdsPopulationResolution;
+}
+
+export interface BirdsPopulationSubdivision {
+  readonly children: readonly [BirdsPopulationCellSample, BirdsPopulationCellSample];
+  readonly parentCount: number;
+  readonly resolution: BirdsPopulationResolution;
+}
+
 export type BirdsPopulationResult =
   | {
       readonly kind: 'population-profile';
@@ -43,11 +55,13 @@ export type BirdsPopulationResult =
       readonly sampledTime: number;
     };
 
-export interface BirdsFlowEndpoint {
+export interface BirdsCell {
   readonly max: number;
   readonly min: number;
   readonly time: number;
 }
+
+export type BirdsFlowEndpoint = BirdsCell;
 
 export interface BirdsFlowSample {
   readonly count: number;
@@ -65,6 +79,14 @@ export type BirdsFlowListResult =
       readonly kind: 'size-limit';
       readonly limit: number;
       readonly requiredCount: number;
+      readonly resolution: BirdsFlowResolution;
+    };
+
+export type BirdsIncidentFlowResult =
+  | BirdsFlowListResult
+  | {
+      readonly kind: 'duration-limit';
+      readonly maximumDuration: number;
       readonly resolution: BirdsFlowResolution;
     };
 
@@ -200,7 +222,7 @@ export class Birds {
   }
 
   /** Returns the canonical flow incidence whose total is this cell's population. */
-  getIncidentFlowResolution(
+  #incidentFlowResolution(
     cellEndpoint: BirdsFlowEndpoint,
     populationResolution: BirdsPopulationResolution,
   ): BirdsFlowResolution {
@@ -216,6 +238,85 @@ export class Birds {
         ? scale.flowDuration
         : construction.outgoingDuration;
     return this.#createFlowResolution(facts.epoch, facts.epoch, duration);
+  }
+
+  queryPopulationCell(request: {
+    readonly cell: BirdsCell;
+    readonly resolution: BirdsPopulationResolution;
+  }): BirdsPopulationCellSample {
+    const facts = this.#populationResolutionFacts(request.resolution);
+    const cell = exactCell(request.cell, request.resolution.cellWidth, 'Population cell');
+    const scale = birdsScale(facts.epoch)!;
+    if (!isAligned(cell.time, scale.nextFlowDuration)) {
+      throw new RangeError('Population cell does not lie on the capability temporal lattice');
+    }
+    return {
+      cell,
+      count: this.#engine.queryCell(cell),
+      resolution: request.resolution,
+    };
+  }
+
+  refinePopulationCell(request: {
+    readonly cell: BirdsCell;
+    readonly resolution: BirdsPopulationResolution;
+  }): BirdsPopulationSubdivision | undefined {
+    const facts = this.#populationResolutionFacts(request.resolution);
+    const cell = exactCell(request.cell, request.resolution.cellWidth, 'Population cell');
+    const resolution =
+      birdsScale(facts.epoch + 1) === undefined
+        ? undefined
+        : this.#createPopulationResolution(facts.epoch + 1);
+    if (resolution === undefined) return undefined;
+    const subdivision = this.#engine.queryCellSubdivision(cell);
+    const childSample = (index: 0 | 1): BirdsPopulationCellSample => ({
+      cell: subdivision.children[index].cell,
+      count: subdivision.children[index].count,
+      resolution,
+    });
+    return {
+      children: [childSample(0), childSample(1)],
+      parentCount: subdivision.parentCount,
+      resolution,
+    };
+  }
+
+  coarsenPopulationCell(request: {
+    readonly cell: BirdsCell;
+    readonly resolution: BirdsPopulationResolution;
+  }): BirdsPopulationCellSample | undefined {
+    const facts = this.#populationResolutionFacts(request.resolution);
+    const cell = exactCell(request.cell, request.resolution.cellWidth, 'Population cell');
+    if (facts.epoch === 0) return undefined;
+    const resolution = this.#createPopulationResolution(facts.epoch - 1);
+    if (!isAligned(cell.time, resolution.timeStep)) return undefined;
+    const min = Math.floor(cell.min / resolution.cellWidth) * resolution.cellWidth;
+    const parent = { min, max: min + resolution.cellWidth, time: cell.time };
+    return {
+      cell: parent,
+      count: this.#engine.queryCell(parent),
+      resolution,
+    };
+  }
+
+  queryIncidentFlows(request: {
+    readonly cell: BirdsCell;
+    readonly direction: 'incoming' | 'outgoing';
+    readonly maximumDuration: number;
+    readonly resolution: BirdsPopulationResolution;
+  }): BirdsIncidentFlowResult {
+    validatePositiveFinite(request.maximumDuration, 'Maximum incident-flow duration');
+    const resolution = this.#incidentFlowResolution(request.cell, request.resolution);
+    if (resolution.duration > request.maximumDuration) {
+      return {
+        kind: 'duration-limit',
+        maximumDuration: request.maximumDuration,
+        resolution,
+      };
+    }
+    return request.direction === 'outgoing'
+      ? this.queryOutflows({ source: request.cell, resolution })
+      : this.queryInflows({ destination: request.cell, resolution });
   }
 
   queryPopulation(request: {

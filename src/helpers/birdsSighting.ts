@@ -1,8 +1,7 @@
 import {
   Birds,
-  type BirdsFlowEndpoint,
-  type BirdsFlowListResult,
-  type BirdsFlowResolution,
+  type BirdsCell,
+  type BirdsIncidentFlowResult,
   type BirdsPopulationResolution,
 } from "../models/birds/birds";
 import { uniformUnit } from "../utils/distributions/uniform";
@@ -11,11 +10,7 @@ import { createAddressedRandom, type Seed } from "../utils/rng/addressedRandom";
 export const DEFAULT_SIGHTING_QUERY_BUDGET = 10_000;
 export const DEFAULT_SIGHTING_REFINEMENT_BUDGET = 32;
 
-export interface SightingCell {
-  readonly max: number;
-  readonly min: number;
-  readonly time: number;
-}
+export type SightingCell = BirdsCell;
 
 export interface SightingOptions {
   readonly maxQueries?: number;
@@ -70,12 +65,11 @@ export class Sighting {
 
   static select(selection: SightingSelection, options?: SightingOptions): Sighting {
     const budget = new QueryBudget(options);
-    const count = queryCellCount(
-      selection.birds,
-      selection.cell,
-      selection.resolution,
-      budget,
-    );
+    budget.take();
+    const count = selection.birds.queryPopulationCell({
+      cell: selection.cell,
+      resolution: selection.resolution,
+    }).count;
     if (count === 0) throw new RangeError("Cannot select a bird from an empty cell");
     const random = createAddressedRandom(selection.seed);
     const rank = Math.floor(
@@ -122,16 +116,15 @@ export class Sighting {
     let entry = root;
     while (entry.count !== 1) {
       budget.takeRefinement();
-      const finer = birds.refinePopulationResolution(entry.resolution);
-      if (finer === undefined) throw new RangeError("No finer population resolution is available");
-      const children = queryCells(
-        birds,
-        entry.cell.min,
-        entry.cell.max,
-        entry.cell.time,
-        finer,
-        budget,
-      );
+      budget.take();
+      const subdivision = birds.refinePopulationCell({
+        cell: entry.cell,
+        resolution: entry.resolution,
+      });
+      if (subdivision === undefined) {
+        throw new RangeError("No finer population resolution is available");
+      }
+      const children = subdivision.children;
       let selected: (typeof children)[number] | undefined;
       for (const child of children) {
         if (rank < child.count) {
@@ -144,9 +137,9 @@ export class Sighting {
         throw new Error("Selection rank is inconsistent with refined populations");
       }
       entry = freezeEntry({
-        cell: { ...selected.interval, time: entry.cell.time },
+        cell: selected.cell,
         count: selected.count,
-        resolution: finer,
+        resolution: subdivision.resolution,
       });
       tube.push(entry);
     }
@@ -171,40 +164,28 @@ export class Sighting {
     let source = this.#atSingleton();
     for (;;) {
       const remaining = Math.abs(targetTime - source.cell.time);
-      const flowResolution = source.#birds.getIncidentFlowResolution(
-        source.cell,
-        source.resolution,
-      );
-      if (flowResolution.duration > remaining) {
+      budget.take();
+      const result = source.#birds.queryIncidentFlows({
+        cell: source.cell,
+        direction: direction === 1 ? "outgoing" : "incoming",
+        maximumDuration: remaining,
+        resolution: source.resolution,
+      });
+      if (result.kind === "duration-limit") {
         source = source.#refineSingleton(budget);
         continue;
       }
-      const result = queryIncidentFlows(
-        source.#birds,
-        source.cell,
-        flowResolution,
-        direction,
-        budget,
-      );
       const flow = singletonFlow(result);
       const endpoint = direction === 1 ? flow.destination : flow.source;
-      const endpointResolution = populationResolutionAtWidth(
-        source.#birds,
-        source.resolution,
-        direction === 1
-          ? flowResolution.destinationCellWidth
-          : flowResolution.sourceCellWidth,
-      );
-      const endpointCount = queryCellCount(
-        source.#birds,
-        endpoint,
-        endpointResolution,
-        budget,
-      );
+      budget.take();
+      const endpointCount = source.#birds.queryPopulationCell({
+        cell: endpoint,
+        resolution: source.resolution,
+      }).count;
       if (endpointCount === 1) {
         return new Sighting(
           source.#birds,
-          [{ cell: endpoint, count: 1, resolution: endpointResolution }],
+          [{ cell: endpoint, count: 1, resolution: source.resolution }],
           0,
         );
       }
@@ -224,14 +205,13 @@ export class Sighting {
   ): Sighting {
     let sighting = this.#atSingleton();
     while (sighting.#tube[0].resolution.cellWidth < maximumResolution.cellWidth) {
-      const coarser = sighting.#coarserResolution();
-      if (
-        coarser === undefined ||
-        !Number.isInteger(sighting.#tube[0].cell.time / coarser.timeStep)
-      ) {
-        break;
-      }
-      sighting = sighting.#extendCoarser(coarser, budget);
+      budget.take();
+      const parent = sighting.#birds.coarsenPopulationCell({
+        cell: sighting.#tube[0].cell,
+        resolution: sighting.#tube[0].resolution,
+      });
+      if (parent === undefined) break;
+      sighting = sighting.#extendCoarser(parent);
       if (sighting.#tube[0].count !== 1) return sighting.#atSingleton();
       sighting = new Sighting(sighting.#birds, sighting.#tube, 0);
     }
@@ -242,11 +222,15 @@ export class Sighting {
     validateResolution(this.#birds, target);
     let sighting = new Sighting(this.#birds, this.#tube, this.#publicIndex);
     while (sighting.#tube[0].resolution.cellWidth < target.cellWidth) {
-      const coarser = sighting.#coarserResolution();
-      if (coarser === undefined) {
+      budget.take();
+      const parent = sighting.#birds.coarsenPopulationCell({
+        cell: sighting.#tube[0].cell,
+        resolution: sighting.#tube[0].resolution,
+      });
+      if (parent === undefined) {
         throw new RangeError("No coarser population resolution is available");
       }
-      sighting = sighting.#extendCoarser(coarser, budget);
+      sighting = sighting.#extendCoarser(parent);
     }
     while (sighting.#tube.at(-1)!.resolution.cellWidth > target.cellWidth) {
       sighting = sighting.#atSingleton().#refineSingleton(budget);
@@ -272,56 +256,30 @@ export class Sighting {
       return new Sighting(this.#birds, this.#tube, this.#publicIndex + 1);
     }
     budget.takeRefinement();
-    const leaf = publicEntry;
-    const finer = this.#birds.refinePopulationResolution(leaf.resolution);
-    if (finer === undefined) throw new RangeError("No finer population resolution is available");
-    const children = queryCells(
-      this.#birds,
-      leaf.cell.min,
-      leaf.cell.max,
-      leaf.cell.time,
-      finer,
-      budget,
-    );
+    budget.take();
+    const subdivision = this.#birds.refinePopulationCell({
+      cell: publicEntry.cell,
+      resolution: publicEntry.resolution,
+    });
+    if (subdivision === undefined) {
+      throw new RangeError("No finer population resolution is available");
+    }
+    const children = subdivision.children;
     const populated = children.filter(({ count }) => count !== 0);
     if (populated.length !== 1 || populated[0].count !== 1) {
       throw new Error("A singleton cell does not have exactly one singleton child");
     }
     const child = freezeEntry({
-      cell: { ...populated[0].interval, time: leaf.cell.time },
+      cell: populated[0].cell,
       count: 1,
-      resolution: finer,
+      resolution: subdivision.resolution,
     });
     const tube = [...this.#tube, child];
     return new Sighting(this.#birds, tube, tube.length - 1);
   }
 
-  #coarserResolution(): BirdsPopulationResolution | undefined {
-    const root = this.#tube[0];
-    return this.#birds
-      .getNearbyPopulationResolutions(root.resolution, 1)
-      .find(({ cellWidth }) => cellWidth === root.resolution.cellWidth * 2);
-  }
-
-  #extendCoarser(
-    coarser: BirdsPopulationResolution,
-    budget: QueryBudget,
-  ): Sighting {
-    const root = this.#tube[0];
-    if (!Number.isInteger(root.cell.time / coarser.timeStep)) {
-      throw new RangeError("No coarser population cell exists at this sighting time");
-    }
-    const parentMin = Math.floor(root.cell.min / coarser.cellWidth) * coarser.cellWidth;
-    const parent = freezeEntry({
-      cell: { min: parentMin, max: parentMin + coarser.cellWidth, time: root.cell.time },
-      count: queryCellCount(
-        this.#birds,
-        { min: parentMin, max: parentMin + coarser.cellWidth, time: root.cell.time },
-        coarser,
-        budget,
-      ),
-      resolution: coarser,
-    });
+  #extendCoarser(parentEntry: TubeEntry): Sighting {
+    const parent = freezeEntry(parentEntry);
     return new Sighting(
       this.#birds,
       [parent, ...this.#tube],
@@ -375,84 +333,11 @@ class QueryBudget {
   }
 }
 
-function queryCellCount(
-  birds: Birds,
-  cell: SightingCell,
-  resolution: BirdsPopulationResolution,
-  budget: QueryBudget,
-): number {
-  const samples = queryCells(birds, cell.min, cell.max, cell.time, resolution, budget);
-  if (
-    samples.length !== 1 ||
-    samples[0].interval.min !== cell.min ||
-    samples[0].interval.max !== cell.max
-  ) {
-    throw new RangeError("Sighting cell does not match its population resolution");
-  }
-  return samples[0].count;
-}
-
-function queryCells(
-  birds: Birds,
-  min: number,
-  max: number,
-  time: number,
-  resolution: BirdsPopulationResolution,
-  budget: QueryBudget,
-) {
-  budget.take();
-  const result = birds.queryPopulation({ min, max, time, resolution });
-  if (result.kind === "size-limit") {
-    throw new Error("Sighting population query exceeded its result limit");
-  }
-  if (result.sampledTime !== time) {
-    throw new RangeError("Sighting time does not lie on the population resolution lattice");
-  }
-  return result.samples;
-}
-
 function validateResolution(birds: Birds, resolution: BirdsPopulationResolution): void {
   birds.getNearbyPopulationResolutions(resolution, 0);
 }
 
-function populationResolutionAtWidth(
-  birds: Birds,
-  origin: BirdsPopulationResolution,
-  width: number,
-): BirdsPopulationResolution {
-  let resolution = origin;
-  while (resolution.cellWidth > width) {
-    const finer = birds.refinePopulationResolution(resolution);
-    if (finer === undefined) break;
-    resolution = finer;
-  }
-  while (resolution.cellWidth < width) {
-    const coarser = birds
-      .getNearbyPopulationResolutions(resolution, 1)
-      .find(({ cellWidth }) => cellWidth === resolution.cellWidth * 2);
-    if (coarser === undefined) break;
-    resolution = coarser;
-  }
-  if (resolution.cellWidth !== width) {
-    throw new RangeError("Flow endpoint width has no population resolution");
-  }
-  return resolution;
-}
-
-function queryIncidentFlows(
-  birds: Birds,
-  cell: BirdsFlowEndpoint,
-  resolution: BirdsFlowResolution,
-  direction: 1 | -1,
-  budget: QueryBudget,
-): BirdsFlowListResult {
-  budget.take();
-  return direction === 1
-    ? birds.queryOutflows({ source: cell, resolution })
-    : birds.queryInflows({ destination: cell, resolution });
-}
-
-function singletonFlow(result: BirdsFlowListResult) {
+function singletonFlow(result: Exclude<BirdsIncidentFlowResult, { kind: "duration-limit" }>) {
   if (result.kind === "size-limit") {
     throw new Error("Sighting flow query exceeded its result limit");
   }
