@@ -292,12 +292,23 @@ export function useViewport2D(
       const zoom = Number(keys.has("out")) - Number(keys.has("in"));
       const current = stateRef.current;
       const directionLength = Math.hypot(horizontal, vertical) || 1;
-      const panDistance = Math.sqrt(current.area) * KEYBOARD_PAN_RATE * elapsed;
+      const dimensions = worldDimensions(
+        size,
+        current.area,
+        verticalZoomExponent,
+        verticalScale,
+      );
+      const pixelDistance =
+        Math.sqrt(size.width * size.height) * KEYBOARD_PAN_RATE * elapsed;
 
       commitState({
         area: current.area * Math.exp(zoom * KEYBOARD_ZOOM_RATE * elapsed),
-        centerX: current.centerX + (horizontal / directionLength) * panDistance,
-        centerY: current.centerY + (vertical / directionLength) * panDistance,
+        centerX:
+          current.centerX +
+          (horizontal / directionLength) * pixelDistance * (dimensions.width / size.width),
+        centerY:
+          current.centerY +
+          (vertical / directionLength) * pixelDistance * (dimensions.height / size.height),
       });
       animationFrame = requestAnimationFrame(animate);
     };
@@ -345,7 +356,14 @@ export function useViewport2D(
       if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
       clearKeys();
     };
-  }, [cancelMomentum, cancelResetAnimation, commitState, size]);
+  }, [
+    cancelMomentum,
+    cancelResetAnimation,
+    commitState,
+    size,
+    verticalScale,
+    verticalZoomExponent,
+  ]);
 
   function updateCursor(point: Point2D) {
     setCursorPosition({ x: point.x / size.width, y: point.y / size.height });
