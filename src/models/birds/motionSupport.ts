@@ -22,6 +22,11 @@ export interface BirdsMotionSupport {
   readonly iterations: number;
 }
 
+export interface MidpointCellProbability {
+  readonly cell: BirdCell;
+  readonly probability: number;
+}
+
 interface InternalMotionSupport extends BirdsMotionSupport {
   readonly coarseOffsetSet: ReadonlySet<number>;
   readonly epochOffsetSet: ReadonlySet<number>;
@@ -48,6 +53,14 @@ export function possibleMidpointCells(
   flow: BirdFlow,
   diffusionRate: number,
 ): readonly BirdCell[] {
+  return midpointCellProbabilities(flow, diffusionRate).map(({ cell }) => cell);
+}
+
+/** Returns the canonical midpoint categories and probabilities owned by a flow. */
+export function midpointCellProbabilities(
+  flow: BirdFlow,
+  diffusionRate: number,
+): readonly MidpointCellProbability[] {
   const owner = classifyFlowTimeSubdivisionOwner(flow);
   if (owner === undefined || !isPossibleFlow(flow, diffusionRate)) return [];
 
@@ -59,13 +72,14 @@ export function possibleMidpointCells(
     support.midpointKernels,
     flowOffset,
     owner.normalizedDuration,
-  ).map(({ value }) =>
-    indexedCell(
+  ).map(({ value, probability }) => ({
+    cell: indexedCell(
       sourceIndex + value,
       owner.midpointCellLength,
       owner.midpointTime,
     ),
-  );
+    probability,
+  }));
 }
 
 /** Algebraically inverts midpoint support for one legal Stage-B or Stage-D leg. */
