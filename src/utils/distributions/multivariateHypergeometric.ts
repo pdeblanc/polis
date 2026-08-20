@@ -1,6 +1,7 @@
 import type { Address } from '../rng/address';
 import type { AddressedRandom } from '../rng/addressedRandom';
 import { hypergeometric } from './hypergeometric';
+import { profileDistribution } from './profiling';
 
 export interface HypergeometricCategory {
   readonly capacity: number;
@@ -10,6 +11,17 @@ export interface HypergeometricCategory {
 
 /** Samples category counts without replacement in supplied canonical order. */
 export function multivariateHypergeometric(
+  random: AddressedRandom,
+  address: Address,
+  categories: readonly HypergeometricCategory[],
+  sampleSize: number,
+): readonly number[] {
+  return profileDistribution('multivariateHypergeometric', () =>
+    sampleMultivariateHypergeometric(random, address, categories, sampleSize),
+  );
+}
+
+function sampleMultivariateHypergeometric(
   random: AddressedRandom,
   address: Address,
   categories: readonly HypergeometricCategory[],

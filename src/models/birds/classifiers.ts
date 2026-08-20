@@ -6,8 +6,8 @@ import {
   type BirdTwoStageFlow,
 } from './entities';
 import {
-  birdsScale,
-  epochForCellLength,
+  BIRDS_COARSE_CELL_LENGTH,
+  BIRDS_COARSE_FLOW_DURATION,
   euclideanModulo,
   isAligned,
   type BirdsScale,
@@ -332,17 +332,33 @@ function temporalAggregation(
 }
 
 function classifyCellGeometry(cell: BirdCell): BirdsScale | undefined {
+  const length = cell.max - cell.min;
+  if (!Number.isFinite(length) || length <= 0 || !Number.isFinite(cell.time)) {
+    return undefined;
+  }
+
+  const epoch = Math.log2(BIRDS_COARSE_CELL_LENGTH / length);
+  if (!Number.isSafeInteger(epoch) || epoch < 0) return undefined;
+
+  const canonicalLength = BIRDS_COARSE_CELL_LENGTH / 2 ** epoch;
+  const flowDuration = BIRDS_COARSE_FLOW_DURATION / 4 ** epoch;
   if (
-    !Number.isFinite(cell.min) ||
-    !Number.isFinite(cell.max) ||
-    !Number.isFinite(cell.time)
+    length !== canonicalLength ||
+    !Number.isFinite(flowDuration) ||
+    flowDuration <= 0 ||
+    !Number.isInteger(cell.min / canonicalLength)
   ) {
     return undefined;
   }
-  const epoch = epochForCellLength(cellLength(cell));
-  const scale = epoch === undefined ? undefined : birdsScale(epoch);
-  if (scale === undefined || !isAligned(cell.min, scale.cellLength)) return undefined;
-  return scale;
+
+  return {
+    epoch,
+    cellLength: canonicalLength,
+    childCellLength: canonicalLength / 2,
+    flowDuration,
+    halfFlowDuration: flowDuration / 2,
+    nextFlowDuration: flowDuration / 4,
+  };
 }
 
 function containingParentCell(cell: BirdCell): BirdCell {

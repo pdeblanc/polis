@@ -6,7 +6,7 @@ import {
   classifyTwoStageFlow,
   type CellConstruction,
 } from './classifiers';
-import { birdsScale } from './scales';
+import { BIRDS_COARSE_CELL_LENGTH, birdsScale } from './scales';
 
 function cell(
   epoch: number,
@@ -78,6 +78,11 @@ describe('classifyCell', () => {
     expect(classifyCell({ min: 1, max: 17, time: 0 })).toBeUndefined();
     expect(classifyCell({ min: 0, max: 16, time: 1 })).toBeUndefined();
     expect(classifyCell({ min: 0, max: 16, time: Number.NaN })).toBeUndefined();
+    expect(classifyCell({ min: Number.POSITIVE_INFINITY, max: Number.POSITIVE_INFINITY, time: 0 }))
+      .toBeUndefined();
+    expect(
+      classifyCell({ min: 0, max: BIRDS_COARSE_CELL_LENGTH / 2 ** 540, time: 0 }),
+    ).toBeUndefined();
   });
 
   it('gives sampled fine cells at coarse-aligned times finite spatial ancestry', () => {

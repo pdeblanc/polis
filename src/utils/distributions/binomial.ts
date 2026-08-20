@@ -2,9 +2,21 @@ import binomialQuantile from '@stdlib/stats-base-dists-binomial-quantile';
 import type { Address } from '../rng/address';
 import type { AddressedRandom } from '../rng/addressedRandom';
 import { uniformUnit } from './uniform';
+import { profileDistribution } from './profiling';
 
 /** Samples an exact binomial count using one addressed inverse-CDF quantile. */
 export function binomial(
+  random: AddressedRandom,
+  address: Address,
+  trials: number,
+  probability: number,
+): number {
+  return profileDistribution('binomial', () =>
+    sampleBinomial(random, address, trials, probability),
+  );
+}
+
+function sampleBinomial(
   random: AddressedRandom,
   address: Address,
   trials: number,

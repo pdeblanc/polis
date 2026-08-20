@@ -1,6 +1,7 @@
 import type { Address } from '../rng/address';
 import type { AddressedRandom } from '../rng/addressedRandom';
 import { binomial } from './binomial';
+import { profileDistribution } from './profiling';
 
 export const MULTINOMIAL_PROBABILITY_TOLERANCE = 1e-12;
 
@@ -15,6 +16,17 @@ export interface MultinomialCategory {
  * order. The final positive-probability category receives the exact remainder.
  */
 export function multinomial(
+  random: AddressedRandom,
+  address: Address,
+  trials: number,
+  categories: readonly MultinomialCategory[],
+): readonly number[] {
+  return profileDistribution('multinomial', () =>
+    sampleMultinomial(random, address, trials, categories),
+  );
+}
+
+function sampleMultinomial(
   random: AddressedRandom,
   address: Address,
   trials: number,

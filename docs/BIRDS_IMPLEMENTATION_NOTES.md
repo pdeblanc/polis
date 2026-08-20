@@ -268,3 +268,61 @@ a higher-dimensional spatial process could make exact collisions rare. The latte
 only practical if the Birds engine becomes substantially faster overall. Near-term
 performance work should consequently profile representative population and flow queries
 across the model, independent of tracking, and optimize the dominant engine costs.
+
+An opt-in Birds engine profiler now separates outermost distribution wall time from the
+rest of a query and attributes address encoding and RapidHash time to every enclosing
+distribution. It also reports an uninstrumented baseline because fine-grained timers add
+overhead. In representative cold flow queries, distributions occupied about `16.5%` at
+epoch 2 with `D = 0.5`, `8.7%` at epoch 3 with `D = 0.5`, and `9.8%` at epoch 2 with
+`D = 2`; the remaining `83.5–91.3%` was model machinery. Exact percentages for tiny cell
+and warm-cache queries are dominated by timer and JIT noise and should not guide work.
+
+Within the sampled distributions, raw RapidHash took roughly `18–35%` of inclusive
+sampler time. Address encoding was usually comparable to or larger than hashing itself.
+Binomial calls dominated total sampler work because the multinomial implementation is a
+sequence of binomials; hypergeometric work was smaller in these cases. Inclusive parent
+rows intentionally include their child samplers, while exclusive rows remove them.
+
+A V8 CPU sample over the same workload attributed about `24%` of all samples to structural
+classifiers, `23%` to `lru-cache`, `17%` to motion-support enumeration and deduplication,
+`5%` to scale arithmetic, and `8%` to garbage collection. These shares include profiler
+startup and are approximate, but they clearly identify repeated classification, support
+construction, cache/key activity, and allocation as the major non-distribution costs.
+The next optimization investigation should begin with reuse or memoization of structural
+facts and motion-support sets, followed by cache-key/allocation costs, rather than replacing
+the discrete samplers first.
+
+Within the `372` CPU samples attributed specifically to construction and owner
+classification, the exclusive self-sample breakdown was: `classifyCell` `147` (`39.5%`),
+`classifyFlow` `88` (`23.7%`), `classifyCellGeometry` `64` (`17.2%`),
+`classifyEqualResolutionFlow` `22` (`5.9%`),
+`classifyFlowTimeSubdivisionOwner` `18` (`4.8%`), `classifyTwoStageFlow` `14`
+(`3.8%`), and `childIndex` `10` (`2.7%`). All remaining classifier and owner helpers
+together accounted for `9` samples (`2.4%`). Relative to all `1,435` CPU samples, the
+three leading functions occupied about `10.2%`, `6.1%`, and `4.5%`, respectively.
+
+These are self samples, so time in `classifyCellGeometry` is not also charged to its
+`classifyCell` caller. The call graph shows substantial repeated validation:
+`classifyFlow` classifies both endpoint geometries and then calls `classifyCell` for both
+endpoints, while `classifyTwoStageFlow` repeats geometry and cell classification for three
+endpoints and then classifies its parent flow. Owner classifiers subsequently reclassify
+the same entities. Passing already-derived structural facts through an engine query, or
+memoizing facts by canonical entity key, is therefore a concrete optimization candidate.
+Functions with zero or very few CPU samples are below this profile's sampling resolution,
+not proven to be free.
+
+The first classifier optimization inlined cell length, epoch inversion, scale construction,
+and spatial alignment inside `classifyCellGeometry`. A positive finite `max - min` makes
+separate endpoint-finiteness checks redundant; the implementation still checks finite
+time, exact canonical dyadic width, non-underflowed flow duration, and integer spatial
+alignment. Focused regressions cover non-finite endpoints and spatial scales whose time
+dimension has underflowed.
+
+On the same calibrated cold-flow cases, uninstrumented time fell from about `34.1` to
+`27.7 ms` at epoch 2 with `D = 0.5`, `83.0` to `69.1 ms` at epoch 3 with `D = 0.5`, and
+`146.0` to `117.2 ms` at epoch 2 with `D = 2`: improvements of roughly `17–20%` in this
+run. A follow-up CPU profile reduced classifier/owner self samples from `372` to `269`
+and scale-helper samples from `75` to `44`; total samples fell from `1,435` to `1,271`.
+Although sampling and wall-clock variation require treating exact percentages cautiously,
+both measurements support continuing with direct classifier simplification before adding
+a structural-fact cache.

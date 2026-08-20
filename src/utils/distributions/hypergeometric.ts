@@ -1,6 +1,7 @@
 import type { Address } from '../rng/address';
 import type { AddressedRandom } from '../rng/addressedRandom';
 import { uniformUnit } from './uniform';
+import { profileDistribution } from './profiling';
 
 export const HYPERGEOMETRIC_MAX_REJECTION_ATTEMPTS = 1_024;
 
@@ -16,6 +17,18 @@ const INVERSE_TRANSFORM_THRESHOLD = 10;
  * an exact direct urn path.
  */
 export function hypergeometric(
+  random: AddressedRandom,
+  address: Address,
+  population: number,
+  subpopulation: number,
+  draws: number,
+): number {
+  return profileDistribution('hypergeometric', () =>
+    sampleHypergeometric(random, address, population, subpopulation, draws),
+  );
+}
+
+function sampleHypergeometric(
   random: AddressedRandom,
   address: Address,
   population: number,

@@ -1,5 +1,6 @@
 import { rapidhash } from 'rapidhash-js/v3.0';
 import { encodeAddress, type Address } from './address';
+import { profileAddressEncoding, profileHash } from '../distributions/profiling';
 
 export type Seed = string;
 
@@ -17,7 +18,8 @@ export function createAddressedRandom(seed: Seed): AddressedRandom {
 
   return {
     randomU64(address) {
-      return rapidhash(encodeAddress(address), options);
+      const encoded = profileAddressEncoding(() => encodeAddress(address));
+      return profileHash(() => rapidhash(encoded, options));
     },
   };
 }

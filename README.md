@@ -61,6 +61,13 @@ Pass one or more case names to run a subset, such as:
 npm run benchmark:birds-tracker -- known-polis-3-meeting
 ```
 
+Profile Birds engine time inside distributions, hashing, address encoding, and other
+model work:
+
+```sh
+npm run profile:birds-engine
+```
+
 ## Build and preview
 
 Create a production build:
