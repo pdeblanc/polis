@@ -1,29 +1,39 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useFramePerformance } from '../helpers/useFramePerformance';
-import { useUrlNumberParameter, useUrlSeed } from '../helpers/urlState';
-import { useViewport2D } from '../helpers/useViewport2D';
+import { useEffect, useMemo, useState } from "react";
+import { useFramePerformance } from "../helpers/useFramePerformance";
+import { useUrlNumberParameter, useUrlSeed } from "../helpers/urlState";
+import { useViewport2D } from "../helpers/useViewport2D";
 import {
   Birds,
   type BirdsFlowListResult,
+  type BirdsFlowSample,
   type BirdsPopulationResolution,
   type BirdsPopulationSample,
-} from '../models/birds/birds';
-import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
-import { CacheControl, type CacheUsage } from './CacheControl';
-import { PerformanceControl } from './PerformanceControl';
-import { ModelParameterControl } from './ModelParameterControl';
-import { SeedControl } from './SeedControl';
-import { ViewportFrame } from './ViewportFrame';
+} from "../models/birds/birds";
+import {
+  worldToScreen,
+  type Size2D,
+  type ViewportState,
+} from "../utils/geometry/viewport2d";
+import { CacheControl, type CacheUsage } from "./CacheControl";
+import { PerformanceControl } from "./PerformanceControl";
+import { ModelParameterControl } from "./ModelParameterControl";
+import { SeedControl } from "./SeedControl";
+import { ViewportFrame } from "./ViewportFrame";
 
-const DEFAULT_SEED = 'Polis 3';
+const DEFAULT_SEED = "Polis 3";
 const DEFAULT_DIFFUSION_RATE = 0.5;
 const DEFAULT_POPULATION_DENSITY = 2;
-const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16_384 };
+const INITIAL_VIEWPORT: ViewportState = {
+  centerX: 0,
+  centerY: 0,
+  area: 16_384,
+};
 const TARGET_CELL_PIXELS = 64;
 const TARGET_TIME_STEP_PIXELS = 128;
 const MAX_RENDER_SAMPLES = 1_000;
 const TIME_ZOOM_EXPONENT = 2;
 const TIME_WORLD_SCALE = 1 / 64;
+const FLOW_REFERENCE_STEP_PIXELS = 50;
 
 interface HoveredPopulationCell {
   readonly max: number;
@@ -34,12 +44,12 @@ interface HoveredPopulationCell {
 export function BirdsCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
   const [populationDensity, setPopulationDensity] = useUrlNumberParameter(
-    'density',
+    "density",
     DEFAULT_POPULATION_DENSITY,
     isNonnegative,
   );
   const [diffusionRate, setDiffusionRate] = useUrlNumberParameter(
-    'diffusion',
+    "diffusion",
     DEFAULT_DIFFUSION_RATE,
     isNonnegative,
   );
@@ -57,9 +67,13 @@ export function BirdsCanvas() {
     [birds, size, state, world],
   );
   const hoveredSpatialIndex =
-    resolution === undefined ? undefined : Math.floor(cursor.x / resolution.cellWidth);
+    resolution === undefined
+      ? undefined
+      : Math.floor(cursor.x / resolution.cellWidth);
   const hoveredTimeIndex =
-    resolution === undefined ? undefined : Math.round(cursor.y / resolution.timeStep);
+    resolution === undefined
+      ? undefined
+      : Math.round(cursor.y / resolution.timeStep);
   const hoveredCell = useMemo(
     () =>
       resolution === undefined ||
@@ -98,7 +112,9 @@ export function BirdsCanvas() {
           }),
     [birds, flowResolution, hoveredCell, showFlows],
   );
-  const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => birds.getCacheUsage());
+  const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() =>
+    birds.getCacheUsage(),
+  );
   const { measureFrame, performance } = useFramePerformance();
 
   useEffect(() => {
@@ -135,7 +151,7 @@ export function BirdsCanvas() {
     <>
       <title>{`Birds (${seed})`}</title>
       <ViewportFrame
-        axisLabels={{ x: 'x', y: 't' }}
+        axisLabels={{ x: "x", y: "t" }}
         canvasLabel="Pannable spacetime population view with future upward"
         coordinateDisplay={
           hoveredCell === undefined
@@ -143,11 +159,13 @@ export function BirdsCanvas() {
             : {
                 formattedX: `[${formatResolution(hoveredCell.min)}, ${formatResolution(hoveredCell.max)})`,
                 formattedY: formatResolution(hoveredCell.time),
-                xOperator: '∈',
+                xOperator: "∈",
               }
         }
         coordinateFooter={
-          hoveredPopulation === undefined ? 'Population = —' : `Population = ${hoveredPopulation}`
+          hoveredPopulation === undefined
+            ? "Population = —"
+            : `Population = ${hoveredPopulation}`
         }
         viewport={viewport}
       >
@@ -165,7 +183,7 @@ export function BirdsCanvas() {
           value={diffusionRate}
         />
         <span>
-          Δx = {formatResolution(resolution?.cellWidth)} · Δt ={' '}
+          Δx = {formatResolution(resolution?.cellWidth)} · Δt ={" "}
           {formatResolution(resolution?.timeStep)}
         </span>
         <CacheControl
@@ -181,7 +199,7 @@ export function BirdsCanvas() {
             type="checkbox"
             checked={showFlows}
             onChange={(event) => setShowFlows(event.target.checked)}
-          />{' '}
+          />{" "}
           Flows
         </label>
       </ViewportFrame>
@@ -226,14 +244,18 @@ function drawBirds(
   }
 
   let queries = 0;
-  for (let timeIndex = firstTimeIndex; timeIndex <= finalTimeIndex; timeIndex += 1) {
+  for (
+    let timeIndex = firstTimeIndex;
+    timeIndex <= finalTimeIndex;
+    timeIndex += 1
+  ) {
     const result = birds.queryPopulation({
       min: bounds.minX,
       max: bounds.maxX,
       time: timeIndex * resolution.timeStep,
       resolution,
     });
-    if (result.kind === 'size-limit') {
+    if (result.kind === "size-limit") {
       drawLimitMessage(context, size);
       return queries;
     }
@@ -250,14 +272,14 @@ function drawBirds(
       queries += 1;
     }
   }
-  if (hoveredFlows?.kind === 'flows') {
-    drawFlows(context, size, viewport, hoveredFlows);
-    queries += hoveredFlows.flows.length;
-  } else if (hoveredFlows?.kind === 'size-limit') {
-    drawFlowLimitMessage(context, size);
-  }
   if (hoveredCell !== undefined) {
     drawHoveredCell(context, size, viewport, resolution, hoveredCell);
+  }
+  if (hoveredFlows?.kind === "flows") {
+    drawFlows(context, size, viewport, hoveredFlows);
+    queries += hoveredFlows.flows.length;
+  } else if (hoveredFlows?.kind === "size-limit") {
+    drawFlowLimitMessage(context, size);
   }
   drawDirection(context);
   return queries;
@@ -267,11 +289,12 @@ function drawFlows(
   context: CanvasRenderingContext2D,
   size: Size2D,
   viewport: ViewportState,
-  result: Extract<BirdsFlowListResult, { readonly kind: 'flows' }>,
+  result: Extract<BirdsFlowListResult, { readonly kind: "flows" }>,
 ): void {
   const maximumCount = Math.max(1, ...result.flows.map(({ count }) => count));
+  const renderedFlows: RenderedFlow[] = [];
   for (const flow of result.flows) {
-    const source = worldToScreen(
+    const sourceCenter = worldToScreen(
       {
         x: (flow.source.min + flow.source.max) / 2,
         y: flow.source.time,
@@ -281,7 +304,7 @@ function drawFlows(
       TIME_ZOOM_EXPONENT,
       TIME_WORLD_SCALE,
     );
-    const destination = worldToScreen(
+    const destinationCenter = worldToScreen(
       {
         x: (flow.destination.min + flow.destination.max) / 2,
         y: flow.destination.time,
@@ -292,33 +315,156 @@ function drawFlows(
       TIME_WORLD_SCALE,
     );
     const strength = Math.sqrt(flow.count / maximumCount);
-    context.strokeStyle = `rgb(255 211 118 / ${0.35 + 0.6 * strength})`;
-    context.lineWidth = 1 + 3 * strength;
+    const centerDistance = Math.hypot(
+      destinationCenter.x - sourceCenter.x,
+      destinationCenter.y - sourceCenter.y,
+    );
+    if (centerDistance === 0) continue;
+    const directionX = (destinationCenter.x - sourceCenter.x) / centerDistance;
+    const directionY = (destinationCenter.y - sourceCenter.y) / centerDistance;
+    const perpendicularX = -directionY;
+    const perpendicularY = directionX;
+    const zoomThicknessScale = Math.sqrt(
+      Math.abs(destinationCenter.y - sourceCenter.y) / FLOW_REFERENCE_STEP_PIXELS,
+    );
+    const lineWidth = (1.5 + 3 * strength) * zoomThicknessScale;
+    const haloLineWidth = lineWidth + 4 * zoomThicknessScale;
+    const haloForwardPadding = 6 * zoomThicknessScale;
+    const sourceSize = flowTileSize(
+      flow.source,
+      result.resolution.duration,
+      size,
+      viewport,
+    );
+    const destinationSize = flowTileSize(
+      flow.destination,
+      result.resolution.duration,
+      size,
+      viewport,
+    );
+    const sourceInset = centerSubtileBoundaryDistance(
+      directionX,
+      directionY,
+      sourceSize,
+    );
+    const destinationInset = centerSubtileBoundaryDistance(
+      directionX,
+      directionY,
+      destinationSize,
+    );
+    const source = {
+      x: sourceCenter.x + directionX * (sourceInset + haloLineWidth / 2),
+      y: sourceCenter.y + directionY * (sourceInset + haloLineWidth / 2),
+    };
+    const destination = {
+      x: destinationCenter.x - directionX * (destinationInset + haloForwardPadding),
+      y: destinationCenter.y - directionY * (destinationInset + haloForwardPadding),
+    };
+    const distance = Math.hypot(destination.x - source.x, destination.y - source.y);
+    if (distance <= 0) continue;
+    const arrowLength = Math.min(
+      (10 + 3 * strength) * zoomThicknessScale,
+      distance * 0.5,
+    );
+    const shaftEnd = {
+      x: destination.x - directionX * arrowLength,
+      y: destination.y - directionY * arrowLength,
+    };
+    const color = `rgb(255 222 142 / ${0.55 + 0.45 * strength})`;
+    renderedFlows.push({
+      arrowLength,
+      color,
+      destination,
+      directionX,
+      directionY,
+      haloForwardPadding,
+      lineWidth,
+      perpendicularX,
+      perpendicularY,
+      shaftEnd,
+      source,
+      strength,
+      zoomThicknessScale,
+    });
+  }
+
+  for (const flow of renderedFlows) {
+    const arrowWidth = (7 + 3 * flow.strength) * flow.zoomThicknessScale;
+    const haloScale = 1 + (3 * flow.haloForwardPadding) / (2 * flow.arrowLength);
+    const haloTip = {
+      x: flow.destination.x + flow.directionX * flow.haloForwardPadding,
+      y: flow.destination.y + flow.directionY * flow.haloForwardPadding,
+    };
+    context.lineCap = "round";
+    context.strokeStyle = "rgb(3 7 12 / 88%)";
+    context.lineWidth = flow.lineWidth + 4 * flow.zoomThicknessScale;
     context.beginPath();
-    context.moveTo(source.x, source.y);
-    context.lineTo(destination.x, destination.y);
+    context.moveTo(flow.source.x, flow.source.y);
+    context.lineTo(flow.shaftEnd.x, flow.shaftEnd.y);
     context.stroke();
-    drawArrowhead(context, source, destination, 3 + 2 * strength);
+    drawArrowheadTriangle(
+      context,
+      haloTip,
+      flow.directionX,
+      flow.directionY,
+      flow.perpendicularX,
+      flow.perpendicularY,
+      {
+        color: "rgb(3 7 12 / 92%)",
+        length: flow.arrowLength * haloScale,
+        width: arrowWidth * haloScale,
+      },
+    );
+  }
+
+  for (const flow of renderedFlows) {
+    context.strokeStyle = flow.color;
+    context.lineWidth = flow.lineWidth;
+    context.beginPath();
+    context.moveTo(flow.source.x, flow.source.y);
+    context.lineTo(flow.shaftEnd.x, flow.shaftEnd.y);
+    context.stroke();
+    drawArrowheadTriangle(
+      context,
+      flow.destination,
+      flow.directionX,
+      flow.directionY,
+      flow.perpendicularX,
+      flow.perpendicularY,
+      {
+        color: flow.color,
+        length: flow.arrowLength,
+        width: (7 + 3 * flow.strength) * flow.zoomThicknessScale,
+      },
+    );
   }
 }
 
-function drawArrowhead(
+function drawArrowheadTriangle(
   context: CanvasRenderingContext2D,
-  source: Point,
-  destination: Point,
-  radius: number,
+  tip: Point,
+  directionX: number,
+  directionY: number,
+  perpendicularX: number,
+  perpendicularY: number,
+  style: {
+    readonly color: string;
+    readonly length: number;
+    readonly width: number;
+  },
 ): void {
-  const angle = Math.atan2(destination.y - source.y, destination.x - source.x);
-  context.fillStyle = context.strokeStyle;
+  const baseX = tip.x - directionX * style.length;
+  const baseY = tip.y - directionY * style.length;
+  context.fillStyle = style.color;
   context.beginPath();
-  context.moveTo(destination.x, destination.y);
+  context.moveTo(tip.x, tip.y);
   context.lineTo(
-    destination.x - radius * Math.cos(angle - Math.PI / 6),
-    destination.y - radius * Math.sin(angle - Math.PI / 6),
+    baseX + perpendicularX * (style.width / 2),
+    baseY + perpendicularY * (style.width / 2),
   );
   context.lineTo(
-    destination.x - radius * Math.cos(angle + Math.PI / 6),
-    destination.y - radius * Math.sin(angle + Math.PI / 6),
+    baseX - perpendicularX * (style.width / 2),
+    baseY - perpendicularY * (style.width / 2),
   );
   context.fill();
 }
@@ -326,6 +472,72 @@ function drawArrowhead(
 interface Point {
   readonly x: number;
   readonly y: number;
+}
+
+interface RenderedFlow {
+  readonly arrowLength: number;
+  readonly color: string;
+  readonly destination: Point;
+  readonly directionX: number;
+  readonly directionY: number;
+  readonly haloForwardPadding: number;
+  readonly lineWidth: number;
+  readonly perpendicularX: number;
+  readonly perpendicularY: number;
+  readonly shaftEnd: Point;
+  readonly source: Point;
+  readonly strength: number;
+  readonly zoomThicknessScale: number;
+}
+
+function flowTileSize(
+  cell: BirdsFlowSample["source"],
+  duration: number,
+  size: Size2D,
+  viewport: ViewportState,
+): Size2D {
+  const centerX = (cell.min + cell.max) / 2;
+  const left = worldToScreen(
+    { x: cell.min, y: cell.time },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  const right = worldToScreen(
+    { x: cell.max, y: cell.time },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  const top = worldToScreen(
+    { x: centerX, y: cell.time + duration / 2 },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  const bottom = worldToScreen(
+    { x: centerX, y: cell.time - duration / 2 },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+    TIME_WORLD_SCALE,
+  );
+  return { width: Math.abs(right.x - left.x), height: Math.abs(bottom.y - top.y) };
+}
+
+function centerSubtileBoundaryDistance(
+  directionX: number,
+  directionY: number,
+  tile: Size2D,
+): number {
+  const horizontalDistance =
+    directionX === 0 ? Number.POSITIVE_INFINITY : tile.width / 6 / Math.abs(directionX);
+  const verticalDistance =
+    directionY === 0 ? Number.POSITIVE_INFINITY : tile.height / 6 / Math.abs(directionY);
+  return Math.min(horizontalDistance, verticalDistance);
 }
 
 function populationCellAt(
@@ -352,7 +564,9 @@ function populationAt(
     time: cell.time,
     resolution,
   });
-  return result.kind === 'population-profile' ? result.samples[0]?.count : undefined;
+  return result.kind === "population-profile"
+    ? result.samples[0]?.count
+    : undefined;
 }
 
 function birdsRenderResolution(
@@ -376,8 +590,13 @@ function birdsRenderResolution(
   let selected = nearby[0] ?? requested;
   for (const candidate of nearby) {
     if (candidate.cellWidth < requested.cellWidth) break;
-    const columns = Math.ceil(bounds.maxX / candidate.cellWidth) - Math.floor(bounds.minX / candidate.cellWidth);
-    const rows = Math.ceil(bounds.maxTime / candidate.timeStep) - Math.floor(bounds.minTime / candidate.timeStep) + 1;
+    const columns =
+      Math.ceil(bounds.maxX / candidate.cellWidth) -
+      Math.floor(bounds.minX / candidate.cellWidth);
+    const rows =
+      Math.ceil(bounds.maxTime / candidate.timeStep) -
+      Math.floor(bounds.minTime / candidate.timeStep) +
+      1;
     if (columns * rows > MAX_RENDER_SAMPLES) break;
     selected = candidate;
   }
@@ -389,7 +608,7 @@ function drawBackground(
   size: Size2D,
   viewport: ViewportState,
 ): void {
-  context.fillStyle = '#080d13';
+  context.fillStyle = "#080d13";
   context.fillRect(0, 0, size.width, size.height);
   const origin = worldToScreen(
     { x: 0, y: 0 },
@@ -398,7 +617,7 @@ function drawBackground(
     TIME_ZOOM_EXPONENT,
     TIME_WORLD_SCALE,
   );
-  context.strokeStyle = '#29394a';
+  context.strokeStyle = "#29394a";
   context.lineWidth = 1;
   context.beginPath();
   context.moveTo(origin.x, 0);
@@ -441,7 +660,12 @@ function drawPopulationSample(
   const expected = populationDensity * resolution.cellWidth;
   const intensity = expected === 0 ? 0 : 1 - Math.exp(-sample.count / expected);
   context.fillStyle = `rgb(105 215 255 / ${0.08 + 0.92 * intensity})`;
-  context.fillRect(left.x, left.y - thickness / 2, Math.max(1, right.x - left.x), thickness);
+  context.fillRect(
+    left.x,
+    left.y - thickness / 2,
+    Math.max(1, right.x - left.x),
+    thickness,
+  );
 }
 
 function drawHoveredCell(
@@ -465,7 +689,7 @@ function drawHoveredCell(
     TIME_ZOOM_EXPONENT,
     TIME_WORLD_SCALE,
   );
-  context.strokeStyle = '#fff0bd';
+  context.strokeStyle = "#fff0bd";
   context.lineWidth = 2;
   context.strokeRect(
     Math.round(topLeft.x) + 0.5,
@@ -478,8 +702,8 @@ function drawHoveredCell(
 function drawDirection(context: CanvasRenderingContext2D): void {
   const x = 18;
   const top = 66;
-  context.strokeStyle = 'rgb(173 225 255 / 72%)';
-  context.fillStyle = 'rgb(190 231 255 / 82%)';
+  context.strokeStyle = "rgb(173 225 255 / 72%)";
+  context.fillStyle = "rgb(190 231 255 / 82%)";
   context.lineWidth = 1.5;
   context.beginPath();
   context.moveTo(x, top + 30);
@@ -488,24 +712,38 @@ function drawDirection(context: CanvasRenderingContext2D): void {
   context.moveTo(x, top);
   context.lineTo(x + 4, top + 7);
   context.stroke();
-  context.font = '11px ui-monospace, monospace';
-  context.fillText('future', x + 8, top + 5);
+  context.font = "11px ui-monospace, monospace";
+  context.fillText("future", x + 8, top + 5);
 }
 
-function drawLimitMessage(context: CanvasRenderingContext2D, size: Size2D): void {
-  context.fillStyle = 'rgb(255 196 107 / 88%)';
-  context.font = '12px ui-monospace, monospace';
-  context.textAlign = 'center';
-  context.fillText('View exceeds the population rendering budget', size.width / 2, size.height / 2);
-  context.textAlign = 'start';
+function drawLimitMessage(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+): void {
+  context.fillStyle = "rgb(255 196 107 / 88%)";
+  context.font = "12px ui-monospace, monospace";
+  context.textAlign = "center";
+  context.fillText(
+    "View exceeds the population rendering budget",
+    size.width / 2,
+    size.height / 2,
+  );
+  context.textAlign = "start";
 }
 
-function drawFlowLimitMessage(context: CanvasRenderingContext2D, size: Size2D): void {
-  context.fillStyle = 'rgb(255 196 107 / 88%)';
-  context.font = '11px ui-monospace, monospace';
-  context.textAlign = 'center';
-  context.fillText('Flow envelope exceeds the overlay budget', size.width / 2, 18);
-  context.textAlign = 'start';
+function drawFlowLimitMessage(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+): void {
+  context.fillStyle = "rgb(255 196 107 / 88%)";
+  context.font = "11px ui-monospace, monospace";
+  context.textAlign = "center";
+  context.fillText(
+    "Flow envelope exceeds the overlay budget",
+    size.width / 2,
+    18,
+  );
+  context.textAlign = "start";
 }
 
 function updateCacheUsage(
@@ -513,13 +751,15 @@ function updateCacheUsage(
   next: CacheUsage,
 ): void {
   setUsage((current) =>
-    current.entries === next.entries && current.capacity === next.capacity ? current : next,
+    current.entries === next.entries && current.capacity === next.capacity
+      ? current
+      : next,
   );
 }
 
 function formatResolution(value: number | undefined): string {
-  if (value === undefined) return '—';
-  if (value === 0) return '0';
+  if (value === undefined) return "—";
+  if (value === 0) return "0";
   if (Math.abs(value) < 0.001 || Math.abs(value) >= 10_000) {
     return value.toExponential(2);
   }
