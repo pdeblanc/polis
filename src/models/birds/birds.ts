@@ -1,5 +1,6 @@
 import type { Seed } from '../../utils/rng/addressedRandom';
 import { BirdsEngine, type BirdsEngineStats } from './birdsEngine';
+import { classifyCell } from './classifiers';
 import type { BirdCell, BirdFlow } from './entities';
 import { possibleFlowDestinations, possibleFlowSources } from './motionSupport';
 import { birdsScale, isAligned } from './scales';
@@ -196,6 +197,25 @@ export class Birds {
       );
     }
     return results;
+  }
+
+  /** Returns the canonical flow incidence whose total is this cell's population. */
+  getIncidentFlowResolution(
+    cellEndpoint: BirdsFlowEndpoint,
+    populationResolution: BirdsPopulationResolution,
+  ): BirdsFlowResolution {
+    const facts = this.#populationResolutionFacts(populationResolution);
+    const cell = exactCell(cellEndpoint, populationResolution.cellWidth, 'Population cell');
+    const construction = classifyCell(cell);
+    if (construction === undefined) {
+      throw new RangeError('Population cell does not lie in the Birds hierarchy');
+    }
+    const scale = birdsScale(facts.epoch)!;
+    const duration =
+      construction.kind === 'spatial-child'
+        ? scale.flowDuration
+        : construction.outgoingDuration;
+    return this.#createFlowResolution(facts.epoch, facts.epoch, duration);
   }
 
   queryPopulation(request: {

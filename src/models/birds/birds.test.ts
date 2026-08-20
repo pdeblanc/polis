@@ -120,6 +120,41 @@ describe('Birds population profiles', () => {
 });
 
 describe('Birds flow queries', () => {
+  it('exposes the canonical population-incidence capability at each cell stage', () => {
+    const birds = new Birds('incident-capability', 2, 0.5);
+    const coarse = birds.resolvePopulationResolution({
+      targetCellWidth: 16,
+      targetTimeStep: 64,
+    })!;
+    const fine = birds.refinePopulationResolution(coarse)!;
+
+    expect(
+      birds.getIncidentFlowResolution({ min: 0, max: 16, time: 0 }, coarse),
+    ).toMatchObject({ sourceCellWidth: 16, destinationCellWidth: 16, duration: 256 });
+    expect(
+      birds.getIncidentFlowResolution({ min: 0, max: 16, time: 64 }, coarse),
+    ).toMatchObject({ sourceCellWidth: 16, destinationCellWidth: 16, duration: 64 });
+    expect(
+      birds.getIncidentFlowResolution({ min: 0, max: 8, time: 0 }, fine),
+    ).toMatchObject({ sourceCellWidth: 8, destinationCellWidth: 8, duration: 64 });
+
+    const child = { min: 0, max: 8, time: 0 };
+    const childCount = birds.queryPopulation({ ...child, resolution: fine });
+    const equal = birds.resolveFlowResolution({
+      targetSourceWidth: 8,
+      targetDestinationWidth: 8,
+      targetDuration: 64,
+    })!;
+    const equalOutflows = birds.queryOutflows({ source: child, resolution: equal });
+    expect(childCount.kind).toBe('population-profile');
+    expect(equalOutflows.kind).toBe('flows');
+    if (childCount.kind === 'population-profile' && equalOutflows.kind === 'flows') {
+      expect(equalOutflows.flows.reduce((sum, flow) => sum + flow.count, 0)).toBe(
+        childCount.samples[0].count,
+      );
+    }
+  });
+
   it('keeps individual, outgoing, and incoming queries consistent', () => {
     const birds = new Birds('public-flow', 2, 0.5);
     const resolution = birds.resolveFlowResolution({

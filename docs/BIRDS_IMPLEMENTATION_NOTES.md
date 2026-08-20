@@ -167,3 +167,20 @@ epoch-3 entry flow, diffusion rates `0`, `0.5`, and `2` produced approximately 9
 24,500, and 118,000 recursive calls respectively. These figures are observations rather
 than complexity guarantees, but they identify diffusion/support width as an important
 parameter for the public query budgets and later performance work.
+
+## Immutable sightings
+
+The helper-level `Sighting` represents one exchangeable bird by a population cell and a
+private rank within that cell. Initial selection is the helper's only independent random
+choice. Spatial refinement maps the rank through cumulative child populations, while
+coarsening restores its rank within the parent, so rescaling does not add model identity
+or randomness.
+
+Movement first refines the sighting to a singleton. The public model method
+`getIncidentFlowResolution` supplies the equal-resolution flow capability whose complete
+incidence conserves that cell population; this keeps stage-dependent duration selection
+inside the model. A singleton has one incident unit flow. If its endpoint is not a
+singleton, the uncommitted segment is retried at finer resolution. `next`, `prev`, and
+`rescale` return new sightings, and all variable searches have explicit model-query and
+refinement budgets. Dense collision cases can still require deep, expensive refinement;
+measuring and improving that behavior remains part of the planned tracker benchmarks.
