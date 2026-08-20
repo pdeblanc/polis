@@ -189,8 +189,66 @@ export class Sighting {
           0,
         );
       }
+      const narrowed = source.#narrowFlowEndpoint(
+        remaining,
+        direction,
+        budget,
+      );
+      if (narrowed !== undefined) return narrowed;
       source = source.#refineSingleton(budget);
     }
+  }
+
+  /** Tries the one-level asymmetric incidence before shortening the time interval. */
+  #narrowFlowEndpoint(
+    maximumDuration: number,
+    direction: 1 | -1,
+    budget: QueryBudget,
+  ): Sighting | undefined {
+    const fineResolution = this.#birds.refinePopulationResolution(this.resolution);
+    if (fineResolution === undefined) return undefined;
+    const flowResolution = this.#birds.resolveFlowResolution({
+      targetSourceWidth:
+        direction === 1 ? this.resolution.cellWidth : fineResolution.cellWidth,
+      targetDestinationWidth:
+        direction === 1 ? fineResolution.cellWidth : this.resolution.cellWidth,
+      targetDuration: maximumDuration,
+    });
+    if (
+      flowResolution === undefined ||
+      flowResolution.sourceCellWidth !==
+        (direction === 1 ? this.resolution.cellWidth : fineResolution.cellWidth) ||
+      flowResolution.destinationCellWidth !==
+        (direction === 1 ? fineResolution.cellWidth : this.resolution.cellWidth)
+    ) {
+      return undefined;
+    }
+
+    budget.take();
+    const result =
+      direction === 1
+        ? this.#birds.queryOutflows({
+            source: this.cell,
+            resolution: flowResolution,
+          })
+        : this.#birds.queryInflows({
+            destination: this.cell,
+            resolution: flowResolution,
+          });
+    const flow = singletonFlow(result);
+    const endpoint = direction === 1 ? flow.destination : flow.source;
+    budget.take();
+    const endpointCount = this.#birds.queryPopulationCell({
+      cell: endpoint,
+      resolution: fineResolution,
+    }).count;
+    return endpointCount === 1
+      ? new Sighting(
+          this.#birds,
+          [{ cell: endpoint, count: 1, resolution: fineResolution }],
+          0,
+        )
+      : undefined;
   }
 
   #atSingleton(): Sighting {

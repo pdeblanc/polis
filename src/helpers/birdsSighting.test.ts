@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { Birds } from "../models/birds/birds";
+import {
+  Birds,
+  type BirdsPopulationResolution,
+} from "../models/birds/birds";
 import { Sighting, SightingBudgetExceededError } from "./birdsSighting";
 
 function coarseSighting(seed = "selection") {
@@ -86,6 +89,70 @@ describe("Sighting selection and rescaling", () => {
 });
 
 describe("Sighting motion", () => {
+  it("narrows the destination asymmetrically before refining the singleton source", () => {
+    const coarse = Object.freeze({ cellWidth: 2, timeOrigin: 0 as const, timeStep: 4 });
+    const fine = Object.freeze({ cellWidth: 1, timeOrigin: 0 as const, timeStep: 1 });
+    const asymmetric = Object.freeze({
+      sourceCellWidth: 2,
+      destinationCellWidth: 1,
+      duration: 4,
+      timeOrigin: 0 as const,
+      timeStep: 4,
+    });
+    let asymmetricQueries = 0;
+    const birds = {
+      queryPopulationCell: ({ cell }: { cell: { min: number; max: number; time: number } }) => ({
+        cell,
+        count: cell.time === 0 || cell.max - cell.min === 1 ? 1 : 2,
+        resolution: cell.max - cell.min === 1 ? fine : coarse,
+      }),
+      queryIncidentFlows: () => ({
+        kind: "flows" as const,
+        resolution: asymmetric,
+        flows: [{
+          source: { min: 0, max: 2, time: 0 },
+          destination: { min: 0, max: 2, time: 4 },
+          count: 1,
+        }],
+      }),
+      refinePopulationResolution: () => fine,
+      resolveFlowResolution: () => asymmetric,
+      queryOutflows: () => {
+        asymmetricQueries += 1;
+        return {
+          kind: "flows" as const,
+          resolution: asymmetric,
+          flows: [{
+            source: { min: 0, max: 2, time: 0 },
+            destination: { min: 0, max: 1, time: 4 },
+            count: 1,
+          }],
+        };
+      },
+      coarsenPopulationCell: ({ cell }: { cell: { time: number } }) => ({
+        cell: { min: 0, max: 2, time: cell.time },
+        count: 2,
+        resolution: coarse,
+      }),
+      getNearbyPopulationResolutions: () => [coarse],
+      refinePopulationCell: () => {
+        throw new Error("the singleton source should not be refined");
+      },
+    } as unknown as Birds;
+
+    const sighting = Sighting.select({
+      birds,
+      cell: { min: 0, max: 2, time: 0 },
+      resolution: coarse as BirdsPopulationResolution,
+      seed: "asymmetric narrowing",
+    });
+    const next = sighting.next({ maxRefinements: 0 });
+
+    expect(asymmetricQueries).toBe(1);
+    expect(next.cell).toEqual({ min: 0, max: 2, time: 4 });
+    expect(next.resolution).toBe(coarse);
+  });
+
   it("returns new sightings for the same bird in both time directions", () => {
     const birds = new Birds("motion-sighting", 1 / 16, 0);
     const resolution = birds.resolvePopulationResolution({

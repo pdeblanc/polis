@@ -221,3 +221,13 @@ finite-resolution and work-budget constraints to the reference paths will test w
 the same join/split/rejoin behavior and tracking failure arise even without the hierarchy.
 This is characterization work: recurrent meetings in the reference process would explain
 the observed limitation rather than count as a defect to eliminate.
+
+The tracker now tries the supported one-level asymmetric incidence before refining its
+singleton source. This narrows only the collided endpoint while retaining the longest
+available time interval, avoiding an unnecessary opportunity for intervening meetings.
+Source refinement, and the shorter temporal scale it may entail, is the fallback only
+when the asymmetric destination or source cell still contains multiple birds. A focused
+unit test requires this path to succeed with a zero source-refinement budget. The known
+`Polis 3` meeting still reaches binary64-scale durations after this change, so asymmetric
+narrowing improves the search order but does not by itself resolve that identity-ambiguous
+path.
