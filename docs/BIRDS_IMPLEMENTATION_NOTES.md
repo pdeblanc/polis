@@ -25,6 +25,11 @@ dense readable grid, not a claim that the population remained fixed throughout t
 It reports the selected `Δx` and `Δt`, limits each frame to a fixed sample budget, and
 coarsens through public resolution capabilities when necessary.
 
+The demo exposes seed, population density, and diffusion rate as committed controls.
+Density and diffusion accept finite nonnegative numbers, apply on blur or Enter, rebuild
+the model, and participate in shareable URL state; default numeric values are omitted
+from the URL.
+
 Birds uses parabolic viewport zoom: if the visible spatial span changes by a factor `s`,
 the visible time span changes by `s²`. The URL's `area` parameter remains the literal
 visible spacetime area, so an area factor `q` corresponds to spatial factor `q^(1/3)` and

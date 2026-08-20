@@ -29,6 +29,25 @@ export function useUrlSeed(defaultSeed: string): readonly [string, (seed: string
   return [seed, setSeed] as const;
 }
 
+export function useUrlNumberParameter(
+  name: string,
+  defaultValue: number,
+  isValid: (value: number) => boolean = Number.isFinite,
+): readonly [number, (value: number) => void] {
+  const [value, setValue] = useState(() => {
+    const parameter = new URLSearchParams(window.location.search).get(name);
+    if (parameter === null || parameter.trim() === '') return defaultValue;
+    const parsed = Number(parameter);
+    return Number.isFinite(parsed) && isValid(parsed) ? parsed : defaultValue;
+  });
+
+  useEffect(() => {
+    replaceUrlParameters({ [name]: value === defaultValue ? undefined : String(value) });
+  }, [defaultValue, name, value]);
+
+  return [value, setValue] as const;
+}
+
 export function replaceUrlParameters(
   values: Readonly<Record<string, string | undefined>>,
 ): void {

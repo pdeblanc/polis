@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useFramePerformance } from '../helpers/useFramePerformance';
-import { useUrlSeed } from '../helpers/urlState';
+import { useUrlNumberParameter, useUrlSeed } from '../helpers/urlState';
 import { useViewport2D } from '../helpers/useViewport2D';
 import {
   Birds,
@@ -10,12 +10,13 @@ import {
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { CacheControl, type CacheUsage } from './CacheControl';
 import { PerformanceControl } from './PerformanceControl';
+import { ModelParameterControl } from './ModelParameterControl';
 import { SeedControl } from './SeedControl';
 import { ViewportFrame } from './ViewportFrame';
 
 const DEFAULT_SEED = 'Polis 3';
-const DIFFUSION_RATE = 0.5;
-const POPULATION_DENSITY = 2;
+const DEFAULT_DIFFUSION_RATE = 0.5;
+const DEFAULT_POPULATION_DENSITY = 2;
 const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16_384 };
 const TARGET_CELL_PIXELS = 64;
 const TARGET_TIME_STEP_PIXELS = 128;
@@ -31,9 +32,19 @@ interface HoveredPopulationCell {
 
 export function BirdsCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
+  const [populationDensity, setPopulationDensity] = useUrlNumberParameter(
+    'density',
+    DEFAULT_POPULATION_DENSITY,
+    isNonnegative,
+  );
+  const [diffusionRate, setDiffusionRate] = useUrlNumberParameter(
+    'diffusion',
+    DEFAULT_DIFFUSION_RATE,
+    isNonnegative,
+  );
   const birds = useMemo(
-    () => new Birds(seed, POPULATION_DENSITY, DIFFUSION_RATE),
-    [seed],
+    () => new Birds(seed, populationDensity, diffusionRate),
+    [diffusionRate, populationDensity, seed],
   );
   const viewport = useViewport2D(INITIAL_VIEWPORT, {
     verticalScale: TIME_WORLD_SCALE,
@@ -71,10 +82,29 @@ export function BirdsCanvas() {
     const context = prepareContext();
     if (context === null) return;
     measureFrame(() =>
-      drawBirds(context, size, world, state, birds, resolution, hoveredCell),
+      drawBirds(
+        context,
+        size,
+        world,
+        state,
+        birds,
+        resolution,
+        hoveredCell,
+        populationDensity,
+      ),
     );
     updateCacheUsage(setCacheUsage, birds.getCacheUsage());
-  }, [birds, hoveredCell, measureFrame, prepareContext, resolution, size, state, world]);
+  }, [
+    birds,
+    hoveredCell,
+    measureFrame,
+    populationDensity,
+    prepareContext,
+    resolution,
+    size,
+    state,
+    world,
+  ]);
 
   return (
     <>
@@ -97,8 +127,18 @@ export function BirdsCanvas() {
         viewport={viewport}
       >
         <SeedControl seed={seed} setSeed={setSeed} />
-        <span>ρ = {POPULATION_DENSITY}</span>
-        <span>D = {DIFFUSION_RATE}</span>
+        <ModelParameterControl
+          ariaLabel="Population density"
+          label="ρ"
+          setValue={setPopulationDensity}
+          value={populationDensity}
+        />
+        <ModelParameterControl
+          ariaLabel="Diffusion rate"
+          label="D"
+          setValue={setDiffusionRate}
+          value={diffusionRate}
+        />
         <span>
           Δx = {formatResolution(resolution?.cellWidth)} · Δt ={' '}
           {formatResolution(resolution?.timeStep)}
@@ -124,6 +164,7 @@ function drawBirds(
   birds: Birds,
   resolution: BirdsPopulationResolution | undefined,
   hoveredCell: HoveredPopulationCell | undefined,
+  populationDensity: number,
 ): number {
   drawBackground(context, size, viewport);
   const bounds = {
@@ -170,6 +211,7 @@ function drawBirds(
         result.sampledTime,
         resolution,
         sample,
+        populationDensity,
       );
       queries += 1;
     }
@@ -266,6 +308,7 @@ function drawPopulationSample(
   time: number,
   resolution: BirdsPopulationResolution,
   sample: BirdsPopulationSample,
+  populationDensity: number,
 ): void {
   const left = worldToScreen(
     { x: sample.interval.min, y: time },
@@ -290,7 +333,7 @@ function drawPopulationSample(
   );
   const rowSpacing = Math.abs(nextTime.y - left.y);
   const thickness = Math.max(1, Math.ceil(rowSpacing) + 1);
-  const expected = POPULATION_DENSITY * resolution.cellWidth;
+  const expected = populationDensity * resolution.cellWidth;
   const intensity = expected === 0 ? 0 : 1 - Math.exp(-sample.count / expected);
   context.fillStyle = `rgb(105 215 255 / ${0.08 + 0.92 * intensity})`;
   context.fillRect(left.x, left.y - thickness / 2, Math.max(1, right.x - left.x), thickness);
@@ -368,4 +411,8 @@ function formatResolution(value: number | undefined): string {
     return value.toExponential(2);
   }
   return String(value);
+}
+
+function isNonnegative(value: number): boolean {
+  return value >= 0;
 }

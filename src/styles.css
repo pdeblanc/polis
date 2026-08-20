@@ -269,11 +269,13 @@ h1 {
   white-space: nowrap;
 }
 
-.seed-control {
+.seed-control,
+.model-parameter-control {
   margin: 0;
 }
 
-.seed-control input {
+.seed-control input,
+.model-parameter-control input {
   width: 9.25rem;
   padding: 0.2rem 0.35rem;
   border: 1px solid rgb(133 157 199 / 35%);
@@ -284,7 +286,12 @@ h1 {
   font: inherit;
 }
 
-.seed-control input:focus {
+.model-parameter-control input {
+  width: 5.5rem;
+}
+
+.seed-control input:focus,
+.model-parameter-control input:focus {
   border-color: #7388b2;
   outline: 1px solid rgb(115 136 178 / 45%);
 }

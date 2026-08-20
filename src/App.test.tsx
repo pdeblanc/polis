@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { App } from './App';
@@ -52,5 +52,13 @@ describe('App routing', () => {
     expect(
       screen.getByLabelText('Pannable spacetime population view with future upward'),
     ).toBeInTheDocument();
+    const density = screen.getByRole('textbox', { name: 'Population density' });
+    const diffusion = screen.getByRole('textbox', { name: 'Diffusion rate' });
+    expect(density).toHaveValue('2');
+    expect(diffusion).toHaveValue('0.5');
+    fireEvent.change(density, { target: { value: '3' } });
+    fireEvent.blur(density);
+    expect(density).toHaveValue('3');
+    expect(new URLSearchParams(window.location.search).get('density')).toBe('3');
   });
 });
