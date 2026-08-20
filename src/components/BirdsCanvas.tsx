@@ -4,6 +4,7 @@ import { useUrlNumberParameter, useUrlSeed } from '../helpers/urlState';
 import { useViewport2D } from '../helpers/useViewport2D';
 import {
   Birds,
+  type BirdsFlowListResult,
   type BirdsPopulationResolution,
   type BirdsPopulationSample,
 } from '../models/birds/birds';
@@ -75,6 +76,28 @@ export function BirdsCanvas() {
         : populationAt(birds, hoveredCell, resolution),
     [birds, hoveredCell, resolution],
   );
+  const [showFlows, setShowFlows] = useState(true);
+  const flowResolution = useMemo(
+    () =>
+      resolution === undefined
+        ? undefined
+        : birds.resolveFlowResolution({
+            targetSourceWidth: resolution.cellWidth,
+            targetDestinationWidth: resolution.cellWidth,
+            targetDuration: resolution.timeStep,
+          }),
+    [birds, resolution],
+  );
+  const hoveredFlows = useMemo(
+    () =>
+      !showFlows || hoveredCell === undefined || flowResolution === undefined
+        ? undefined
+        : birds.queryOutflows({
+            source: hoveredCell,
+            resolution: flowResolution,
+          }),
+    [birds, flowResolution, hoveredCell, showFlows],
+  );
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => birds.getCacheUsage());
   const { measureFrame, performance } = useFramePerformance();
 
@@ -90,6 +113,7 @@ export function BirdsCanvas() {
         birds,
         resolution,
         hoveredCell,
+        hoveredFlows,
         populationDensity,
       ),
     );
@@ -97,6 +121,7 @@ export function BirdsCanvas() {
   }, [
     birds,
     hoveredCell,
+    hoveredFlows,
     measureFrame,
     populationDensity,
     prepareContext,
@@ -151,6 +176,14 @@ export function BirdsCanvas() {
           }}
         />
         <PerformanceControl performance={performance} />
+        <label>
+          <input
+            type="checkbox"
+            checked={showFlows}
+            onChange={(event) => setShowFlows(event.target.checked)}
+          />{' '}
+          Flows
+        </label>
       </ViewportFrame>
     </>
   );
@@ -164,6 +197,7 @@ function drawBirds(
   birds: Birds,
   resolution: BirdsPopulationResolution | undefined,
   hoveredCell: HoveredPopulationCell | undefined,
+  hoveredFlows: BirdsFlowListResult | undefined,
   populationDensity: number,
 ): number {
   drawBackground(context, size, viewport);
@@ -216,11 +250,82 @@ function drawBirds(
       queries += 1;
     }
   }
+  if (hoveredFlows?.kind === 'flows') {
+    drawFlows(context, size, viewport, hoveredFlows);
+    queries += hoveredFlows.flows.length;
+  } else if (hoveredFlows?.kind === 'size-limit') {
+    drawFlowLimitMessage(context, size);
+  }
   if (hoveredCell !== undefined) {
     drawHoveredCell(context, size, viewport, resolution, hoveredCell);
   }
   drawDirection(context);
   return queries;
+}
+
+function drawFlows(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+  viewport: ViewportState,
+  result: Extract<BirdsFlowListResult, { readonly kind: 'flows' }>,
+): void {
+  const maximumCount = Math.max(1, ...result.flows.map(({ count }) => count));
+  for (const flow of result.flows) {
+    const source = worldToScreen(
+      {
+        x: (flow.source.min + flow.source.max) / 2,
+        y: flow.source.time,
+      },
+      size,
+      viewport,
+      TIME_ZOOM_EXPONENT,
+      TIME_WORLD_SCALE,
+    );
+    const destination = worldToScreen(
+      {
+        x: (flow.destination.min + flow.destination.max) / 2,
+        y: flow.destination.time,
+      },
+      size,
+      viewport,
+      TIME_ZOOM_EXPONENT,
+      TIME_WORLD_SCALE,
+    );
+    const strength = Math.sqrt(flow.count / maximumCount);
+    context.strokeStyle = `rgb(255 211 118 / ${0.35 + 0.6 * strength})`;
+    context.lineWidth = 1 + 3 * strength;
+    context.beginPath();
+    context.moveTo(source.x, source.y);
+    context.lineTo(destination.x, destination.y);
+    context.stroke();
+    drawArrowhead(context, source, destination, 3 + 2 * strength);
+  }
+}
+
+function drawArrowhead(
+  context: CanvasRenderingContext2D,
+  source: Point,
+  destination: Point,
+  radius: number,
+): void {
+  const angle = Math.atan2(destination.y - source.y, destination.x - source.x);
+  context.fillStyle = context.strokeStyle;
+  context.beginPath();
+  context.moveTo(destination.x, destination.y);
+  context.lineTo(
+    destination.x - radius * Math.cos(angle - Math.PI / 6),
+    destination.y - radius * Math.sin(angle - Math.PI / 6),
+  );
+  context.lineTo(
+    destination.x - radius * Math.cos(angle + Math.PI / 6),
+    destination.y - radius * Math.sin(angle + Math.PI / 6),
+  );
+  context.fill();
+}
+
+interface Point {
+  readonly x: number;
+  readonly y: number;
 }
 
 function populationCellAt(
@@ -392,6 +497,14 @@ function drawLimitMessage(context: CanvasRenderingContext2D, size: Size2D): void
   context.font = '12px ui-monospace, monospace';
   context.textAlign = 'center';
   context.fillText('View exceeds the population rendering budget', size.width / 2, size.height / 2);
+  context.textAlign = 'start';
+}
+
+function drawFlowLimitMessage(context: CanvasRenderingContext2D, size: Size2D): void {
+  context.fillStyle = 'rgb(255 196 107 / 88%)';
+  context.font = '11px ui-monospace, monospace';
+  context.textAlign = 'center';
+  context.fillText('Flow envelope exceeds the overlay budget', size.width / 2, 18);
   context.textAlign = 'start';
 }
 

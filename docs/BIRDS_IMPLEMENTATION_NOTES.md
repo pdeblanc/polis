@@ -14,10 +14,12 @@ coarse cells and flows through Stages A–H. Queries compose through multiple ep
 consumer-facing `Birds` API now provides model-scoped resolution capabilities,
 population profiles, singular flows, complete nonzero inflow/outflow lists, explicit
 result ceilings, cache controls, and query statistics. An initial spacetime visualization
-renders discrete population profiles with space horizontal and future time upward. Flow
-and dependency overlays, the tagged-bird helper, statistical characterization, and the
-final complexity suite have not yet been implemented. Initial cold-cache flow
-measurements cover epoch depth and diffusion-dependent support width.
+renders discrete population profiles with space horizontal and future time upward. A
+toggleable cursor-following overlay draws every nonzero outflow from the selected cell to
+the next sampled row, with count-weighted opacity and width. The dependency overlay,
+tagged-bird helper, statistical characterization, and final complexity suite have not yet
+been implemented. Initial cold-cache flow measurements cover epoch depth and
+diffusion-dependent support width.
 
 The visualization presents each population sample as a filled temporal band centered on
 its exact sampled time, with adjacent bands touching. This is a display convention for a
