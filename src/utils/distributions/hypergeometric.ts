@@ -8,15 +8,14 @@ const LOG_SQRT_TWO_PI = 0.9189385332046727;
 const INVERSE_TRANSFORM_THRESHOLD = 10;
 
 /**
- * Experimental addressed H2PE hypergeometric sampler.
+ * Samples an exact hypergeometric count with bounded addressed H2PE rejection.
  *
- * This is a TypeScript adaptation of the rejection algorithm in `rand_distr`
+ * This is a TypeScript adaptation of the algorithm in `rand_distr`
  * (https://github.com/rust-random/rand_distr/blob/master/src/hypergeometric.rs),
- * itself based on Kachitvichyanukul and Schmeiser (1985). It is deliberately not
- * yet the production Birds sampler: the prototype exists to measure large-count
- * throughput and numerical behavior first.
+ * itself based on Kachitvichyanukul and Schmeiser (1985). Narrow-support cases use
+ * an exact direct urn path.
  */
-export function hypergeometricPrototype(
+export function hypergeometric(
   random: AddressedRandom,
   address: Address,
   population: number,

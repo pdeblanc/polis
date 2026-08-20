@@ -4,7 +4,7 @@ import normalQuantile from '@stdlib/stats-base-dists-normal-quantile';
 import poissonQuantile from '@stdlib/stats-base-dists-poisson-quantile';
 import { bench, describe } from 'vitest';
 import { binomialHalf } from '../utils/distributions/binomialHalf';
-import { hypergeometricPrototype } from '../utils/distributions/hypergeometricPrototype';
+import { hypergeometric } from '../utils/distributions/hypergeometric';
 import { normal } from '../utils/distributions/normal';
 import { poisson, POISSON_UPPER_TAIL_PROBABILITY } from '../utils/distributions/poisson';
 import { uniform, uniformUnit } from '../utils/distributions/uniform';
@@ -127,10 +127,10 @@ describe('@stdlib exact hypergeometric baseline', () => {
   });
 });
 
-describe('experimental H2PE hypergeometric scaling', () => {
+describe('H2PE hypergeometric scaling', () => {
   for (const population of [1_000, 1_000_000, LARGE_COUNT]) {
     bench(`addressed scalar, population ${population}`, () => {
-      sink = hypergeometricPrototype(
+      sink = hypergeometric(
         random,
         nextAddress(),
         population,
@@ -141,7 +141,7 @@ describe('experimental H2PE hypergeometric scaling', () => {
   }
 
   bench('addressed multivariate, 8 categories, population 1e9', () => {
-    const result = multivariateHypergeometricPrototype(
+    const result = multivariateHypergeometricH2pe(
       nextAddress(),
       new Array<number>(8).fill(LARGE_COUNT / 8),
       LARGE_COUNT / 2,
@@ -207,7 +207,7 @@ function multivariateHypergeometric(
   return result;
 }
 
-function multivariateHypergeometricPrototype(
+function multivariateHypergeometricH2pe(
   address: Address,
   capacities: readonly number[],
   sampleSize: number,
@@ -218,7 +218,7 @@ function multivariateHypergeometricPrototype(
 
   for (let index = 0; index < capacities.length - 1; index += 1) {
     const capacity = capacities[index];
-    const count = hypergeometricPrototype(
+    const count = hypergeometric(
       random,
       [...address, 'category', index],
       remainingCapacity,
