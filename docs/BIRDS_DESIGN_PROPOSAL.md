@@ -660,6 +660,15 @@ Measure cell and flow distributions, increment means and variances, one- and mul
 displacements, independence of disjoint increments, bridge behavior, child crossing and
 retention, tagged trajectories, and dependence on scale, density, and diffusion.
 
+Near the end of the Birds project, compare tracker behavior with a finite population of
+labeled reference Brownian motions on a quotient space. Run the same finite-resolution,
+budgeted tracking procedure against both systems, including cases where two trajectories
+meet, separate, and meet again. This experiment should distinguish limitations inherent
+to observing recurrent one-dimensional paths through anonymous population counts from
+additional recurrence or work introduced by the hierarchical approximation. A matching
+failure in the reference system is an explanatory result, not a requirement to suppress
+the meetings.
+
 These measurements do not gate version 1. Deterministic coarse initialization and
 conditional subdivision of fixed totals prevent exact Poisson marginals and are expected
 sources of discrepancy.
@@ -692,7 +701,8 @@ part of stochastic semantics and may be disabled or simplified after the model i
 12. Add the spacetime view and early dependency overlays.
 13. After the public API has been exercised by the visualization, implement singleton-
     tube tracking and trajectory display.
-14. Run Poisson–Brownian characterization.
+14. Run Poisson–Brownian characterization, including the finite-population quotient-space
+    tracker comparison.
 15. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
     why sequential binomials remain.
 16. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
@@ -707,9 +717,9 @@ structural and acyclicity tests, expose bounded hierarchy-free APIs, and support
 spacetime visualization with debug overlays.
 
 The broader Birds project additionally requires a budgeted singleton-tube tracker,
-Poisson–Brownian characterization, end-to-end performance measurements, the completed
-multinomial monotonicity investigation, and the documented Starfield/Terrain classifier
-audit.
+Poisson–Brownian characterization including the reference tracker comparison,
+end-to-end performance measurements, the completed multinomial monotonicity
+investigation, and the documented Starfield/Terrain classifier audit.
 
 Any later approximate sampler requires a separate specification and tests. Any follow-up
 not implemented must be closed by an explicit documented decision rather than silently

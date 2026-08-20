@@ -190,3 +190,34 @@ uncommitted segment is retried at finer resolution. `next`, `prev`, and `rescale
 new sightings, and all variable searches have explicit model-query and refinement
 budgets. Dense collision cases can still require deep, expensive refinement; measuring
 and improving that behavior remains part of the planned tracker benchmarks.
+
+Investigation of the `Polis 3` sighting beginning at `[5.3125, 5.375)` and
+`t = 6.9921875` found a stronger limitation. Its third forward step repeatedly approaches
+`t ≈ 6.994203669932815`; candidate destination cells continue to contain two birds as
+space and time are refined. With larger budgets the search reached 37 new refinement
+levels, a cell width near `1.49e-8`, and a binary64-scale duration before numeric flow
+enumeration failed. This is Zeno-like behavior at an identity-ambiguous meeting, not an
+ordinary slow singleton search. The version-1 model records no incoming-to-outgoing
+correspondence through a multi-bird cell, so the current helper cannot continue that bird
+past the meeting. The design assumption that endpoint refinement always recovers a
+singleton is therefore false for at least this constructed path and must be revised
+before trajectory tracking can be considered complete.
+
+A follow-up address audit found no omitted owner geometry or cross-stage address reuse in
+the cell, temporal-flow, incidence, or flow-reconciliation samplers. Refining the first
+two-bird destination from the path above while holding its time fixed produced child
+counts `[2, 0]`, then `[0, 2]`, `[0, 2]`, and finally `[1, 1]`. Thus the spatial sampler
+does separate the pair, with distinct decisions at successive addresses. The persistent
+join/split/rejoin pattern occurs across changing times near the meeting. This is
+qualitatively consistent with the recurrent zero set of the difference of two
+one-dimensional Brownian motions, although the anonymous count construction does not by
+itself establish that the empirical recurrence frequency matches independent Brownian
+trajectories. That frequency remains a statistical-characterization question rather than
+an identified address or discrete-sampler defect.
+
+The end-of-project statistical work will include a controlled tracker comparison against
+a finite population of labeled Brownian motions on a quotient space. Applying comparable
+finite-resolution and work-budget constraints to the reference paths will test whether
+the same join/split/rejoin behavior and tracking failure arise even without the hierarchy.
+This is characterization work: recurrent meetings in the reference process would explain
+the observed limitation rather than count as a defect to eliminate.
