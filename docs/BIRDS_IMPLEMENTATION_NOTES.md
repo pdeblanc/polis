@@ -11,10 +11,27 @@
 
 The internal `BirdsEngine` implements the complete inward recurrence from deterministic
 coarse cells and flows through Stages A–H. Queries compose through multiple epochs. The
-consumer-facing `Birds` API, resolution capabilities, result ceilings, visualization,
-tagged-bird helper, statistical characterization, and final complexity suite have not yet
-been implemented. Initial cold-cache flow measurements now cover epoch depth and
+consumer-facing `Birds` API now provides model-scoped resolution capabilities,
+population profiles, singular flows, complete nonzero inflow/outflow lists, explicit
+result ceilings, cache controls, and query statistics. Visualization, the tagged-bird
+helper, statistical characterization, and the final complexity suite have not yet been
+implemented. Initial cold-cache flow measurements cover epoch depth and
 diffusion-dependent support width.
+
+## Public API boundary
+
+Resolution objects expose exact world-unit widths, durations, and temporal lattice data,
+while their epoch metadata remains in model-owned weak maps. A capability cannot be
+forged or reused with another model instance. Resolvers choose the coarsest equal- or
+adjacent-resolution construction satisfying all requested upper bounds; refinement
+methods preserve the exact supported relationship without consumer scale arithmetic.
+
+Population queries cover an arbitrary spatial interval with an ordered cell profile.
+They snap the requested time to the nearest supported sample and disclose the exact time
+and resolution. Exact flow queries do not snap: their endpoints must lie on the selected
+spatial and temporal lattices. Plural incidence queries enumerate support internally,
+retain the support helper's canonical spatial order, omit zero flows, and either return
+the complete result or an explicit size-limit result.
 
 ## Structural geometry
 
