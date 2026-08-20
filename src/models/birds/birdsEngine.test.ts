@@ -3,6 +3,7 @@ import { BirdsEngine } from './birdsEngine';
 import type { BirdCell, BirdFlow } from './entities';
 import {
   possibleFlowDestinations,
+  possibleFlowSources,
   possibleMidpointCells,
   possibleParentFlows,
 } from './motionSupport';
@@ -211,14 +212,110 @@ describe('BirdsEngine temporal Stages A-D', () => {
     expect(engine.getCacheUsage().entries).toBeGreaterThan(0);
   });
 
-  it('fails explicitly for valid stages that are not implemented yet', () => {
+  it('fails explicitly for valid flow stages that are not implemented yet', () => {
     const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
     const scale = birdsScale(1)!;
 
-    expect(() => engine.queryCell(cell(0, 0, birdsScale(0)!.nextFlowDuration))).toThrow(
-      /not implemented/,
-    );
     expect(() => engine.queryFlow(flowAtEpochOneEntry(scale))).toThrow(/not implemented/);
+  });
+});
+
+describe('BirdsEngine cell Stages E-F', () => {
+  it('constructs Stage-E cells from equal-resolution Stage-D outflows', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(0)!;
+
+    for (const timeIndex of [-7, -3, -2, -1, 1, 2, 3, 5]) {
+      const target = cell(0, -4, timeIndex * scale.nextFlowDuration);
+      const outgoing = equalResolutionFlows(target, scale.nextFlowDuration);
+      const incoming = possibleFlowSources(
+        target,
+        scale.nextFlowDuration,
+        DIFFUSION_RATE,
+      )
+        .filter((source) => source.max - source.min === scale.cellLength)
+        .map((source) => ({ source, destination: target }));
+
+      const population = engine.queryCell(target);
+      expect(outgoing.reduce((sum, candidate) => sum + engine.queryFlow(candidate), 0)).toBe(
+        population,
+      );
+      expect(incoming.reduce((sum, candidate) => sum + engine.queryFlow(candidate), 0)).toBe(
+        population,
+      );
+    }
+  });
+
+  it('conserves each Stage-F cell subdivision and serves both child entries', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(0)!;
+    const parents = [
+      cell(0, -3, 0),
+      cell(0, -3, scale.nextFlowDuration),
+      cell(1, -3, 0),
+    ];
+
+    for (const parent of parents) {
+      const subdivision = engine.queryCellSubdivision(parent);
+      expect(subdivision.children[0].count + subdivision.children[1].count).toBe(
+        subdivision.parentCount,
+      );
+      expect(engine.queryCell(subdivision.children[0].cell)).toBe(
+        subdivision.children[0].count,
+      );
+      expect(engine.queryCell(subdivision.children[1].cell)).toBe(
+        subdivision.children[1].count,
+      );
+    }
+  });
+
+  it('supports repeated inward spatial subdivision at coarse-aligned times', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    let parent = cell(0, -1, 0);
+
+    for (let epoch = 0; epoch < 8; epoch += 1) {
+      const subdivision = engine.queryCellSubdivision(parent);
+      expect(subdivision.children[0].count + subdivision.children[1].count).toBe(
+        engine.queryCell(parent),
+      );
+      parent = subdivision.children[epoch % 2].cell;
+    }
+  });
+
+  it('is deterministic across cell query order and cache clearing', () => {
+    const scale = birdsScale(0)!;
+    const cells = [
+      cell(0, -2, scale.nextFlowDuration),
+      cell(1, -4, 0),
+      cell(1, -3, 0),
+      cell(1, -4, scale.nextFlowDuration),
+      cell(1, -3, scale.nextFlowDuration),
+    ];
+    const first = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const second = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const forward = new Map(cells.map((target) => [JSON.stringify(target), first.queryCell(target)]));
+    const reverse = new Map(
+      [...cells]
+        .reverse()
+        .map((target) => [JSON.stringify(target), second.queryCell(target)]),
+    );
+
+    expect(reverse).toEqual(forward);
+    first.clearCache();
+    expect(new Map(cells.map((target) => [JSON.stringify(target), first.queryCell(target)]))).toEqual(
+      forward,
+    );
+  });
+
+  it('caches the owned Stage-F batch', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const parent = cell(0, 0, birdsScale(0)!.nextFlowDuration);
+
+    const first = engine.queryCellSubdivision(parent);
+    const second = engine.queryCellSubdivision(parent);
+
+    expect(second).toEqual(first);
+    expect(engine.getLastQueryStats().cacheHits).toBeGreaterThan(0);
   });
 });
 

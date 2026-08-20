@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import { binomial } from '../../utils/distributions/binomial';
 import { multinomial } from '../../utils/distributions/multinomial';
 import {
   createAddressedRandom,
@@ -15,12 +16,18 @@ import type { BirdCell, BirdFlow, BirdTwoStageFlow } from './entities';
 import {
   isPossibleFlow,
   midpointCellProbabilities,
+  possibleFlowDestinations,
   possibleParentFlows,
 } from './motionSupport';
-import { classifyFlowTimeSubdivisionOwner } from './ownerClassifiers';
+import {
+  classifyCellSubdivisionOwner,
+  classifyFlowTimeSubdivisionOwner,
+} from './ownerClassifiers';
 
 export const BIRDS_FLOW_CACHE_CAPACITY = 50_000;
 export const BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY = 20_000;
+export const BIRDS_CELL_CACHE_CAPACITY = 50_000;
+export const BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY = 20_000;
 
 export interface TemporalSubdivisionEntry {
   readonly midpointCell: BirdCell;
@@ -32,8 +39,18 @@ export interface TemporalSubdivisionResult {
   readonly entries: readonly TemporalSubdivisionEntry[];
 }
 
+export interface CellSubdivisionResult {
+  readonly parentCount: number;
+  readonly children: readonly [
+    { readonly cell: BirdCell; readonly count: number },
+    { readonly cell: BirdCell; readonly count: number },
+  ];
+}
+
 export interface BirdsEngineStats {
   readonly cacheHits: number;
+  readonly cellsEvaluated: number;
+  readonly cellSubdivisionsEvaluated: number;
   readonly flowsEvaluated: number;
   readonly maximumDepth: number;
   readonly temporalBatchesEvaluated: number;
@@ -42,6 +59,8 @@ export interface BirdsEngineStats {
 
 interface MutableStats {
   cacheHits: number;
+  cellsEvaluated: number;
+  cellSubdivisionsEvaluated: number;
   flowsEvaluated: number;
   maximumDepth: number;
   temporalBatchesEvaluated: number;
@@ -51,15 +70,19 @@ interface MutableStats {
 export interface BirdsEngineOptions {
   readonly flowCacheCapacity?: number;
   readonly temporalBatchCacheCapacity?: number;
+  readonly cellCacheCapacity?: number;
+  readonly cellSubdivisionCacheCapacity?: number;
 }
 
-/** Internal stochastic Birds hierarchy. Currently evaluates coarse facts and Stages A–D. */
+/** Internal stochastic Birds hierarchy. Currently evaluates coarse facts and Stages A–F. */
 export class BirdsEngine {
   readonly #diffusionRate: number;
   readonly #initialization: BirdsCoarseInitialization;
   readonly #random: AddressedRandom;
   readonly #flowCache: LRUCache<string, number>;
   readonly #temporalBatchCache: LRUCache<string, TemporalSubdivisionResult>;
+  readonly #cellCache: LRUCache<string, number>;
+  readonly #cellSubdivisionCache: LRUCache<string, CellSubdivisionResult>;
   #lastQueryStats: BirdsEngineStats = emptyStats();
 
   constructor(
@@ -80,16 +103,19 @@ export class BirdsEngine {
     this.#temporalBatchCache = new LRUCache({
       max: options.temporalBatchCacheCapacity ?? BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY,
     });
+    this.#cellCache = new LRUCache({
+      max: options.cellCacheCapacity ?? BIRDS_CELL_CACHE_CAPACITY,
+    });
+    this.#cellSubdivisionCache = new LRUCache({
+      max: options.cellSubdivisionCacheCapacity ?? BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY,
+    });
   }
 
   queryCell(cell: BirdCell): number {
-    const construction = classifyCell(cell);
-    if (construction === undefined) throw new RangeError('Invalid Birds cell geometry');
-    if (construction.kind !== 'coarse-initialized') {
-      throw new Error(`Birds cell construction ${construction.stage} is not implemented`);
-    }
-    this.#lastQueryStats = emptyStats();
-    return this.#initialization.cellPopulation;
+    const stats = emptyStats();
+    const count = this.#queryCell(cell, stats, 0);
+    this.#lastQueryStats = stats;
+    return count;
   }
 
   queryFlow(flow: BirdFlow): number {
@@ -116,6 +142,16 @@ export class BirdsEngine {
     return result;
   }
 
+  queryCellSubdivision(cell: BirdCell): CellSubdivisionResult {
+    if (classifyCellSubdivisionOwner(cell) === undefined) {
+      throw new RangeError('Cell does not own a Birds spatial subdivision');
+    }
+    const stats = emptyStats();
+    const result = this.#queryCellSubdivision(cell, stats, 0);
+    this.#lastQueryStats = stats;
+    return result;
+  }
+
   getLastQueryStats(): BirdsEngineStats {
     return this.#lastQueryStats;
   }
@@ -125,14 +161,74 @@ export class BirdsEngine {
     readonly entries: number;
   } {
     return {
-      capacity: this.#flowCache.max + this.#temporalBatchCache.max,
-      entries: this.#flowCache.size + this.#temporalBatchCache.size,
+      capacity:
+        this.#flowCache.max +
+        this.#temporalBatchCache.max +
+        this.#cellCache.max +
+        this.#cellSubdivisionCache.max,
+      entries:
+        this.#flowCache.size +
+        this.#temporalBatchCache.size +
+        this.#cellCache.size +
+        this.#cellSubdivisionCache.size,
     };
   }
 
   clearCache(): void {
     this.#flowCache.clear();
     this.#temporalBatchCache.clear();
+    this.#cellCache.clear();
+    this.#cellSubdivisionCache.clear();
+  }
+
+  #queryCell(cell: BirdCell, stats: MutableStats, depth: number): number {
+    stats.maximumDepth = Math.max(stats.maximumDepth, depth);
+    const construction = classifyCell(cell);
+    if (construction === undefined) throw new RangeError('Invalid Birds cell geometry');
+
+    const key = cellKey(cell);
+    const cached = this.#cellCache.get(key);
+    if (cached !== undefined) {
+      stats.cacheHits += 1;
+      return cached;
+    }
+
+    stats.cellsEvaluated += 1;
+    let count: number;
+    switch (construction.kind) {
+      case 'coarse-initialized':
+        count = this.#initialization.cellPopulation;
+        break;
+
+      case 'temporally-introduced': {
+        const length = cell.max - cell.min;
+        count = possibleFlowDestinations(
+          cell,
+          construction.outgoingDuration,
+          this.#diffusionRate,
+        )
+          .filter((destination) => destination.max - destination.min === length)
+          .reduce(
+            (sum, destination) =>
+              sum + this.#queryFlow({ source: cell, destination }, stats, depth + 1),
+            0,
+          );
+        break;
+      }
+
+      case 'spatial-child': {
+        const subdivision = this.#queryCellSubdivision(
+          construction.subdivisionOwner,
+          stats,
+          depth + 1,
+        );
+        count = subdivision.children[construction.childIndex].count;
+        break;
+      }
+    }
+
+    this.#cellCache.set(key, count);
+    return count;
   }
 
   #queryFlow(flow: BirdFlow, stats: MutableStats, depth: number): number {
@@ -246,6 +342,43 @@ export class BirdsEngine {
     this.#temporalBatchCache.set(key, result);
     return result;
   }
+
+  #queryCellSubdivision(
+    cell: BirdCell,
+    stats: MutableStats,
+    depth: number,
+  ): CellSubdivisionResult {
+    stats.maximumDepth = Math.max(stats.maximumDepth, depth);
+    const owner = classifyCellSubdivisionOwner(cell);
+    if (owner === undefined) {
+      throw new RangeError('Cell does not own a Birds spatial subdivision');
+    }
+
+    const key = `cell-subdivision:${cellKey(cell)}`;
+    const cached = this.#cellSubdivisionCache.get(key);
+    if (cached !== undefined) {
+      stats.cacheHits += 1;
+      return cached;
+    }
+
+    stats.cellSubdivisionsEvaluated += 1;
+    const parentCount = this.#queryCell(cell, stats, depth + 1);
+    const leftCount = binomial(
+      this.#random,
+      ['birds.cell-subdivision', cell.min, cell.max, cell.time, 'left-child'],
+      parentCount,
+      0.5,
+    );
+    const result: CellSubdivisionResult = {
+      parentCount,
+      children: [
+        { cell: owner.children[0], count: leftCount },
+        { cell: owner.children[1], count: parentCount - leftCount },
+      ],
+    };
+    this.#cellSubdivisionCache.set(key, result);
+    return result;
+  }
 }
 
 function flowKey(flow: BirdFlow): string {
@@ -280,6 +413,8 @@ function cellsEqual(left: BirdCell, right: BirdCell): boolean {
 function emptyStats(): MutableStats {
   return {
     cacheHits: 0,
+    cellsEvaluated: 0,
+    cellSubdivisionsEvaluated: 0,
     flowsEvaluated: 0,
     maximumDepth: 0,
     temporalBatchesEvaluated: 0,
