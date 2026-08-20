@@ -35,6 +35,21 @@ describe('viewport2d geometry', () => {
     expect(screenToWorld(anchorScreen, size, zoomed).y).toBeCloseTo(anchorWorld.y);
   });
 
+  it('supports parabolic zoom with the vertical factor squared', () => {
+    const exponent = 2;
+    const before = worldDimensions(size, viewport.area, exponent);
+    const after = worldDimensions(size, viewport.area * 8, exponent);
+    const anchorScreen = { x: 200, y: 50 };
+    const anchorWorld = screenToWorld(anchorScreen, size, viewport, exponent);
+    const zoomed = zoomAround(viewport, size, anchorScreen, 8, exponent);
+
+    expect(after.width / before.width).toBeCloseTo(2);
+    expect(after.height / before.height).toBeCloseTo(4);
+    expect(after.height / before.height).toBeCloseTo((after.width / before.width) ** 2);
+    expect(screenToWorld(anchorScreen, size, zoomed, exponent).x).toBeCloseTo(anchorWorld.x);
+    expect(screenToWorld(anchorScreen, size, zoomed, exponent).y).toBeCloseTo(anchorWorld.y);
+  });
+
   it('prevents zooming below floating-point resolution at the center', () => {
     const constrained = constrainViewport({ centerX: 100, centerY: -20, area: 0 }, size);
     const world = worldDimensions(size, constrained.area);

@@ -26,6 +26,7 @@ export function createResetFlight(
   start: ViewportState,
   target: ViewportState,
   size: Size2D,
+  verticalZoomExponent = 1,
 ): ViewportFlight {
   const distance = Math.hypot(
     target.centerX - start.centerX,
@@ -37,6 +38,7 @@ export function createResetFlight(
   const peakArea = constrainViewport(
     { ...start, area: peakScale ** 2 },
     size,
+    verticalZoomExponent,
   ).area;
   const startLogArea = Math.log(start.area);
   const peakLogArea = Math.log(peakArea);
@@ -131,7 +133,9 @@ export function createResetFlight(
 export function constrainViewport(
   viewport: ViewportState,
   size: Size2D,
+  verticalZoomExponent = 1,
 ): ViewportState {
+  validateVerticalZoomExponent(verticalZoomExponent);
   const aspectRatio = size.width / size.height;
   const coordinateScale = Math.max(
     1,
@@ -141,10 +145,20 @@ export function constrainViewport(
   const minimumWorldPerPixel = Number.EPSILON * coordinateScale;
   const minimumWidth = minimumWorldPerPixel * size.width;
   const minimumHeight = minimumWorldPerPixel * size.height;
-  const maximumArea = Number.MAX_VALUE / Math.max(aspectRatio, 1 / aspectRatio);
+  const maximumLogArea = Math.min(
+    Math.log(Number.MAX_VALUE),
+    (verticalZoomExponent + 1) * Math.log(Number.MAX_VALUE) - Math.log(aspectRatio),
+    ((verticalZoomExponent + 1) * Math.log(Number.MAX_VALUE) + Math.log(aspectRatio)) /
+      verticalZoomExponent,
+  );
+  const maximumArea = Math.exp(maximumLogArea);
   const minimumArea = Math.min(
     maximumArea,
-    Math.max(minimumWidth ** 2 / aspectRatio, minimumHeight ** 2 * aspectRatio),
+    Math.max(
+      minimumWidth ** (verticalZoomExponent + 1) / aspectRatio,
+      (minimumHeight ** (verticalZoomExponent + 1) * aspectRatio) **
+        (1 / verticalZoomExponent),
+    ) * 1.000000000001,
   );
   const requestedArea = Number.isNaN(viewport.area)
     ? minimumArea
@@ -194,11 +208,19 @@ function lerp(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
 }
 
-export function worldDimensions(size: Size2D, area: number): Size2D {
+export function worldDimensions(
+  size: Size2D,
+  area: number,
+  verticalZoomExponent = 1,
+): Size2D {
+  validateVerticalZoomExponent(verticalZoomExponent);
   const aspectRatio = size.width / size.height;
+  const logWidth =
+    (Math.log(area) + Math.log(aspectRatio)) / (verticalZoomExponent + 1);
+  const width = Math.exp(logWidth);
   return {
-    width: Math.sqrt(area * aspectRatio),
-    height: Math.sqrt(area / aspectRatio),
+    width,
+    height: area / width,
   };
 }
 
@@ -206,8 +228,9 @@ export function screenToWorld(
   point: Point2D,
   size: Size2D,
   viewport: ViewportState,
+  verticalZoomExponent = 1,
 ): Point2D {
-  const world = worldDimensions(size, viewport.area);
+  const world = worldDimensions(size, viewport.area, verticalZoomExponent);
   return {
     x: viewport.centerX + (point.x / size.width - 0.5) * world.width,
     y: viewport.centerY + (0.5 - point.y / size.height) * world.height,
@@ -218,8 +241,9 @@ export function worldToScreen(
   point: Point2D,
   size: Size2D,
   viewport: ViewportState,
+  verticalZoomExponent = 1,
 ): Point2D {
-  const world = worldDimensions(size, viewport.area);
+  const world = worldDimensions(size, viewport.area, verticalZoomExponent);
   return {
     x: ((point.x - viewport.centerX) / world.width + 0.5) * size.width,
     y: (0.5 - (point.y - viewport.centerY) / world.height) * size.height,
@@ -231,8 +255,9 @@ export function positionWorldPointAtScreen(
   size: Size2D,
   screenPoint: Point2D,
   worldPoint: Point2D,
+  verticalZoomExponent = 1,
 ): ViewportState {
-  const world = worldDimensions(size, viewport.area);
+  const world = worldDimensions(size, viewport.area, verticalZoomExponent);
   return {
     ...viewport,
     centerX: worldPoint.x - (screenPoint.x / size.width - 0.5) * world.width,
@@ -245,16 +270,18 @@ export function zoomAround(
   size: Size2D,
   anchorScreen: Point2D,
   areaFactor: number,
+  verticalZoomExponent = 1,
 ): ViewportState {
-  const anchor = screenToWorld(anchorScreen, size, viewport);
+  const anchor = screenToWorld(anchorScreen, size, viewport, verticalZoomExponent);
   const requestedArea = viewport.area * areaFactor;
   const area = constrainViewport(
     { ...viewport, area: requestedArea },
     size,
+    verticalZoomExponent,
   ).area;
   if (area === viewport.area && requestedArea !== viewport.area)
     return viewport;
-  const world = worldDimensions(size, area);
+  const world = worldDimensions(size, area, verticalZoomExponent);
   return constrainViewport(
     {
       area,
@@ -262,5 +289,12 @@ export function zoomAround(
       centerY: anchor.y - (0.5 - anchorScreen.y / size.height) * world.height,
     },
     size,
+    verticalZoomExponent,
   );
+}
+
+function validateVerticalZoomExponent(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError('Vertical zoom exponent must be finite and positive');
+  }
 }

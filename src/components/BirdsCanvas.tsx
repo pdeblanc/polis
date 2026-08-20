@@ -20,6 +20,7 @@ const INITIAL_VIEWPORT: ViewportState = { centerX: 0, centerY: 0, area: 16_384 }
 const TARGET_CELL_PIXELS = 64;
 const TARGET_TIME_STEP_PIXELS = 128;
 const MAX_RENDER_SAMPLES = 1_000;
+const TIME_ZOOM_EXPONENT = 2;
 
 export function BirdsCanvas() {
   const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
@@ -27,7 +28,9 @@ export function BirdsCanvas() {
     () => new Birds(seed, POPULATION_DENSITY, DIFFUSION_RATE),
     [seed],
   );
-  const viewport = useViewport2D(INITIAL_VIEWPORT);
+  const viewport = useViewport2D(INITIAL_VIEWPORT, {
+    verticalZoomExponent: TIME_ZOOM_EXPONENT,
+  });
   const { prepareContext, size, state, world } = viewport;
   const resolution = useMemo(
     () => birdsRenderResolution(birds, size, world, state),
@@ -168,7 +171,7 @@ function drawBackground(
 ): void {
   context.fillStyle = '#080d13';
   context.fillRect(0, 0, size.width, size.height);
-  const origin = worldToScreen({ x: 0, y: 0 }, size, viewport);
+  const origin = worldToScreen({ x: 0, y: 0 }, size, viewport, TIME_ZOOM_EXPONENT);
   context.strokeStyle = '#29394a';
   context.lineWidth = 1;
   context.beginPath();
@@ -187,9 +190,24 @@ function drawPopulationSample(
   resolution: BirdsPopulationResolution,
   sample: BirdsPopulationSample,
 ): void {
-  const left = worldToScreen({ x: sample.interval.min, y: time }, size, viewport);
-  const right = worldToScreen({ x: sample.interval.max, y: time }, size, viewport);
-  const nextTime = worldToScreen({ x: 0, y: time + resolution.timeStep }, size, viewport);
+  const left = worldToScreen(
+    { x: sample.interval.min, y: time },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+  );
+  const right = worldToScreen(
+    { x: sample.interval.max, y: time },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+  );
+  const nextTime = worldToScreen(
+    { x: 0, y: time + resolution.timeStep },
+    size,
+    viewport,
+    TIME_ZOOM_EXPONENT,
+  );
   const rowSpacing = Math.abs(nextTime.y - left.y);
   const thickness = Math.max(2, Math.min(8, rowSpacing * 0.22));
   const expected = POPULATION_DENSITY * resolution.cellWidth;

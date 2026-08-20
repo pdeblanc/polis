@@ -57,7 +57,11 @@ export type Viewport2D = {
   readonly world: Size2D;
 };
 
-export function useViewport2D(initialState: ViewportState): Viewport2D {
+export function useViewport2D(
+  initialState: ViewportState,
+  options: { readonly verticalZoomExponent?: number } = {},
+): Viewport2D {
+  const verticalZoomExponent = options.verticalZoomExponent ?? 1;
   const [defaultState] = useState(initialState);
   const [initialUrlState] = useState(() =>
     viewportStateFromSearch(window.location.search, defaultState),
@@ -94,11 +98,11 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
   }, []);
   const applyState = useCallback(
     (next: ViewportState) => {
-      const constrained = constrainViewport(next, size);
+      const constrained = constrainViewport(next, size, verticalZoomExponent);
       stateRef.current = constrained;
       setState(constrained);
     },
-    [size],
+    [size, verticalZoomExponent],
   );
   const commitState = useCallback(
     (next: ViewportState) => {
@@ -112,14 +116,19 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     cancelResetAnimation();
     cancelMomentum();
     pressedKeysRef.current.clear();
-    const target = constrainViewport(requestedTarget, size);
+    const target = constrainViewport(requestedTarget, size, verticalZoomExponent);
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       applyState(target);
       onComplete?.();
       return;
     }
 
-    const flight = createResetFlight(stateRef.current, target, size);
+    const flight = createResetFlight(
+      stateRef.current,
+      target,
+      size,
+      verticalZoomExponent,
+    );
     flightCompletionRef.current = onComplete;
     let startTime: number | undefined;
     const animate = (time: number) => {
@@ -136,20 +145,24 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       }
     };
     resetAnimationRef.current = requestAnimationFrame(animate);
-  }, [applyState, cancelMomentum, cancelResetAnimation, size]);
+  }, [applyState, cancelMomentum, cancelResetAnimation, size, verticalZoomExponent]);
   const resetView = useCallback(() => {
     animateTo(defaultState);
   }, [animateTo, defaultState]);
 
-  const world = useMemo(() => worldDimensions(size, state.area), [size, state.area]);
+  const world = useMemo(
+    () => worldDimensions(size, state.area, verticalZoomExponent),
+    [size, state.area, verticalZoomExponent],
+  );
   const cursor = useMemo(
     () =>
       screenToWorld(
         { x: cursorPosition.x * size.width, y: cursorPosition.y * size.height },
         size,
         state,
+        verticalZoomExponent,
       ),
-    [cursorPosition, size, state],
+    [cursorPosition, size, state, verticalZoomExponent],
   );
   const setCursorWorldPosition = useCallback(
     (point: Point2D, onComplete?: () => void) => {
@@ -162,11 +175,12 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
             y: cursorPosition.y * size.height,
           },
           point,
+          verticalZoomExponent,
         ),
         onComplete,
       );
     },
-    [animateTo, cursorPosition, size],
+    [animateTo, cursorPosition, size, verticalZoomExponent],
   );
 
   useEffect(() => {
@@ -229,13 +243,14 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
           size,
           point,
           Math.exp(wheelDeltaInPixels(event, size.height) * WHEEL_ZOOM_RATE),
+          verticalZoomExponent,
         ),
       );
     };
 
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
-  }, [commitState, size]);
+  }, [commitState, size, verticalZoomExponent]);
 
   useEffect(() => {
     let animationFrame: number | undefined;
@@ -335,7 +350,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       pinchRef.current = {
         area: current.area,
         distance: distanceBetween(first, second),
-        anchor: screenToWorld(midpoint, size, current),
+        anchor: screenToWorld(midpoint, size, current, verticalZoomExponent),
       };
     }
   };
@@ -349,7 +364,7 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
     pointersRef.current.set(event.pointerId, point);
     if (pointersRef.current.size === 1) {
       const current = stateRef.current;
-      const dimensions = worldDimensions(size, current.area);
+      const dimensions = worldDimensions(size, current.area, verticalZoomExponent);
       const centerDeltaX =
         -((point.x - previous.x) / size.width) * dimensions.width;
       const centerDeltaY =
@@ -383,9 +398,10 @@ export function useViewport2D(initialState: ViewportState): Viewport2D {
       const area = constrainViewport(
         { ...current, area: requestedArea },
         size,
+        verticalZoomExponent,
       ).area;
       if (area === current.area && requestedArea < current.area) return;
-      const dimensions = worldDimensions(size, area);
+      const dimensions = worldDimensions(size, area, verticalZoomExponent);
       commitState({
         area,
         centerX:

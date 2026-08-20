@@ -25,6 +25,11 @@ the interval before the next sample. It reports the selected `Δx` and `Δt`, li
 frame to a fixed sample budget, and coarsens through public resolution capabilities when
 necessary.
 
+Birds uses parabolic viewport zoom: if the visible spatial span changes by a factor `s`,
+the visible time span changes by `s²`. The URL's `area` parameter remains the literal
+visible spacetime area, so an area factor `q` corresponds to spatial factor `q^(1/3)` and
+time factor `q^(2/3)`. Other Polis views retain isotropic zoom.
+
 ## Public API boundary
 
 Resolution objects expose exact world-unit widths, durations, and temporal lattice data,
