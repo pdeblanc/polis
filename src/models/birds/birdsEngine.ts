@@ -1,6 +1,8 @@
 import { LRUCache } from 'lru-cache';
 import { binomial } from '../../utils/distributions/binomial';
+import { hypergeometric } from '../../utils/distributions/hypergeometric';
 import { multinomial } from '../../utils/distributions/multinomial';
+import { multivariateHypergeometric } from '../../utils/distributions/multivariateHypergeometric';
 import {
   createAddressedRandom,
   type AddressedRandom,
@@ -17,10 +19,14 @@ import {
   isPossibleFlow,
   midpointCellProbabilities,
   possibleFlowDestinations,
+  possibleFlowSources,
   possibleParentFlows,
 } from './motionSupport';
 import {
   classifyCellSubdivisionOwner,
+  classifyCellInflowSubdivisionOwner,
+  classifyCellOutflowSubdivisionOwner,
+  classifyFlowSpaceSubdivisionOwner,
   classifyFlowTimeSubdivisionOwner,
 } from './ownerClassifiers';
 
@@ -28,6 +34,8 @@ export const BIRDS_FLOW_CACHE_CAPACITY = 50_000;
 export const BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY = 20_000;
 export const BIRDS_CELL_CACHE_CAPACITY = 50_000;
 export const BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY = 20_000;
+export const BIRDS_CELL_INCIDENCE_CACHE_CAPACITY = 20_000;
+export const BIRDS_FLOW_RECONCILIATION_CACHE_CAPACITY = 20_000;
 
 export interface TemporalSubdivisionEntry {
   readonly midpointCell: BirdCell;
@@ -47,10 +55,37 @@ export interface CellSubdivisionResult {
   ];
 }
 
+export interface CellIncidenceSubdivisionEntry {
+  readonly flow: BirdFlow;
+  readonly count: number;
+}
+
+export interface CellIncidenceSubdivisionResult {
+  readonly parentCellCount: number;
+  readonly entries: readonly CellIncidenceSubdivisionEntry[];
+}
+
+export interface FlowSpaceSubdivisionEntry {
+  readonly flow: BirdFlow;
+  readonly count: number;
+}
+
+export interface FlowSpaceSubdivisionResult {
+  readonly parentCount: number;
+  readonly entries: readonly [
+    FlowSpaceSubdivisionEntry,
+    FlowSpaceSubdivisionEntry,
+    FlowSpaceSubdivisionEntry,
+    FlowSpaceSubdivisionEntry,
+  ];
+}
+
 export interface BirdsEngineStats {
   readonly cacheHits: number;
   readonly cellsEvaluated: number;
   readonly cellSubdivisionsEvaluated: number;
+  readonly incidenceBatchesEvaluated: number;
+  readonly flowReconciliationsEvaluated: number;
   readonly flowsEvaluated: number;
   readonly maximumDepth: number;
   readonly temporalBatchesEvaluated: number;
@@ -61,6 +96,8 @@ interface MutableStats {
   cacheHits: number;
   cellsEvaluated: number;
   cellSubdivisionsEvaluated: number;
+  incidenceBatchesEvaluated: number;
+  flowReconciliationsEvaluated: number;
   flowsEvaluated: number;
   maximumDepth: number;
   temporalBatchesEvaluated: number;
@@ -72,9 +109,11 @@ export interface BirdsEngineOptions {
   readonly temporalBatchCacheCapacity?: number;
   readonly cellCacheCapacity?: number;
   readonly cellSubdivisionCacheCapacity?: number;
+  readonly cellIncidenceCacheCapacity?: number;
+  readonly flowReconciliationCacheCapacity?: number;
 }
 
-/** Internal stochastic Birds hierarchy. Currently evaluates coarse facts and Stages A–F. */
+/** Internal stochastic Birds hierarchy for the complete inward refinement recurrence. */
 export class BirdsEngine {
   readonly #diffusionRate: number;
   readonly #initialization: BirdsCoarseInitialization;
@@ -83,6 +122,9 @@ export class BirdsEngine {
   readonly #temporalBatchCache: LRUCache<string, TemporalSubdivisionResult>;
   readonly #cellCache: LRUCache<string, number>;
   readonly #cellSubdivisionCache: LRUCache<string, CellSubdivisionResult>;
+  readonly #cellOutflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
+  readonly #cellInflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
+  readonly #flowSpaceSubdivisionCache: LRUCache<string, FlowSpaceSubdivisionResult>;
   #lastQueryStats: BirdsEngineStats = emptyStats();
 
   constructor(
@@ -108,6 +150,17 @@ export class BirdsEngine {
     });
     this.#cellSubdivisionCache = new LRUCache({
       max: options.cellSubdivisionCacheCapacity ?? BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY,
+    });
+    this.#cellOutflowSubdivisionCache = new LRUCache({
+      max: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
+    });
+    this.#cellInflowSubdivisionCache = new LRUCache({
+      max: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
+    });
+    this.#flowSpaceSubdivisionCache = new LRUCache({
+      max:
+        options.flowReconciliationCacheCapacity ??
+        BIRDS_FLOW_RECONCILIATION_CACHE_CAPACITY,
     });
   }
 
@@ -152,6 +205,36 @@ export class BirdsEngine {
     return result;
   }
 
+  queryCellOutflowSubdivision(cell: BirdCell): CellIncidenceSubdivisionResult {
+    if (classifyCellOutflowSubdivisionOwner(cell) === undefined) {
+      throw new RangeError('Cell does not own a Birds outflow subdivision');
+    }
+    const stats = emptyStats();
+    const result = this.#queryCellOutflowSubdivision(cell, stats, 0);
+    this.#lastQueryStats = stats;
+    return result;
+  }
+
+  queryCellInflowSubdivision(cell: BirdCell): CellIncidenceSubdivisionResult {
+    if (classifyCellInflowSubdivisionOwner(cell) === undefined) {
+      throw new RangeError('Cell does not own a Birds inflow subdivision');
+    }
+    const stats = emptyStats();
+    const result = this.#queryCellInflowSubdivision(cell, stats, 0);
+    this.#lastQueryStats = stats;
+    return result;
+  }
+
+  queryFlowSpaceSubdivision(flow: BirdFlow): FlowSpaceSubdivisionResult {
+    if (classifyFlowSpaceSubdivisionOwner(flow) === undefined) {
+      throw new RangeError('Flow does not own a Birds spatial subdivision');
+    }
+    const stats = emptyStats();
+    const result = this.#queryFlowSpaceSubdivision(flow, stats, 0);
+    this.#lastQueryStats = stats;
+    return result;
+  }
+
   getLastQueryStats(): BirdsEngineStats {
     return this.#lastQueryStats;
   }
@@ -165,12 +248,18 @@ export class BirdsEngine {
         this.#flowCache.max +
         this.#temporalBatchCache.max +
         this.#cellCache.max +
-        this.#cellSubdivisionCache.max,
+        this.#cellSubdivisionCache.max +
+        this.#cellOutflowSubdivisionCache.max +
+        this.#cellInflowSubdivisionCache.max +
+        this.#flowSpaceSubdivisionCache.max,
       entries:
         this.#flowCache.size +
         this.#temporalBatchCache.size +
         this.#cellCache.size +
-        this.#cellSubdivisionCache.size,
+        this.#cellSubdivisionCache.size +
+        this.#cellOutflowSubdivisionCache.size +
+        this.#cellInflowSubdivisionCache.size +
+        this.#flowSpaceSubdivisionCache.size,
     };
   }
 
@@ -179,6 +268,9 @@ export class BirdsEngine {
     this.#temporalBatchCache.clear();
     this.#cellCache.clear();
     this.#cellSubdivisionCache.clear();
+    this.#cellOutflowSubdivisionCache.clear();
+    this.#cellInflowSubdivisionCache.clear();
+    this.#flowSpaceSubdivisionCache.clear();
   }
 
   #queryCell(cell: BirdCell, stats: MutableStats, depth: number): number {
@@ -274,8 +366,35 @@ export class BirdsEngine {
         );
         break;
 
-      default:
-        throw new Error(`Birds flow construction ${construction.stage} is not implemented`);
+      case 'source-spatial-child': {
+        const batch = this.#queryCellOutflowSubdivision(
+          construction.subdivisionOwner,
+          stats,
+          depth + 1,
+        );
+        count = findFlowCount(batch.entries, flow);
+        break;
+      }
+
+      case 'destination-spatial-child': {
+        const batch = this.#queryCellInflowSubdivision(
+          construction.subdivisionOwner,
+          stats,
+          depth + 1,
+        );
+        count = findFlowCount(batch.entries, flow);
+        break;
+      }
+
+      case 'fully-spatially-refined': {
+        const batch = this.#queryFlowSpaceSubdivision(
+          construction.subdivisionOwner,
+          stats,
+          depth + 1,
+        );
+        count = findFlowCount(batch.entries, flow);
+        break;
+      }
     }
 
     this.#flowCache.set(key, count);
@@ -379,6 +498,177 @@ export class BirdsEngine {
     this.#cellSubdivisionCache.set(key, result);
     return result;
   }
+
+  #queryCellOutflowSubdivision(
+    cell: BirdCell,
+    stats: MutableStats,
+    depth: number,
+  ): CellIncidenceSubdivisionResult {
+    stats.maximumDepth = Math.max(stats.maximumDepth, depth);
+    const owner = classifyCellOutflowSubdivisionOwner(cell);
+    if (owner === undefined) {
+      throw new RangeError('Cell does not own a Birds outflow subdivision');
+    }
+
+    const key = `outflow-subdivision:${cellKey(cell)}`;
+    const cached = this.#cellOutflowSubdivisionCache.get(key);
+    if (cached !== undefined) {
+      stats.cacheHits += 1;
+      return cached;
+    }
+
+    stats.incidenceBatchesEvaluated += 1;
+    const parentFlows = possibleFlowDestinations(
+      cell,
+      owner.flowDuration,
+      this.#diffusionRate,
+    )
+      .filter((destination) => destination.max - destination.min === owner.destinationCellLength)
+      .map((destination) => ({ source: cell, destination }));
+    const capacities = parentFlows.map((flow) => this.#queryFlow(flow, stats, depth + 1));
+    const subdivision = this.#queryCellSubdivision(cell, stats, depth + 1);
+    const leftCounts = multivariateHypergeometric(
+      this.#random,
+      ['birds.cell-outflow-subdivision', cell.min, cell.max, cell.time],
+      parentFlows.map((flow, index) => ({
+        capacity: capacities[index],
+        address: ['destination-cell', flow.destination.min, flow.destination.max, flow.destination.time],
+      })),
+      subdivision.children[0].count,
+    );
+    const entries: CellIncidenceSubdivisionEntry[] = [];
+    for (let index = 0; index < parentFlows.length; index += 1) {
+      entries.push({
+        flow: { source: owner.sourceChildren[0], destination: parentFlows[index].destination },
+        count: leftCounts[index],
+      });
+      entries.push({
+        flow: { source: owner.sourceChildren[1], destination: parentFlows[index].destination },
+        count: capacities[index] - leftCounts[index],
+      });
+    }
+    const result = { parentCellCount: subdivision.parentCount, entries };
+    this.#cellOutflowSubdivisionCache.set(key, result);
+    return result;
+  }
+
+  #queryCellInflowSubdivision(
+    cell: BirdCell,
+    stats: MutableStats,
+    depth: number,
+  ): CellIncidenceSubdivisionResult {
+    stats.maximumDepth = Math.max(stats.maximumDepth, depth);
+    const owner = classifyCellInflowSubdivisionOwner(cell);
+    if (owner === undefined) {
+      throw new RangeError('Cell does not own a Birds inflow subdivision');
+    }
+
+    const key = `inflow-subdivision:${cellKey(cell)}`;
+    const cached = this.#cellInflowSubdivisionCache.get(key);
+    if (cached !== undefined) {
+      stats.cacheHits += 1;
+      return cached;
+    }
+
+    stats.incidenceBatchesEvaluated += 1;
+    const parentFlows = possibleFlowSources(
+      cell,
+      owner.flowDuration,
+      this.#diffusionRate,
+    )
+      .filter((source) => source.max - source.min === owner.sourceCellLength)
+      .map((source) => ({ source, destination: cell }));
+    const capacities = parentFlows.map((flow) => this.#queryFlow(flow, stats, depth + 1));
+    const subdivision = this.#queryCellSubdivision(cell, stats, depth + 1);
+    const leftCounts = multivariateHypergeometric(
+      this.#random,
+      ['birds.cell-inflow-subdivision', cell.min, cell.max, cell.time],
+      parentFlows.map((flow, index) => ({
+        capacity: capacities[index],
+        address: ['source-cell', flow.source.min, flow.source.max, flow.source.time],
+      })),
+      subdivision.children[0].count,
+    );
+    const entries: CellIncidenceSubdivisionEntry[] = [];
+    for (let index = 0; index < parentFlows.length; index += 1) {
+      entries.push({
+        flow: { source: parentFlows[index].source, destination: owner.destinationChildren[0] },
+        count: leftCounts[index],
+      });
+      entries.push({
+        flow: { source: parentFlows[index].source, destination: owner.destinationChildren[1] },
+        count: capacities[index] - leftCounts[index],
+      });
+    }
+    const result = { parentCellCount: subdivision.parentCount, entries };
+    this.#cellInflowSubdivisionCache.set(key, result);
+    return result;
+  }
+
+  #queryFlowSpaceSubdivision(
+    flow: BirdFlow,
+    stats: MutableStats,
+    depth: number,
+  ): FlowSpaceSubdivisionResult {
+    stats.maximumDepth = Math.max(stats.maximumDepth, depth);
+    const owner = classifyFlowSpaceSubdivisionOwner(flow);
+    if (owner === undefined) {
+      throw new RangeError('Flow does not own a Birds spatial subdivision');
+    }
+
+    const key = `flow-space-subdivision:${flowKey(flow)}`;
+    const cached = this.#flowSpaceSubdivisionCache.get(key);
+    if (cached !== undefined) {
+      stats.cacheHits += 1;
+      return cached;
+    }
+
+    stats.flowReconciliationsEvaluated += 1;
+    const parentCount = this.#queryFlow(flow, stats, depth + 1);
+    const outflowBatch = this.#queryCellOutflowSubdivision(flow.source, stats, depth + 1);
+    const inflowBatch = this.#queryCellInflowSubdivision(flow.destination, stats, depth + 1);
+    const firstRow = findFlowCount(outflowBatch.entries, {
+      source: owner.sourceChildren[0],
+      destination: flow.destination,
+    });
+    const firstColumn = findFlowCount(inflowBatch.entries, {
+      source: flow.source,
+      destination: owner.destinationChildren[0],
+    });
+    const upperLeft = hypergeometric(
+      this.#random,
+      [
+        'birds.flow-space-subdivision',
+        flow.source.min,
+        flow.source.max,
+        flow.source.time,
+        flow.destination.min,
+        flow.destination.max,
+        flow.destination.time,
+        'upper-left',
+      ],
+      parentCount,
+      firstRow,
+      firstColumn,
+    );
+    const counts = [
+      upperLeft,
+      firstRow - upperLeft,
+      firstColumn - upperLeft,
+      parentCount - firstRow - firstColumn + upperLeft,
+    ] as const;
+    const result: FlowSpaceSubdivisionResult = {
+      parentCount,
+      entries: [
+        { flow: owner.childFlows[0], count: counts[0] },
+        { flow: owner.childFlows[1], count: counts[1] },
+        { flow: owner.childFlows[2], count: counts[2] },
+        { flow: owner.childFlows[3], count: counts[3] },
+      ],
+    };
+    this.#flowSpaceSubdivisionCache.set(key, result);
+    return result;
+  }
 }
 
 function flowKey(flow: BirdFlow): string {
@@ -410,11 +700,24 @@ function cellsEqual(left: BirdCell, right: BirdCell): boolean {
   return left.min === right.min && left.max === right.max && left.time === right.time;
 }
 
+function flowsEqual(left: BirdFlow, right: BirdFlow): boolean {
+  return cellsEqual(left.source, right.source) && cellsEqual(left.destination, right.destination);
+}
+
+function findFlowCount(
+  entries: readonly { readonly flow: BirdFlow; readonly count: number }[],
+  flow: BirdFlow,
+): number {
+  return entries.find((entry) => flowsEqual(entry.flow, flow))?.count ?? 0;
+}
+
 function emptyStats(): MutableStats {
   return {
     cacheHits: 0,
     cellsEvaluated: 0,
     cellSubdivisionsEvaluated: 0,
+    incidenceBatchesEvaluated: 0,
+    flowReconciliationsEvaluated: 0,
     flowsEvaluated: 0,
     maximumDepth: 0,
     temporalBatchesEvaluated: 0,

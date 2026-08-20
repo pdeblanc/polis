@@ -212,11 +212,18 @@ describe('BirdsEngine temporal Stages A-D', () => {
     expect(engine.getCacheUsage().entries).toBeGreaterThan(0);
   });
 
-  it('fails explicitly for valid flow stages that are not implemented yet', () => {
+  it('continues through Stage-H entry flows across multiple epochs', () => {
     const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
-    const scale = birdsScale(1)!;
 
-    expect(() => engine.queryFlow(flowAtEpochOneEntry(scale))).toThrow(/not implemented/);
+    for (const epoch of [1, 2]) {
+      const scale = birdsScale(epoch)!;
+      expect(
+        engine.queryFlow({
+          source: cell(epoch, 0, 0),
+          destination: cell(epoch, 0, scale.flowDuration),
+        }),
+      ).toBeGreaterThanOrEqual(0);
+    }
   });
 });
 
@@ -319,9 +326,165 @@ describe('BirdsEngine cell Stages E-F', () => {
   });
 });
 
-function flowAtEpochOneEntry(scale: NonNullable<ReturnType<typeof birdsScale>>): BirdFlow {
-  return {
-    source: cell(1, 0, 0),
-    destination: cell(1, 0, scale.flowDuration),
-  };
+describe('BirdsEngine spatial flow Stages G1-G2-H', () => {
+  it('jointly splits every outflow while conserving source-child populations', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(0)!;
+    const parent = cell(0, -2, scale.nextFlowDuration);
+    const cellSubdivision = engine.queryCellSubdivision(parent);
+    const batch = engine.queryCellOutflowSubdivision(parent);
+
+    for (const child of cellSubdivision.children) {
+      expect(
+        batch.entries
+          .filter((entry) => entry.flow.source.min === child.cell.min)
+          .reduce((sum, entry) => sum + entry.count, 0),
+      ).toBe(child.count);
+    }
+    for (const parentFlow of equalResolutionFlows(parent, scale.nextFlowDuration)) {
+      expect(
+        batch.entries
+          .filter(
+            (entry) =>
+              entry.flow.destination.min === parentFlow.destination.min &&
+              entry.flow.destination.max === parentFlow.destination.max,
+          )
+          .reduce((sum, entry) => sum + entry.count, 0),
+      ).toBe(engine.queryFlow(parentFlow));
+    }
+  });
+
+  it('jointly splits every inflow while conserving destination-child populations', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(0)!;
+    const parent = cell(0, 3, 2 * scale.nextFlowDuration);
+    const cellSubdivision = engine.queryCellSubdivision(parent);
+    const batch = engine.queryCellInflowSubdivision(parent);
+
+    for (const child of cellSubdivision.children) {
+      expect(
+        batch.entries
+          .filter((entry) => entry.flow.destination.min === child.cell.min)
+          .reduce((sum, entry) => sum + entry.count, 0),
+      ).toBe(child.count);
+    }
+    const parentFlows = possibleFlowSources(parent, scale.nextFlowDuration, DIFFUSION_RATE)
+      .filter((source) => source.max - source.min === scale.cellLength)
+      .map((source) => ({ source, destination: parent }));
+    for (const parentFlow of parentFlows) {
+      expect(
+        batch.entries
+          .filter(
+            (entry) =>
+              entry.flow.source.min === parentFlow.source.min &&
+              entry.flow.source.max === parentFlow.source.max,
+          )
+          .reduce((sum, entry) => sum + entry.count, 0),
+      ).toBe(engine.queryFlow(parentFlow));
+    }
+  });
+
+  it('reconciles each 2 x 2 flow table to both G1 and G2 margins', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(0)!;
+    const parent = equalResolutionFlows(
+      cell(0, -1, scale.nextFlowDuration),
+      scale.nextFlowDuration,
+    ).find((candidate) => engine.queryFlow(candidate) > 0)!;
+    const result = engine.queryFlowSpaceSubdivision(parent);
+    const outflows = engine.queryCellOutflowSubdivision(parent.source);
+    const inflows = engine.queryCellInflowSubdivision(parent.destination);
+    const [topLeft, topRight, bottomLeft, bottomRight] = result.entries;
+
+    expect(result.entries.reduce((sum, entry) => sum + entry.count, 0)).toBe(
+      result.parentCount,
+    );
+    expect(topLeft.count + topRight.count).toBe(
+      matchingCount(outflows.entries, topLeft.flow.source, parent.destination),
+    );
+    expect(bottomLeft.count + bottomRight.count).toBe(
+      matchingCount(outflows.entries, bottomLeft.flow.source, parent.destination),
+    );
+    expect(topLeft.count + bottomLeft.count).toBe(
+      matchingCount(inflows.entries, parent.source, topLeft.flow.destination),
+    );
+    expect(topRight.count + bottomRight.count).toBe(
+      matchingCount(inflows.entries, parent.source, topRight.flow.destination),
+    );
+    for (const entry of result.entries) {
+      expect(engine.queryFlow(entry.flow)).toBe(entry.count);
+    }
+  });
+
+  it('conserves complete fine-resolution incidence after a full epoch', () => {
+    const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const scale = birdsScale(1)!;
+
+    for (const timeIndex of [-2, 0, 3]) {
+      const target = cell(1, -3, timeIndex * scale.flowDuration);
+      const outgoing = possibleFlowDestinations(
+        target,
+        scale.flowDuration,
+        DIFFUSION_RATE,
+      )
+        .filter((destination) => destination.max - destination.min === scale.cellLength)
+        .map((destination) => ({ source: target, destination }));
+      const incoming = possibleFlowSources(target, scale.flowDuration, DIFFUSION_RATE)
+        .filter((source) => source.max - source.min === scale.cellLength)
+        .map((source) => ({ source, destination: target }));
+      const population = engine.queryCell(target);
+
+      expect(outgoing.reduce((sum, candidate) => sum + engine.queryFlow(candidate), 0)).toBe(
+        population,
+      );
+      expect(incoming.reduce((sum, candidate) => sum + engine.queryFlow(candidate), 0)).toBe(
+        population,
+      );
+    }
+  });
+
+  it('is deterministic across H query order and cache clearing', () => {
+    const scale = birdsScale(0)!;
+    const parents = equalResolutionFlows(cell(0, 0, 0), scale.nextFlowDuration);
+    const fineFlows = parents.flatMap((parent) => {
+      const engine = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+      return engine.queryFlowSpaceSubdivision(parent).entries.map(({ flow }) => flow);
+    });
+    const first = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const second = new BirdsEngine(SEED, POPULATION_DENSITY, DIFFUSION_RATE);
+    const forward = new Map(
+      fineFlows.map((candidate) => [JSON.stringify(candidate), first.queryFlow(candidate)]),
+    );
+    const reverse = new Map(
+      [...fineFlows]
+        .reverse()
+        .map((candidate) => [JSON.stringify(candidate), second.queryFlow(candidate)]),
+    );
+
+    expect(reverse).toEqual(forward);
+    first.clearCache();
+    expect(
+      new Map(
+        fineFlows.map((candidate) => [JSON.stringify(candidate), first.queryFlow(candidate)]),
+      ),
+    ).toEqual(forward);
+  });
+});
+
+function matchingCount(
+  entries: readonly { readonly flow: BirdFlow; readonly count: number }[],
+  source: BirdCell,
+  destination: BirdCell,
+): number {
+  return (
+    entries.find(
+      (entry) =>
+        entry.flow.source.min === source.min &&
+        entry.flow.source.max === source.max &&
+        entry.flow.source.time === source.time &&
+        entry.flow.destination.min === destination.min &&
+        entry.flow.destination.max === destination.max &&
+        entry.flow.destination.time === destination.time,
+    )?.count ?? 0
+  );
 }
