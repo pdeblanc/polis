@@ -1,4 +1,4 @@
-import { useState, type PropsWithChildren } from 'react';
+import { useState, type PropsWithChildren, type ReactNode } from 'react';
 import type { Viewport2D } from '../helpers/useViewport2D';
 import { CoordinateControl } from './CoordinateControl';
 
@@ -11,6 +11,7 @@ type ViewportFrameProps = PropsWithChildren<{
     readonly xOperator?: string;
     readonly yOperator?: string;
   };
+  readonly coordinateFooter?: ReactNode;
   readonly viewport: Viewport2D;
 }>;
 
@@ -19,6 +20,7 @@ export function ViewportFrame({
   canvasLabel,
   children,
   coordinateDisplay,
+  coordinateFooter,
   viewport,
 }: ViewportFrameProps) {
   const [coordinateWidgetHovered, setCoordinateWidgetHovered] = useState(false);
@@ -72,6 +74,9 @@ export function ViewportFrame({
           <span className="viewport-area-readout">
             A = {formatSpan(world.width)} × {formatSpan(world.height)}
           </span>
+          {coordinateFooter === undefined ? null : (
+            <span className="viewport-coordinate-footer">{coordinateFooter}</span>
+          )}
         </div>
         <div className="viewport-model-controls">{children}</div>
       </div>

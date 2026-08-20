@@ -7,7 +7,6 @@ import {
   type BirdsPopulationResolution,
   type BirdsPopulationSample,
 } from '../models/birds/birds';
-import type { Point2D } from '../utils/geometry/point2d';
 import { worldToScreen, type Size2D, type ViewportState } from '../utils/geometry/viewport2d';
 import { CacheControl, type CacheUsage } from './CacheControl';
 import { PerformanceControl } from './PerformanceControl';
@@ -45,9 +44,25 @@ export function BirdsCanvas() {
     () => birdsRenderResolution(birds, size, world, state),
     [birds, size, state, world],
   );
+  const hoveredSpatialIndex =
+    resolution === undefined ? undefined : Math.floor(cursor.x / resolution.cellWidth);
+  const hoveredTimeIndex =
+    resolution === undefined ? undefined : Math.round(cursor.y / resolution.timeStep);
   const hoveredCell = useMemo(
-    () => (resolution === undefined ? undefined : populationCellAt(cursor, resolution)),
-    [cursor, resolution],
+    () =>
+      resolution === undefined ||
+      hoveredSpatialIndex === undefined ||
+      hoveredTimeIndex === undefined
+        ? undefined
+        : populationCellAt(hoveredSpatialIndex, hoveredTimeIndex, resolution),
+    [hoveredSpatialIndex, hoveredTimeIndex, resolution],
+  );
+  const hoveredPopulation = useMemo(
+    () =>
+      hoveredCell === undefined || resolution === undefined
+        ? undefined
+        : populationAt(birds, hoveredCell, resolution),
+    [birds, hoveredCell, resolution],
   );
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() => birds.getCacheUsage());
   const { measureFrame, performance } = useFramePerformance();
@@ -75,6 +90,9 @@ export function BirdsCanvas() {
                 formattedY: formatResolution(hoveredCell.time),
                 xOperator: '∈',
               }
+        }
+        coordinateFooter={
+          hoveredPopulation === undefined ? 'Population = —' : `Population = ${hoveredPopulation}`
         }
         viewport={viewport}
       >
@@ -164,15 +182,30 @@ function drawBirds(
 }
 
 function populationCellAt(
-  point: Point2D,
+  spatialIndex: number,
+  timeIndex: number,
   resolution: BirdsPopulationResolution,
 ): HoveredPopulationCell {
-  const min = Math.floor(point.x / resolution.cellWidth) * resolution.cellWidth;
+  const min = spatialIndex * resolution.cellWidth;
   return {
     min,
     max: min + resolution.cellWidth,
-    time: Math.round(point.y / resolution.timeStep) * resolution.timeStep,
+    time: timeIndex * resolution.timeStep,
   };
+}
+
+function populationAt(
+  birds: Birds,
+  cell: HoveredPopulationCell,
+  resolution: BirdsPopulationResolution,
+): number | undefined {
+  const result = birds.queryPopulation({
+    min: cell.min,
+    max: cell.max,
+    time: cell.time,
+    resolution,
+  });
+  return result.kind === 'population-profile' ? result.samples[0]?.count : undefined;
 }
 
 function birdsRenderResolution(
