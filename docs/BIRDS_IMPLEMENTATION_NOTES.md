@@ -258,3 +258,13 @@ by a conservative binary64 error margin at that coordinate magnitude. If not, it
 a structured `SightingResolutionLimitError` without asserting that the apparent meeting
 is intrinsically unresolvable. The Birds page labels this separately from query or
 refinement budget exhaustion, and tracker benchmarks record it as `numeric-resolution`.
+
+GUI experiments indicate that these ambiguous collision paths are common whenever two
+birds appear likely to meet. The version-1 tracker is therefore considered an adequate
+consumer of the current one-dimensional anonymous model; tracker-specific search tuning
+is not the primary performance project. Further relief is deferred to a later model
+revision, where explicit bird materialization could preserve an easier correspondence or
+a higher-dimensional spatial process could make exact collisions rare. The latter is
+only practical if the Birds engine becomes substantially faster overall. Near-term
+performance work should consequently profile representative population and flow queries
+across the model, independent of tracking, and optimize the dominant engine costs.
