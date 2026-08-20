@@ -105,7 +105,14 @@ The implementation tests currently cover:
 - incoming/outgoing conservation for Stage-E and fine entry cells;
 - H row and column margin reconciliation;
 - deterministic results across query order and cache clearing; and
-- recursive evaluation through epoch 2.
+- recursive evaluation through epoch 2; and
+- diagnostic tracing of the actual recursive call graph through all eight query roles,
+  with every observed edge through epoch 2 checked against the conceptual rank order.
 
-Full heterogeneous-ancestry, dependency-rank, complexity, public-API, and statistical
+Conceptual ranks are implemented in a separate diagnostic module. The engine's optional
+dependency observer reports caller/dependency nodes using the recursion depth already
+carried for statistics; production construction and dependency selection do not consult
+ranks.
+
+Broader heterogeneous-ancestry sampling, complexity, public-API, and statistical
 characterization tests remain future implementation milestones.

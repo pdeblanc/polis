@@ -92,6 +92,21 @@ export interface BirdsEngineStats {
   readonly twoStageEntriesEvaluated: number;
 }
 
+export type BirdsDependencyNode =
+  | { readonly role: 'cell'; readonly cell: BirdCell }
+  | { readonly role: 'flow'; readonly flow: BirdFlow }
+  | { readonly role: 'two-stage-flow'; readonly flow: BirdTwoStageFlow }
+  | { readonly role: 'temporal-subdivision'; readonly flow: BirdFlow }
+  | { readonly role: 'cell-subdivision'; readonly cell: BirdCell }
+  | { readonly role: 'outflow-subdivision'; readonly cell: BirdCell }
+  | { readonly role: 'inflow-subdivision'; readonly cell: BirdCell }
+  | { readonly role: 'flow-space-subdivision'; readonly flow: BirdFlow };
+
+export interface BirdsDependencyEdge {
+  readonly dependent: BirdsDependencyNode;
+  readonly dependency: BirdsDependencyNode;
+}
+
 interface MutableStats {
   cacheHits: number;
   cellsEvaluated: number;
@@ -102,6 +117,7 @@ interface MutableStats {
   maximumDepth: number;
   temporalBatchesEvaluated: number;
   twoStageEntriesEvaluated: number;
+  readonly dependencyPath: BirdsDependencyNode[];
 }
 
 export interface BirdsEngineOptions {
@@ -111,6 +127,8 @@ export interface BirdsEngineOptions {
   readonly cellSubdivisionCacheCapacity?: number;
   readonly cellIncidenceCacheCapacity?: number;
   readonly flowReconciliationCacheCapacity?: number;
+  /** Diagnostic observer; query correctness never depends on its presence. */
+  readonly observeDependency?: (edge: BirdsDependencyEdge) => void;
 }
 
 /** Internal stochastic Birds hierarchy for the complete inward refinement recurrence. */
@@ -125,6 +143,7 @@ export class BirdsEngine {
   readonly #cellOutflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
   readonly #cellInflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
   readonly #flowSpaceSubdivisionCache: LRUCache<string, FlowSpaceSubdivisionResult>;
+  readonly #observeDependency: ((edge: BirdsDependencyEdge) => void) | undefined;
   #lastQueryStats: BirdsEngineStats = emptyStats();
 
   constructor(
@@ -139,6 +158,7 @@ export class BirdsEngine {
       diffusionRate,
     );
     this.#random = createAddressedRandom(seed);
+    this.#observeDependency = options.observeDependency;
     this.#flowCache = new LRUCache({
       max: options.flowCacheCapacity ?? BIRDS_FLOW_CACHE_CAPACITY,
     });
@@ -274,6 +294,7 @@ export class BirdsEngine {
   }
 
   #queryCell(cell: BirdCell, stats: MutableStats, depth: number): number {
+    this.#visitDependency(stats, depth, { role: 'cell', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const construction = classifyCell(cell);
     if (construction === undefined) throw new RangeError('Invalid Birds cell geometry');
@@ -324,6 +345,7 @@ export class BirdsEngine {
   }
 
   #queryFlow(flow: BirdFlow, stats: MutableStats, depth: number): number {
+    this.#visitDependency(stats, depth, { role: 'flow', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const construction = classifyFlow(flow);
     if (construction === undefined) throw new RangeError('Invalid Birds flow geometry');
@@ -406,6 +428,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): number {
+    this.#visitDependency(stats, depth, { role: 'two-stage-flow', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const construction = classifyTwoStageFlow(flow);
     if (construction === undefined) {
@@ -423,6 +446,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): TemporalSubdivisionResult {
+    this.#visitDependency(stats, depth, { role: 'temporal-subdivision', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const owner = classifyFlowTimeSubdivisionOwner(flow);
     if (owner === undefined) {
@@ -467,6 +491,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): CellSubdivisionResult {
+    this.#visitDependency(stats, depth, { role: 'cell-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const owner = classifyCellSubdivisionOwner(cell);
     if (owner === undefined) {
@@ -504,6 +529,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): CellIncidenceSubdivisionResult {
+    this.#visitDependency(stats, depth, { role: 'outflow-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const owner = classifyCellOutflowSubdivisionOwner(cell);
     if (owner === undefined) {
@@ -557,6 +583,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): CellIncidenceSubdivisionResult {
+    this.#visitDependency(stats, depth, { role: 'inflow-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const owner = classifyCellInflowSubdivisionOwner(cell);
     if (owner === undefined) {
@@ -610,6 +637,7 @@ export class BirdsEngine {
     stats: MutableStats,
     depth: number,
   ): FlowSpaceSubdivisionResult {
+    this.#visitDependency(stats, depth, { role: 'flow-space-subdivision', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
     const owner = classifyFlowSpaceSubdivisionOwner(flow);
     if (owner === undefined) {
@@ -669,6 +697,15 @@ export class BirdsEngine {
     this.#flowSpaceSubdivisionCache.set(key, result);
     return result;
   }
+
+  #visitDependency(stats: MutableStats, depth: number, node: BirdsDependencyNode): void {
+    if (this.#observeDependency !== undefined && depth > 0) {
+      const dependent = stats.dependencyPath[depth - 1];
+      if (dependent !== undefined) this.#observeDependency({ dependent, dependency: node });
+    }
+    stats.dependencyPath.length = depth;
+    stats.dependencyPath[depth] = node;
+  }
 }
 
 function flowKey(flow: BirdFlow): string {
@@ -722,5 +759,6 @@ function emptyStats(): MutableStats {
     maximumDepth: 0,
     temporalBatchesEvaluated: 0,
     twoStageEntriesEvaluated: 0,
+    dependencyPath: [],
   };
 }
