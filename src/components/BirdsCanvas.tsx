@@ -103,13 +103,26 @@ export function BirdsCanvas() {
     [birds, resolution],
   );
   const hoveredFlows = useMemo(
-    () =>
-      !showFlows || hoveredCell === undefined || flowResolution === undefined
-        ? undefined
-        : birds.queryOutflows({
-            source: hoveredCell,
-            resolution: flowResolution,
-          }),
+    () => {
+      if (!showFlows || hoveredCell === undefined || flowResolution === undefined) {
+        return undefined;
+      }
+      const outflows = birds.queryOutflows({
+        source: hoveredCell,
+        resolution: flowResolution,
+      });
+      if (outflows.kind === "size-limit") return outflows;
+      const inflows = birds.queryInflows({
+        destination: hoveredCell,
+        resolution: flowResolution,
+      });
+      if (inflows.kind === "size-limit") return inflows;
+      return {
+        flows: [...inflows.flows, ...outflows.flows],
+        kind: "flows",
+        resolution: flowResolution,
+      } satisfies BirdsFlowListResult;
+    },
     [birds, flowResolution, hoveredCell, showFlows],
   );
   const [cacheUsage, setCacheUsage] = useState<CacheUsage>(() =>
