@@ -486,7 +486,7 @@ export class BirdsEngine {
     }
 
     const keyStart = this.#cacheProfiler?.start();
-    const key = temporalBatchKey(flow);
+    const key = flowKey(flow);
     if (keyStart !== undefined) this.#cacheProfiler!.recordKey('temporal-batch', keyStart);
     const getStart = this.#cacheProfiler?.start();
     const cached = this.#temporalBatchCache.get(key);
@@ -540,7 +540,7 @@ export class BirdsEngine {
     }
 
     const keyStart = this.#cacheProfiler?.start();
-    const key = `cell-subdivision:${cellKey(cell)}`;
+    const key = cellKey(cell);
     if (keyStart !== undefined) this.#cacheProfiler!.recordKey('cell-subdivision', keyStart);
     const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellSubdivisionCache.get(key);
@@ -587,7 +587,7 @@ export class BirdsEngine {
     }
 
     const keyStart = this.#cacheProfiler?.start();
-    const key = `outflow-subdivision:${cellKey(cell)}`;
+    const key = cellKey(cell);
     if (keyStart !== undefined) this.#cacheProfiler!.recordKey('outflow-subdivision', keyStart);
     const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellOutflowSubdivisionCache.get(key);
@@ -650,7 +650,7 @@ export class BirdsEngine {
     }
 
     const keyStart = this.#cacheProfiler?.start();
-    const key = `inflow-subdivision:${cellKey(cell)}`;
+    const key = cellKey(cell);
     if (keyStart !== undefined) this.#cacheProfiler!.recordKey('inflow-subdivision', keyStart);
     const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellInflowSubdivisionCache.get(key);
@@ -713,7 +713,7 @@ export class BirdsEngine {
     }
 
     const keyStart = this.#cacheProfiler?.start();
-    const key = `flow-space-subdivision:${flowKey(flow)}`;
+    const key = flowKey(flow);
     if (keyStart !== undefined) {
       this.#cacheProfiler!.recordKey('flow-space-subdivision', keyStart);
     }
@@ -791,11 +791,8 @@ export class BirdsEngine {
 }
 
 function flowKey(flow: BirdFlow): string {
-  return `${cellKey(flow.source)}>${cellKey(flow.destination)}`;
-}
-
-function temporalBatchKey(flow: BirdFlow): string {
-  return `temporal:${flowKey(flow)}`;
+  const { source, destination } = flow;
+  return `${source.min}:${source.max}@${source.time}>${destination.min}:${destination.max}@${destination.time}`;
 }
 
 function cellKey(cell: BirdCell): string {
