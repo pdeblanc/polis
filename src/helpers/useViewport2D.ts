@@ -28,6 +28,8 @@ const MOMENTUM_TIME_CONSTANT = 0.2;
 const PAN_VELOCITY_SMOOTHING_TIME = 0.05;
 const URL_UPDATE_DELAY_MS = 250;
 const WHEEL_ZOOM_RATE = 0.0033;
+const ZOOM_VELOCITY_GAP_SECONDS = 0.2;
+const ZOOM_VELOCITY_SMOOTHING_SECONDS = 0.08;
 
 type Pinch = {
   readonly area: number;
@@ -55,6 +57,8 @@ export type Viewport2D = {
   readonly size: Size2D;
   readonly state: ViewportState;
   readonly world: Size2D;
+  /** Smoothed derivative of log(viewport area), in inverse seconds. */
+  readonly zoomVelocity: number;
 };
 
 export function useViewport2D(
@@ -72,6 +76,7 @@ export function useViewport2D(
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef(initialUrlState);
+  const zoomSampleRef = useRef({ area: initialUrlState.area, time: 0, velocity: 0 });
   const pointersRef = useRef(new Map<number, Point2D>());
   const pinchRef = useRef<Pinch | undefined>(undefined);
   const pressedKeysRef = useRef(new Set<string>());
@@ -81,6 +86,7 @@ export function useViewport2D(
   const flightCompletionRef = useRef<(() => void) | undefined>(undefined);
   const [size, setSize] = useState<Size2D>({ width: 1, height: 1 });
   const [state, setState] = useState(initialUrlState);
+  const [zoomVelocity, setZoomVelocity] = useState(0);
   const [cursorPosition, setCursorPosition] = useState<Point2D>({
     x: 0.5,
     y: 0.5,
@@ -108,8 +114,25 @@ export function useViewport2D(
         verticalZoomExponent,
         verticalScale,
       );
+      const now = performance.now();
+      const previous = zoomSampleRef.current;
+      const gap = Math.max(0, (now - previous.time) / 1_000);
+      let velocity = previous.velocity;
+      if (constrained.area !== previous.area) {
+        const elapsed = Math.max(0.001, Math.min(gap, 0.05));
+        const instantaneous = Math.log(constrained.area / previous.area) / elapsed;
+        const blend =
+          gap > ZOOM_VELOCITY_GAP_SECONDS
+            ? 1
+            : 1 - Math.exp(-elapsed / ZOOM_VELOCITY_SMOOTHING_SECONDS);
+        velocity += (instantaneous - velocity) * blend;
+      } else if (gap > 0) {
+        velocity *= Math.exp(-gap / ZOOM_VELOCITY_SMOOTHING_SECONDS);
+      }
+      zoomSampleRef.current = { area: constrained.area, time: now, velocity };
       stateRef.current = constrained;
       setState(constrained);
+      setZoomVelocity(velocity);
     },
     [size, verticalScale, verticalZoomExponent],
   );
@@ -552,6 +575,7 @@ export function useViewport2D(
     size,
     state,
     world,
+    zoomVelocity,
   };
 }
 

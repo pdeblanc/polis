@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sighting,
   SightingBudgetExceededError,
@@ -16,6 +16,7 @@ import {
 } from "../models/birds/birds";
 import {
   screenToWorld,
+  worldDimensions,
   worldToScreen,
   type Size2D,
   type ViewportState,
@@ -43,6 +44,9 @@ const FLOW_REFERENCE_STEP_PIXELS = 50;
 const TRACKED_STEPS_PER_DIRECTION = 3;
 const TRACKED_STEP_QUERY_BUDGET = 256;
 const TRACKED_STEP_REFINEMENT_BUDGET = 16;
+const PREFETCH_FRAME_BUDGET_MS = 2;
+const PREFETCH_LOOKAHEAD_SECONDS = 0.5;
+const MIN_PREFETCH_ZOOM_VELOCITY = 0.05;
 
 interface HoveredPopulationCell {
   readonly max: number;
@@ -155,6 +159,13 @@ export function BirdsCanvas() {
     birds.getCacheUsage(),
   );
   const { measureFrame, performance } = useFramePerformance();
+  useBirdsViewportPrefetch(
+    birds,
+    resolution,
+    size,
+    state,
+    viewport.zoomVelocity,
+  );
 
   useEffect(() => {
     const context = prepareContext();
@@ -290,6 +301,158 @@ export function BirdsCanvas() {
       </ViewportFrame>
     </>
   );
+}
+
+function useBirdsViewportPrefetch(
+  birds: Birds,
+  resolution: BirdsPopulationResolution | undefined,
+  size: Size2D,
+  viewport: ViewportState,
+  zoomVelocity: number,
+): void {
+  const prefetchedRef = useRef<{
+    readonly birds: Birds;
+    readonly resolution: BirdsPopulationResolution;
+    readonly cells: Set<string>;
+  } | undefined>(undefined);
+
+  useEffect(() => {
+    if (
+      resolution === undefined ||
+      zoomVelocity >= -MIN_PREFETCH_ZOOM_VELOCITY
+    ) {
+      prefetchedRef.current = undefined;
+      return;
+    }
+    const nextResolution = birds.refinePopulationResolution(resolution);
+    if (nextResolution === undefined) return;
+    const projectedArea =
+      viewport.area *
+      Math.exp(Math.max(-10, zoomVelocity * PREFETCH_LOOKAHEAD_SECONDS));
+    const projectedWorld = worldDimensions(
+      size,
+      projectedArea,
+      TIME_ZOOM_EXPONENT,
+      TIME_WORLD_SCALE,
+    );
+    const projectedResolution = birdsRenderResolution(birds, size, projectedWorld);
+    if (
+      projectedResolution === undefined ||
+      projectedResolution.cellWidth >= resolution.cellWidth
+    ) {
+      return;
+    }
+
+    const transitionArea = populationResolutionTransitionArea(
+      birds,
+      size,
+      viewport.area,
+      projectedArea,
+      resolution,
+    );
+    const transitionWorld = worldDimensions(
+      size,
+      transitionArea,
+      TIME_ZOOM_EXPONENT,
+      TIME_WORLD_SCALE,
+    );
+    const cells = populationCellsInView(viewport, transitionWorld, nextResolution);
+    let record = prefetchedRef.current;
+    if (record?.birds !== birds || record.resolution.cellWidth !== nextResolution.cellWidth) {
+      record = { birds, resolution: nextResolution, cells: new Set() };
+      prefetchedRef.current = record;
+    }
+    const pending = cells.filter((cell) => !record.cells.has(populationCellKey(cell)));
+    let index = 0;
+    let animationFrame: number | undefined;
+    const prefetch = () => {
+      const start = performance.now();
+      do {
+        const cell = pending[index];
+        if (cell === undefined) return;
+        birds.queryPopulation({
+          min: cell.min,
+          max: cell.max,
+          time: cell.time,
+          resolution: nextResolution,
+        });
+        record.cells.add(populationCellKey(cell));
+        index += 1;
+      } while (performance.now() - start < PREFETCH_FRAME_BUDGET_MS);
+      animationFrame = requestAnimationFrame(prefetch);
+    };
+    animationFrame = requestAnimationFrame(prefetch);
+    return () => {
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+    };
+  }, [birds, resolution, size, viewport, zoomVelocity]);
+}
+
+function populationResolutionTransitionArea(
+  birds: Birds,
+  size: Size2D,
+  currentArea: number,
+  projectedArea: number,
+  currentResolution: BirdsPopulationResolution,
+): number {
+  let coarseLogArea = Math.log(currentArea);
+  let fineLogArea = Math.log(projectedArea);
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const candidateLogArea = (coarseLogArea + fineLogArea) / 2;
+    const candidateWorld = worldDimensions(
+      size,
+      Math.exp(candidateLogArea),
+      TIME_ZOOM_EXPONENT,
+      TIME_WORLD_SCALE,
+    );
+    const candidate = birdsRenderResolution(birds, size, candidateWorld);
+    if (candidate !== undefined && candidate.cellWidth < currentResolution.cellWidth) {
+      fineLogArea = candidateLogArea;
+    } else {
+      coarseLogArea = candidateLogArea;
+    }
+  }
+  return Math.exp(fineLogArea);
+}
+
+function populationCellsInView(
+  viewport: ViewportState,
+  world: Size2D,
+  resolution: BirdsPopulationResolution,
+): readonly HoveredPopulationCell[] {
+  const minX = viewport.centerX - world.width / 2;
+  const maxX = viewport.centerX + world.width / 2;
+  const minTime = viewport.centerY - world.height / 2;
+  const maxTime = viewport.centerY + world.height / 2;
+  const firstSpatialIndex = Math.floor(minX / resolution.cellWidth);
+  const finalSpatialIndex = Math.ceil(maxX / resolution.cellWidth);
+  const firstTimeIndex = Math.floor(minTime / resolution.timeStep);
+  const finalTimeIndex = Math.ceil(maxTime / resolution.timeStep);
+  const centerSpatialIndex = viewport.centerX / resolution.cellWidth;
+  const centerTimeIndex = viewport.centerY / resolution.timeStep;
+  const cells: HoveredPopulationCell[] = [];
+  for (let timeIndex = firstTimeIndex; timeIndex <= finalTimeIndex; timeIndex += 1) {
+    for (
+      let spatialIndex = firstSpatialIndex;
+      spatialIndex < finalSpatialIndex;
+      spatialIndex += 1
+    ) {
+      cells.push(populationCellAt(spatialIndex, timeIndex, resolution));
+    }
+  }
+  return cells.sort((left, right) => {
+    const leftDistance =
+      Math.abs((left.min + left.max) / (2 * resolution.cellWidth) - centerSpatialIndex) +
+      Math.abs(left.time / resolution.timeStep - centerTimeIndex);
+    const rightDistance =
+      Math.abs((right.min + right.max) / (2 * resolution.cellWidth) - centerSpatialIndex) +
+      Math.abs(right.time / resolution.timeStep - centerTimeIndex);
+    return leftDistance - rightDistance;
+  });
+}
+
+function populationCellKey(cell: HoveredPopulationCell): string {
+  return `${cell.min}:${cell.max}@${cell.time}`;
 }
 
 function buildTrackedTrajectory(
