@@ -1,4 +1,5 @@
-import { LRUCache } from 'lru-cache';
+import QuickLRU from 'quick-lru';
+import type { BirdsCacheProfiler } from './cacheProfiling';
 import { binomial } from '../../utils/distributions/binomial';
 import { hypergeometric } from '../../utils/distributions/hypergeometric';
 import { multinomial } from '../../utils/distributions/multinomial';
@@ -123,6 +124,7 @@ interface MutableStats {
 }
 
 export interface BirdsEngineOptions {
+  readonly cacheProfiler?: BirdsCacheProfiler;
   readonly flowCacheCapacity?: number;
   readonly temporalBatchCacheCapacity?: number;
   readonly cellCacheCapacity?: number;
@@ -138,14 +140,16 @@ export class BirdsEngine {
   readonly #diffusionRate: number;
   readonly #initialization: BirdsCoarseInitialization;
   readonly #random: AddressedRandom;
-  readonly #flowCache: LRUCache<string, number>;
-  readonly #temporalBatchCache: LRUCache<string, TemporalSubdivisionResult>;
-  readonly #cellCache: LRUCache<string, number>;
-  readonly #cellSubdivisionCache: LRUCache<string, CellSubdivisionResult>;
-  readonly #cellOutflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
-  readonly #cellInflowSubdivisionCache: LRUCache<string, CellIncidenceSubdivisionResult>;
-  readonly #flowSpaceSubdivisionCache: LRUCache<string, FlowSpaceSubdivisionResult>;
+  readonly #flowCache: QuickLRU<string, number>;
+  readonly #temporalBatchCache: QuickLRU<string, TemporalSubdivisionResult>;
+  readonly #cellCache: QuickLRU<string, number>;
+  readonly #cellSubdivisionCache: QuickLRU<string, CellSubdivisionResult>;
+  readonly #cellOutflowSubdivisionCache: QuickLRU<string, CellIncidenceSubdivisionResult>;
+  readonly #cellInflowSubdivisionCache: QuickLRU<string, CellIncidenceSubdivisionResult>;
+  readonly #flowSpaceSubdivisionCache: QuickLRU<string, FlowSpaceSubdivisionResult>;
+  readonly #cacheCapacity: number;
   readonly #observeDependency: ((edge: BirdsDependencyEdge) => void) | undefined;
+  readonly #cacheProfiler: BirdsCacheProfiler | undefined;
   #lastQueryStats: BirdsEngineStats = emptyStats();
   #totalQueryStats: BirdsEngineStats = emptyStats();
 
@@ -162,29 +166,39 @@ export class BirdsEngine {
     );
     this.#random = createAddressedRandom(seed);
     this.#observeDependency = options.observeDependency;
-    this.#flowCache = new LRUCache({
-      max: options.flowCacheCapacity ?? BIRDS_FLOW_CACHE_CAPACITY,
+    this.#cacheProfiler = options.cacheProfiler;
+    this.#flowCache = new QuickLRU({
+      maxSize: options.flowCacheCapacity ?? BIRDS_FLOW_CACHE_CAPACITY,
     });
-    this.#temporalBatchCache = new LRUCache({
-      max: options.temporalBatchCacheCapacity ?? BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY,
+    this.#temporalBatchCache = new QuickLRU({
+      maxSize: options.temporalBatchCacheCapacity ?? BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY,
     });
-    this.#cellCache = new LRUCache({
-      max: options.cellCacheCapacity ?? BIRDS_CELL_CACHE_CAPACITY,
+    this.#cellCache = new QuickLRU({
+      maxSize: options.cellCacheCapacity ?? BIRDS_CELL_CACHE_CAPACITY,
     });
-    this.#cellSubdivisionCache = new LRUCache({
-      max: options.cellSubdivisionCacheCapacity ?? BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY,
+    this.#cellSubdivisionCache = new QuickLRU({
+      maxSize: options.cellSubdivisionCacheCapacity ?? BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY,
     });
-    this.#cellOutflowSubdivisionCache = new LRUCache({
-      max: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
+    this.#cellOutflowSubdivisionCache = new QuickLRU({
+      maxSize: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
     });
-    this.#cellInflowSubdivisionCache = new LRUCache({
-      max: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
+    this.#cellInflowSubdivisionCache = new QuickLRU({
+      maxSize: options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY,
     });
-    this.#flowSpaceSubdivisionCache = new LRUCache({
-      max:
+    this.#flowSpaceSubdivisionCache = new QuickLRU({
+      maxSize:
         options.flowReconciliationCacheCapacity ??
         BIRDS_FLOW_RECONCILIATION_CACHE_CAPACITY,
     });
+    this.#cacheCapacity =
+      2 *
+      ((options.flowCacheCapacity ?? BIRDS_FLOW_CACHE_CAPACITY) +
+        (options.temporalBatchCacheCapacity ?? BIRDS_TEMPORAL_BATCH_CACHE_CAPACITY) +
+        (options.cellCacheCapacity ?? BIRDS_CELL_CACHE_CAPACITY) +
+        (options.cellSubdivisionCacheCapacity ?? BIRDS_CELL_SUBDIVISION_CACHE_CAPACITY) +
+        2 * (options.cellIncidenceCacheCapacity ?? BIRDS_CELL_INCIDENCE_CACHE_CAPACITY) +
+        (options.flowReconciliationCacheCapacity ??
+          BIRDS_FLOW_RECONCILIATION_CACHE_CAPACITY));
   }
 
   queryCell(cell: BirdCell): number {
@@ -277,14 +291,7 @@ export class BirdsEngine {
     readonly entries: number;
   } {
     return {
-      capacity:
-        this.#flowCache.max +
-        this.#temporalBatchCache.max +
-        this.#cellCache.max +
-        this.#cellSubdivisionCache.max +
-        this.#cellOutflowSubdivisionCache.max +
-        this.#cellInflowSubdivisionCache.max +
-        this.#flowSpaceSubdivisionCache.max,
+      capacity: this.#cacheCapacity,
       entries:
         this.#flowCache.size +
         this.#temporalBatchCache.size +
@@ -312,8 +319,12 @@ export class BirdsEngine {
     const construction = classifyCell(cell);
     if (construction === undefined) throw new RangeError('Invalid Birds cell geometry');
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = cellKey(cell);
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('cell', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellCache.get(key);
+    if (getStart !== undefined) this.#cacheProfiler!.recordGet('cell', getStart, cached !== undefined);
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -353,7 +364,9 @@ export class BirdsEngine {
       }
     }
 
+    const setStart = this.#cacheProfiler?.start();
     this.#cellCache.set(key, count);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('cell', setStart);
     return count;
   }
 
@@ -364,8 +377,12 @@ export class BirdsEngine {
     if (construction === undefined) throw new RangeError('Invalid Birds flow geometry');
     if (!isPossibleFlow(flow, this.#diffusionRate)) return 0;
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = flowKey(flow);
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('flow', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#flowCache.get(key);
+    if (getStart !== undefined) this.#cacheProfiler!.recordGet('flow', getStart, cached !== undefined);
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -432,7 +449,9 @@ export class BirdsEngine {
       }
     }
 
+    const setStart = this.#cacheProfiler?.start();
     this.#flowCache.set(key, count);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('flow', setStart);
     return count;
   }
 
@@ -466,8 +485,14 @@ export class BirdsEngine {
       throw new RangeError('Flow does not own a Birds temporal subdivision');
     }
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = temporalBatchKey(flow);
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('temporal-batch', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#temporalBatchCache.get(key);
+    if (getStart !== undefined) {
+      this.#cacheProfiler!.recordGet('temporal-batch', getStart, cached !== undefined);
+    }
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -496,7 +521,9 @@ export class BirdsEngine {
         count: counts[index],
       })),
     };
+    const setStart = this.#cacheProfiler?.start();
     this.#temporalBatchCache.set(key, result);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('temporal-batch', setStart);
     return result;
   }
 
@@ -512,8 +539,14 @@ export class BirdsEngine {
       throw new RangeError('Cell does not own a Birds spatial subdivision');
     }
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = `cell-subdivision:${cellKey(cell)}`;
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('cell-subdivision', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellSubdivisionCache.get(key);
+    if (getStart !== undefined) {
+      this.#cacheProfiler!.recordGet('cell-subdivision', getStart, cached !== undefined);
+    }
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -535,7 +568,9 @@ export class BirdsEngine {
         { cell: owner.children[1], count: parentCount - leftCount },
       ],
     };
+    const setStart = this.#cacheProfiler?.start();
     this.#cellSubdivisionCache.set(key, result);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('cell-subdivision', setStart);
     return result;
   }
 
@@ -551,8 +586,14 @@ export class BirdsEngine {
       throw new RangeError('Cell does not own a Birds outflow subdivision');
     }
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = `outflow-subdivision:${cellKey(cell)}`;
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('outflow-subdivision', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellOutflowSubdivisionCache.get(key);
+    if (getStart !== undefined) {
+      this.#cacheProfiler!.recordGet('outflow-subdivision', getStart, cached !== undefined);
+    }
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -590,7 +631,9 @@ export class BirdsEngine {
       });
     }
     const result = { parentCellCount: subdivision.parentCount, entries };
+    const setStart = this.#cacheProfiler?.start();
     this.#cellOutflowSubdivisionCache.set(key, result);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('outflow-subdivision', setStart);
     return result;
   }
 
@@ -606,8 +649,14 @@ export class BirdsEngine {
       throw new RangeError('Cell does not own a Birds inflow subdivision');
     }
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = `inflow-subdivision:${cellKey(cell)}`;
+    if (keyStart !== undefined) this.#cacheProfiler!.recordKey('inflow-subdivision', keyStart);
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#cellInflowSubdivisionCache.get(key);
+    if (getStart !== undefined) {
+      this.#cacheProfiler!.recordGet('inflow-subdivision', getStart, cached !== undefined);
+    }
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -645,7 +694,9 @@ export class BirdsEngine {
       });
     }
     const result = { parentCellCount: subdivision.parentCount, entries };
+    const setStart = this.#cacheProfiler?.start();
     this.#cellInflowSubdivisionCache.set(key, result);
+    if (setStart !== undefined) this.#cacheProfiler!.recordSet('inflow-subdivision', setStart);
     return result;
   }
 
@@ -661,8 +712,16 @@ export class BirdsEngine {
       throw new RangeError('Flow does not own a Birds spatial subdivision');
     }
 
+    const keyStart = this.#cacheProfiler?.start();
     const key = `flow-space-subdivision:${flowKey(flow)}`;
+    if (keyStart !== undefined) {
+      this.#cacheProfiler!.recordKey('flow-space-subdivision', keyStart);
+    }
+    const getStart = this.#cacheProfiler?.start();
     const cached = this.#flowSpaceSubdivisionCache.get(key);
+    if (getStart !== undefined) {
+      this.#cacheProfiler!.recordGet('flow-space-subdivision', getStart, cached !== undefined);
+    }
     if (cached !== undefined) {
       stats.cacheHits += 1;
       return cached;
@@ -712,7 +771,11 @@ export class BirdsEngine {
         { flow: owner.childFlows[3], count: counts[3] },
       ],
     };
+    const setStart = this.#cacheProfiler?.start();
     this.#flowSpaceSubdivisionCache.set(key, result);
+    if (setStart !== undefined) {
+      this.#cacheProfiler!.recordSet('flow-space-subdivision', setStart);
+    }
     return result;
   }
 

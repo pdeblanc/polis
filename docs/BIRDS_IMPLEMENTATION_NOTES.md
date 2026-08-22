@@ -347,3 +347,44 @@ concentrated in `classifyFlowFromValidCells` (`30`), `classifyFlow` (`27`),
 `classifyCellGeometry` (`16`), `classifyTwoStageFlow` (`13`), and
 `classifyFlowTimeSubdivisionOwner` (`10`). This leaves LRU activity and motion-support
 construction as larger targets than classification in this workload.
+
+Cache profiling now separates string-key construction, LRU lookup, and insertion for the
+cell, flow, temporal-batch, cell-subdivision, outflow-subdivision,
+inflow-subdivision, and flow-space-subdivision caches. It records hit and miss counts by
+family and is enabled only for profiled engines. On the calibrated cold-flow workloads,
+the complete cache system occupied about `11.4%` at epoch 2 with `D = 0.5`, `12.8%` at
+epoch 3 with `D = 0.5`, and `12.1%` at epoch 2 with `D = 2`. Instrumented query time was
+within roughly `0–6%` of the separate baseline for these substantial queries.
+
+The temporal-batch cache accounted for about `63–73%` of measured cache time. Its hit
+rate was high (`80.5–88.3%`), but it was consulted far more often than any other cache:
+`4,067`, `10,040`, and `20,632` lookups in the three cases. Within this family, LRU
+lookup took about `59–61%` of cache time, key construction about `32–33%`, and insertion
+about `6–10%`. Avoiding repeated requests for an already-known temporal batch may
+therefore be more valuable than changing its eviction policy.
+
+The flow cache was the second-largest family at roughly `22‒7%` of cache time. Its hit
+rate was low (`9.6–13.5%`) in cold recursive queries, and misses require both a lookup and
+later insertion. Other cache families were individually small; incidence and
+flow-reconciliation caches had good hit rates, while cell and cell-subdivision caches had
+few hits in these particular single-query workloads. Across all families, string-key
+construction is material but ordinary LRU operations remain the larger component. Once
+a complete query is warm, the root flow-cache hit reduces it to one key construction and
+one lookup, with no recursive or distribution work.
+
+The cache-library comparison exercised `lru-cache`, `quick-lru`, `tiny-lru`, Mnemonist,
+and a bounded `Map` FIFO using complete Birds flow queries. With caches below capacity,
+results were close and workload-dependent; `quick-lru` was generally about `0–8%` faster.
+Under constrained capacities, ordinary `quick-lru` was about `15%` faster at epoch 3 with
+`D = 0.5` and `10%` faster at epoch 2 with `D = 2`, despite recording fewer cache hits.
+The other strict-capacity candidates ranged from about `2%` faster to `3%` slower. A
+half-sized `quick-lru` configuration that forced its two generations under the old hard
+bound was `6–21%` slower and was rejected.
+
+The Birds engine therefore uses `quick-lru` as its default cache. Its `maxSize` is a target:
+the two-generation algorithm can retain up to twice that number of entries. Cache usage
+reports this honest worst-case capacity, and tests accept the same bound. This is an
+intentional memory-for-throughput tradeoff following the decision that exact LRU policy
+is not required. The temporary comparison harness and rejected candidate dependencies
+were removed after recording these results. String-key construction remains the next
+cache optimization target.

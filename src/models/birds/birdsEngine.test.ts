@@ -496,7 +496,7 @@ describe('BirdsEngine spatial flow Stages G1-G2-H', () => {
     for (const candidate of [...flows].reverse()) {
       expect(evicting.queryFlow(candidate)).toBe(expected.get(JSON.stringify(candidate)));
     }
-    expect(evicting.getCacheUsage().entries).toBeLessThanOrEqual(7);
+    expect(evicting.getCacheUsage().entries).toBeLessThanOrEqual(14);
   });
 });
 
