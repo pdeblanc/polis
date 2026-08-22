@@ -5,6 +5,9 @@ import {
   clearBirdsMotionSupportCache,
   constructBirdsMotionSupport,
   isPossibleFlow,
+  possibleCanonicalFlowDestinations,
+  possibleCanonicalFlowSources,
+  possibleCanonicalParentFlows,
   possibleFlowDestinations,
   possibleFlowSources,
   possibleMidpointCells,
@@ -38,6 +41,40 @@ function containsCell(cells: readonly BirdCell[], target: BirdCell): boolean {
       candidate.time === target.time,
   );
 }
+
+describe('canonical motion support', () => {
+  it('matches validated enumeration for legal hierarchy cells and flows', () => {
+    for (const epoch of [0, 1, 2, 3]) {
+      const scale = birdsScale(epoch)!;
+      const source = cell(epoch, -2, 0);
+      for (const duration of [
+        scale.flowDuration,
+        scale.halfFlowDuration,
+        scale.nextFlowDuration,
+      ]) {
+        expect(possibleCanonicalFlowDestinations(source, duration, 0.5)).toEqual(
+          possibleFlowDestinations(source, duration, 0.5),
+        );
+        const destination = cell(epoch, 2, duration);
+        expect(possibleCanonicalFlowSources(destination, duration, 0.5)).toEqual(
+          possibleFlowSources(destination, duration, 0.5),
+        );
+      }
+
+      const midpoint = possibleFlowDestinations(
+        source,
+        scale.halfFlowDuration,
+        0.5,
+      )[0];
+      if (midpoint !== undefined) {
+        const leg = { source, destination: midpoint };
+        expect(possibleCanonicalParentFlows(leg, 0.5)).toEqual(
+          possibleParentFlows(leg, 0.5),
+        );
+      }
+    }
+  });
+});
 
 function containsFlow(flows: readonly BirdFlow[], target: BirdFlow): boolean {
   return flows.some(

@@ -121,7 +121,43 @@ export function possibleCanonicalParentFlows(
   flow: BirdFlow,
   diffusionRate: number,
 ): readonly BirdFlow[] {
-  return possibleParentFlowsInternal(flow, diffusionRate, true);
+  const construction = classifyCanonicalFlow(flow);
+  if (
+    construction?.kind !== 'temporal-aggregation' ||
+    !isPossibleCanonicalFlow(flow, diffusionRate)
+  ) {
+    return [];
+  }
+
+  const support = getMotionSupport(diffusionRate);
+  const normalizedDuration = construction.stage === 'B' ? 1 : 0.5;
+  const parents: BirdFlow[] = [];
+  if (construction.leg === 'first') {
+    for (const destination of possibleCanonicalFlowDestinations(
+      flow.source,
+      construction.parentDuration,
+      diffusionRate,
+    )) {
+      if (cellLength(destination) !== cellLength(flow.source)) continue;
+      const parent = { source: flow.source, destination };
+      if (hasMidpointCell(parent, flow.destination, normalizedDuration, support)) {
+        parents.push(parent);
+      }
+    }
+  } else {
+    for (const source of possibleCanonicalFlowSources(
+      flow.destination,
+      construction.parentDuration,
+      diffusionRate,
+    )) {
+      if (cellLength(source) !== cellLength(flow.destination)) continue;
+      const parent = { source, destination: flow.destination };
+      if (hasMidpointCell(parent, flow.source, normalizedDuration, support)) {
+        parents.push(parent);
+      }
+    }
+  }
+  return parents.sort(compareFlows);
 }
 
 function possibleParentFlowsInternal(
@@ -195,7 +231,38 @@ export function possibleCanonicalFlowDestinations(
   duration: number,
   diffusionRate: number,
 ): readonly BirdCell[] {
-  return possibleFlowDestinationsInternal(source, duration, diffusionRate, true);
+  const epoch = Math.log2(BIRDS_COARSE_CELL_LENGTH / cellLength(source));
+  const scale = birdsScale(epoch)!;
+  const sourceIndex = spatialIndex(source);
+  const destinationTime = source.time + duration;
+  const support = getMotionSupport(diffusionRate);
+  const candidates = equalResolutionOffsets(
+    epoch,
+    source.time,
+    duration,
+    scale,
+    support,
+  ).map((offset) => indexedCell(sourceIndex + offset, scale.cellLength, destinationTime));
+
+  if (duration === scale.nextFlowDuration) {
+    candidates.push(...support.quarterDurationOffsets.flatMap((offset) => {
+      const parentDestinationIndex = sourceIndex + offset;
+      return [
+        indexedCell(2 * parentDestinationIndex, scale.childCellLength, destinationTime),
+        indexedCell(2 * parentDestinationIndex + 1, scale.childCellLength, destinationTime),
+      ];
+    }));
+  }
+
+  if (epoch > 0 && duration === scale.flowDuration) {
+    const parentScale = birdsScale(epoch - 1)!;
+    const parentSourceIndex = Math.floor(sourceIndex / 2);
+    candidates.push(...support.quarterDurationOffsets.map((offset) =>
+      indexedCell(parentSourceIndex + offset, parentScale.cellLength, destinationTime),
+    ));
+  }
+
+  return candidates.sort(compareCells);
 }
 
 function possibleFlowDestinationsInternal(
@@ -268,7 +335,38 @@ export function possibleCanonicalFlowSources(
   duration: number,
   diffusionRate: number,
 ): readonly BirdCell[] {
-  return possibleFlowSourcesInternal(destination, duration, diffusionRate, true);
+  const epoch = Math.log2(BIRDS_COARSE_CELL_LENGTH / cellLength(destination));
+  const scale = birdsScale(epoch)!;
+  const destinationIndex = spatialIndex(destination);
+  const sourceTime = destination.time - duration;
+  const support = getMotionSupport(diffusionRate);
+  const candidates = equalResolutionOffsets(
+    epoch,
+    sourceTime,
+    duration,
+    scale,
+    support,
+  ).map((offset) => indexedCell(destinationIndex - offset, scale.cellLength, sourceTime));
+
+  if (duration === scale.nextFlowDuration) {
+    candidates.push(...support.quarterDurationOffsets.flatMap((offset) => {
+      const parentSourceIndex = destinationIndex - offset;
+      return [
+        indexedCell(2 * parentSourceIndex, scale.childCellLength, sourceTime),
+        indexedCell(2 * parentSourceIndex + 1, scale.childCellLength, sourceTime),
+      ];
+    }));
+  }
+
+  if (epoch > 0 && duration === scale.flowDuration) {
+    const parentScale = birdsScale(epoch - 1)!;
+    const parentDestinationIndex = Math.floor(destinationIndex / 2);
+    candidates.push(...support.quarterDurationOffsets.map((offset) =>
+        indexedCell(parentDestinationIndex - offset, parentScale.cellLength, sourceTime),
+    ));
+  }
+
+  return candidates.sort(compareCells);
 }
 
 function possibleFlowSourcesInternal(
@@ -542,6 +640,22 @@ function containsCell(cells: readonly BirdCell[], target: BirdCell): boolean {
   return cells.some(
     (cell) => cell.min === target.min && cell.max === target.max && cell.time === target.time,
   );
+}
+
+function hasMidpointCell(
+  parent: BirdFlow,
+  midpoint: BirdCell,
+  normalizedDuration: NormalizedDuration,
+  support: InternalMotionSupport,
+): boolean {
+  const sourceIndex = spatialIndex(parent.source);
+  const flowOffset = spatialIndex(parent.destination) - sourceIndex;
+  const midpointOffset = spatialIndex(midpoint) - sourceIndex;
+  return midpointKernelForFlow(
+    support.midpointKernels,
+    flowOffset,
+    normalizedDuration,
+  ).some(({ value }) => value === midpointOffset);
 }
 
 function sorted(values: ReadonlySet<number>): readonly number[] {
