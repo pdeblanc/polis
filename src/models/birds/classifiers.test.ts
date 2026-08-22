@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { BirdCell, BirdFlow, BirdTwoStageFlow } from './entities';
 import {
+  classifyCanonicalCell,
+  classifyCanonicalFlow,
+  classifyCanonicalTwoStageFlow,
   classifyCell,
   classifyFlow,
   classifyTwoStageFlow,
@@ -260,5 +263,33 @@ describe('classifyTwoStageFlow', () => {
         midpoint: cell(1, 0, scale.halfFlowDuration),
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('canonical classifiers', () => {
+  it('agree with validated classifiers for legal hierarchy objects', () => {
+    for (const epoch of [0, 1, 2, 3]) {
+      const scale = birdsScale(epoch)!;
+      const legalCell = cell(epoch, -3, -scale.flowDuration);
+      const legalFlow = flow(
+        epoch,
+        -3,
+        epoch,
+        2,
+        -scale.flowDuration,
+        scale.flowDuration,
+      );
+      const twoStage: BirdTwoStageFlow = {
+        source: legalFlow.source,
+        midpoint: cell(epoch, 0, -scale.flowDuration / 2),
+        destination: legalFlow.destination,
+      };
+
+      expect(classifyCanonicalCell(legalCell)).toEqual(classifyCell(legalCell));
+      expect(classifyCanonicalFlow(legalFlow)).toEqual(classifyFlow(legalFlow));
+      expect(classifyCanonicalTwoStageFlow(twoStage)).toEqual(
+        classifyTwoStageFlow(twoStage),
+      );
+    }
   });
 });

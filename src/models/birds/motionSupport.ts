@@ -1,6 +1,6 @@
 import { LRUCache } from 'lru-cache';
 import { roundedNormal } from '../../utils/distributions/roundedNormal';
-import { classifyCell, classifyFlow } from './classifiers';
+import { classifyCanonicalFlow, classifyCell, classifyFlow } from './classifiers';
 import { cellLength, type BirdCell, type BirdFlow } from './entities';
 import {
   createMidpointKernels,
@@ -8,8 +8,11 @@ import {
   type MidpointKernels,
   type NormalizedDuration,
 } from './midpointKernels';
-import { classifyFlowTimeSubdivisionOwner } from './ownerClassifiers';
-import { birdsScale, epochForCellLength } from './scales';
+import {
+  classifyCanonicalFlowTimeSubdivisionOwner,
+  classifyFlowTimeSubdivisionOwner,
+} from './ownerClassifiers';
+import { BIRDS_COARSE_CELL_LENGTH, birdsScale, epochForCellLength } from './scales';
 
 export const BIRDS_MOTION_SUPPORT_CACHE_CAPACITY = 32;
 
@@ -56,13 +59,37 @@ export function possibleMidpointCells(
   return midpointCellProbabilities(flow, diffusionRate).map(({ cell }) => cell);
 }
 
+export function possibleCanonicalMidpointCells(
+  flow: BirdFlow,
+  diffusionRate: number,
+): readonly BirdCell[] {
+  return midpointCellProbabilitiesInternal(flow, diffusionRate, true).map(({ cell }) => cell);
+}
+
 /** Returns the canonical midpoint categories and probabilities owned by a flow. */
 export function midpointCellProbabilities(
   flow: BirdFlow,
   diffusionRate: number,
 ): readonly MidpointCellProbability[] {
-  const owner = classifyFlowTimeSubdivisionOwner(flow);
-  if (owner === undefined || !isPossibleFlow(flow, diffusionRate)) return [];
+  return midpointCellProbabilitiesInternal(flow, diffusionRate, false);
+}
+
+export function canonicalMidpointCellProbabilities(
+  flow: BirdFlow,
+  diffusionRate: number,
+): readonly MidpointCellProbability[] {
+  return midpointCellProbabilitiesInternal(flow, diffusionRate, true);
+}
+
+function midpointCellProbabilitiesInternal(
+  flow: BirdFlow,
+  diffusionRate: number,
+  canonical: boolean,
+): readonly MidpointCellProbability[] {
+  const owner = canonical
+    ? classifyCanonicalFlowTimeSubdivisionOwner(flow)
+    : classifyFlowTimeSubdivisionOwner(flow);
+  if (owner === undefined || !isPossibleFlowInternal(flow, diffusionRate, canonical)) return [];
 
   const support = getMotionSupport(diffusionRate);
   const sourceIndex = spatialIndex(flow.source);
@@ -87,10 +114,25 @@ export function possibleParentFlows(
   flow: BirdFlow,
   diffusionRate: number,
 ): readonly BirdFlow[] {
-  const construction = classifyFlow(flow);
+  return possibleParentFlowsInternal(flow, diffusionRate, false);
+}
+
+export function possibleCanonicalParentFlows(
+  flow: BirdFlow,
+  diffusionRate: number,
+): readonly BirdFlow[] {
+  return possibleParentFlowsInternal(flow, diffusionRate, true);
+}
+
+function possibleParentFlowsInternal(
+  flow: BirdFlow,
+  diffusionRate: number,
+  canonical: boolean,
+): readonly BirdFlow[] {
+  const construction = canonical ? classifyCanonicalFlow(flow) : classifyFlow(flow);
   if (
     construction?.kind !== 'temporal-aggregation' ||
-    !isPossibleFlow(flow, diffusionRate)
+    !isPossibleFlowInternal(flow, diffusionRate, canonical)
   ) {
     return [];
   }
@@ -98,27 +140,39 @@ export function possibleParentFlows(
   const parents: BirdFlow[] = [];
   if (construction.leg === 'first') {
     const source = flow.source;
-    for (const destination of possibleFlowDestinations(
+    for (const destination of possibleFlowDestinationsInternal(
       source,
       construction.parentDuration,
       diffusionRate,
+      canonical,
     )) {
       if (cellLength(destination) !== cellLength(source)) continue;
       const parent = { source, destination };
-      if (containsCell(possibleMidpointCells(parent, diffusionRate), flow.destination)) {
+      if (containsCell(
+        canonical
+          ? possibleCanonicalMidpointCells(parent, diffusionRate)
+          : possibleMidpointCells(parent, diffusionRate),
+        flow.destination,
+      )) {
         parents.push(parent);
       }
     }
   } else {
     const destination = flow.destination;
-    for (const source of possibleFlowSources(
+    for (const source of possibleFlowSourcesInternal(
       destination,
       construction.parentDuration,
       diffusionRate,
+      canonical,
     )) {
       if (cellLength(source) !== cellLength(destination)) continue;
       const parent = { source, destination };
-      if (containsCell(possibleMidpointCells(parent, diffusionRate), flow.source)) {
+      if (containsCell(
+        canonical
+          ? possibleCanonicalMidpointCells(parent, diffusionRate)
+          : possibleMidpointCells(parent, diffusionRate),
+        flow.source,
+      )) {
         parents.push(parent);
       }
     }
@@ -133,9 +187,32 @@ export function possibleFlowDestinations(
   duration: number,
   diffusionRate: number,
 ): readonly BirdCell[] {
-  const epoch = epochForCellLength(cellLength(source));
+  return possibleFlowDestinationsInternal(source, duration, diffusionRate, false);
+}
+
+export function possibleCanonicalFlowDestinations(
+  source: BirdCell,
+  duration: number,
+  diffusionRate: number,
+): readonly BirdCell[] {
+  return possibleFlowDestinationsInternal(source, duration, diffusionRate, true);
+}
+
+function possibleFlowDestinationsInternal(
+  source: BirdCell,
+  duration: number,
+  diffusionRate: number,
+  canonical: boolean,
+): readonly BirdCell[] {
+  const epoch = canonical
+    ? Math.log2(BIRDS_COARSE_CELL_LENGTH / cellLength(source))
+    : epochForCellLength(cellLength(source));
   const scale = epoch === undefined ? undefined : birdsScale(epoch);
-  if (epoch === undefined || scale === undefined || classifyCell(source) === undefined) return [];
+  if (
+    epoch === undefined ||
+    scale === undefined ||
+    (!canonical && classifyCell(source) === undefined)
+  ) return [];
 
   const candidates: BirdCell[] = [];
   const sourceIndex = spatialIndex(source);
@@ -172,7 +249,7 @@ export function possibleFlowDestinations(
 
   return uniqueCells(
     candidates.filter((destination) =>
-      isPossibleFlow({ source, destination }, diffusionRate),
+      isPossibleFlowInternal({ source, destination }, diffusionRate, canonical),
     ),
   );
 }
@@ -183,12 +260,31 @@ export function possibleFlowSources(
   duration: number,
   diffusionRate: number,
 ): readonly BirdCell[] {
-  const epoch = epochForCellLength(cellLength(destination));
+  return possibleFlowSourcesInternal(destination, duration, diffusionRate, false);
+}
+
+export function possibleCanonicalFlowSources(
+  destination: BirdCell,
+  duration: number,
+  diffusionRate: number,
+): readonly BirdCell[] {
+  return possibleFlowSourcesInternal(destination, duration, diffusionRate, true);
+}
+
+function possibleFlowSourcesInternal(
+  destination: BirdCell,
+  duration: number,
+  diffusionRate: number,
+  canonical: boolean,
+): readonly BirdCell[] {
+  const epoch = canonical
+    ? Math.log2(BIRDS_COARSE_CELL_LENGTH / cellLength(destination))
+    : epochForCellLength(cellLength(destination));
   const scale = epoch === undefined ? undefined : birdsScale(epoch);
   if (
     epoch === undefined ||
     scale === undefined ||
-    classifyCell(destination) === undefined
+    (!canonical && classifyCell(destination) === undefined)
   ) {
     return [];
   }
@@ -226,14 +322,26 @@ export function possibleFlowSources(
 
   return uniqueCells(
     candidates.filter((source) =>
-      isPossibleFlow({ source, destination }, diffusionRate),
+      isPossibleFlowInternal({ source, destination }, diffusionRate, canonical),
     ),
   );
 }
 
 /** Returns false for both invalid flow geometry and legal flows outside finite support. */
 export function isPossibleFlow(flow: BirdFlow, diffusionRate: number): boolean {
-  const construction = classifyFlow(flow);
+  return isPossibleFlowInternal(flow, diffusionRate, false);
+}
+
+export function isPossibleCanonicalFlow(flow: BirdFlow, diffusionRate: number): boolean {
+  return isPossibleFlowInternal(flow, diffusionRate, true);
+}
+
+function isPossibleFlowInternal(
+  flow: BirdFlow,
+  diffusionRate: number,
+  canonical: boolean,
+): boolean {
+  const construction = canonical ? classifyCanonicalFlow(flow) : classifyFlow(flow);
   if (construction === undefined) return false;
   const support = getMotionSupport(diffusionRate);
 

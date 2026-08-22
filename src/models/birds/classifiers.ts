@@ -7,6 +7,7 @@ import {
 import {
   BIRDS_COARSE_CELL_LENGTH,
   BIRDS_COARSE_FLOW_DURATION,
+  birdsScale,
   euclideanModulo,
   type BirdsScale,
 } from './scales';
@@ -116,7 +117,15 @@ export function classifyCell(cell: BirdCell): CellConstruction | undefined {
   if (scale === undefined || !Number.isInteger(cell.time / scale.nextFlowDuration)) {
     return undefined;
   }
+  return classifyCellAtScale(cell, scale);
+}
 
+/** Classifies a cell already known to be canonical hierarchy geometry. */
+export function classifyCanonicalCell(cell: BirdCell): CellConstruction {
+  return classifyCellAtScale(cell, canonicalCellScale(cell));
+}
+
+function classifyCellAtScale(cell: BirdCell, scale: BirdsScale): CellConstruction {
   if (scale.epoch === 0 && Number.isInteger(cell.time / scale.flowDuration)) {
     return {
       kind: 'coarse-initialized',
@@ -171,6 +180,16 @@ export function classifyFlow(flow: BirdFlow): FlowConstruction | undefined {
   }
 
   return classifyFlowFromValidCells(flow, sourceScale, destinationScale, duration);
+}
+
+/** Classifies a flow whose endpoints and temporal alignment are already known to be canonical. */
+export function classifyCanonicalFlow(flow: BirdFlow): FlowConstruction | undefined {
+  return classifyFlowFromValidCells(
+    flow,
+    canonicalCellScale(flow.source),
+    canonicalCellScale(flow.destination),
+    flowDuration(flow),
+  );
 }
 
 function classifyFlowFromValidCells(
@@ -326,11 +345,19 @@ export function classifyTwoStageFlow(
     return undefined;
   }
 
+  return classifyTwoStageFlowFromValidGeometry(flow, sourceScale, duration);
+}
+
+function classifyTwoStageFlowFromValidGeometry(
+  flow: BirdTwoStageFlow,
+  sourceScale: BirdsScale,
+  duration: number,
+): TwoStageFlowConstruction | undefined {
   const parentFlow = { source: flow.source, destination: flow.destination };
   const parentConstruction = classifyFlowFromValidCells(
     parentFlow,
     sourceScale,
-    destinationScale,
+    sourceScale,
     duration,
   );
   if (duration === sourceScale.flowDuration && isEntryFlow(parentConstruction)) {
@@ -361,6 +388,15 @@ export function classifyTwoStageFlow(
   return undefined;
 }
 
+/** Classifies a two-stage flow already known to be canonical hierarchy geometry. */
+export function classifyCanonicalTwoStageFlow(
+  flow: BirdTwoStageFlow,
+): TwoStageFlowConstruction | undefined {
+  const sourceScale = canonicalCellScale(flow.source);
+  const duration = flow.destination.time - flow.source.time;
+  return classifyTwoStageFlowFromValidGeometry(flow, sourceScale, duration);
+}
+
 function classifyCellGeometry(cell: BirdCell): BirdsScale | undefined {
   const length = cell.max - cell.min;
   if (!Number.isFinite(length) || length <= 0 || !Number.isFinite(cell.time)) {
@@ -389,6 +425,11 @@ function classifyCellGeometry(cell: BirdCell): BirdsScale | undefined {
     halfFlowDuration: flowDuration / 2,
     nextFlowDuration: flowDuration / 4,
   };
+}
+
+function canonicalCellScale(cell: BirdCell): BirdsScale {
+  const epoch = Math.log2(BIRDS_COARSE_CELL_LENGTH / (cell.max - cell.min));
+  return birdsScale(epoch)!;
 }
 
 function isEntryFlow(construction: FlowConstruction | undefined): boolean {

@@ -9,7 +9,14 @@ import {
   type AddressedRandom,
   type Seed,
 } from '../../utils/rng/addressedRandom';
-import { classifyCell, classifyFlow, classifyTwoStageFlow } from './classifiers';
+import {
+  classifyCanonicalCell,
+  classifyCanonicalFlow,
+  classifyCanonicalTwoStageFlow,
+  classifyCell,
+  classifyFlow,
+  classifyTwoStageFlow,
+} from './classifiers';
 import {
   coarseFlowCount,
   createBirdsCoarseInitialization,
@@ -17,13 +24,18 @@ import {
 } from './coarseInitialization';
 import type { BirdCell, BirdFlow, BirdTwoStageFlow } from './entities';
 import {
-  isPossibleFlow,
-  midpointCellProbabilities,
-  possibleFlowDestinations,
-  possibleFlowSources,
-  possibleParentFlows,
+  canonicalMidpointCellProbabilities,
+  isPossibleCanonicalFlow,
+  possibleCanonicalFlowDestinations,
+  possibleCanonicalFlowSources,
+  possibleCanonicalParentFlows,
 } from './motionSupport';
 import {
+  classifyCanonicalCellInflowSubdivisionOwner,
+  classifyCanonicalCellOutflowSubdivisionOwner,
+  classifyCanonicalCellSubdivisionOwner,
+  classifyCanonicalFlowSpaceSubdivisionOwner,
+  classifyCanonicalFlowTimeSubdivisionOwner,
   classifyCellSubdivisionOwner,
   classifyCellInflowSubdivisionOwner,
   classifyCellOutflowSubdivisionOwner,
@@ -316,7 +328,7 @@ export class BirdsEngine {
   #queryCell(cell: BirdCell, stats: MutableStats, depth: number): number {
     this.#visitDependency(stats, depth, { role: 'cell', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const construction = classifyCell(cell);
+    const construction = depth === 0 ? classifyCell(cell) : classifyCanonicalCell(cell);
     if (construction === undefined) throw new RangeError('Invalid Birds cell geometry');
 
     const keyStart = this.#cacheProfiler?.start();
@@ -339,7 +351,7 @@ export class BirdsEngine {
 
       case 'temporally-introduced': {
         const length = cell.max - cell.min;
-        count = possibleFlowDestinations(
+        count = possibleCanonicalFlowDestinations(
           cell,
           construction.outgoingDuration,
           this.#diffusionRate,
@@ -373,9 +385,9 @@ export class BirdsEngine {
   #queryFlow(flow: BirdFlow, stats: MutableStats, depth: number): number {
     this.#visitDependency(stats, depth, { role: 'flow', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const construction = classifyFlow(flow);
+    const construction = depth === 0 ? classifyFlow(flow) : classifyCanonicalFlow(flow);
     if (construction === undefined) throw new RangeError('Invalid Birds flow geometry');
-    if (!isPossibleFlow(flow, this.#diffusionRate)) return 0;
+    if (!isPossibleCanonicalFlow(flow, this.#diffusionRate)) return 0;
 
     const keyStart = this.#cacheProfiler?.start();
     const key = flowKey(flow);
@@ -396,7 +408,7 @@ export class BirdsEngine {
         break;
 
       case 'temporal-aggregation':
-        count = possibleParentFlows(flow, this.#diffusionRate).reduce(
+        count = possibleCanonicalParentFlows(flow, this.#diffusionRate).reduce(
           (sum, parentFlow) =>
             sum +
             this.#queryTwoStageFlow(
@@ -462,7 +474,8 @@ export class BirdsEngine {
   ): number {
     this.#visitDependency(stats, depth, { role: 'two-stage-flow', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const construction = classifyTwoStageFlow(flow);
+    const construction =
+      depth === 0 ? classifyTwoStageFlow(flow) : classifyCanonicalTwoStageFlow(flow);
     if (construction === undefined) {
       throw new RangeError('Invalid Birds two-stage flow geometry');
     }
@@ -480,7 +493,7 @@ export class BirdsEngine {
   ): TemporalSubdivisionResult {
     this.#visitDependency(stats, depth, { role: 'temporal-subdivision', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const owner = classifyFlowTimeSubdivisionOwner(flow);
+    const owner = classifyCanonicalFlowTimeSubdivisionOwner(flow);
     if (owner === undefined) {
       throw new RangeError('Flow does not own a Birds temporal subdivision');
     }
@@ -500,7 +513,7 @@ export class BirdsEngine {
 
     stats.temporalBatchesEvaluated += 1;
     const parentCount = this.#queryFlow(flow, stats, depth + 1);
-    const categories = midpointCellProbabilities(flow, this.#diffusionRate);
+    const categories = canonicalMidpointCellProbabilities(flow, this.#diffusionRate);
     let counts: readonly number[] = [];
     if (categories.length > 0) {
       stats.samplerCalls += 1;
@@ -534,7 +547,7 @@ export class BirdsEngine {
   ): CellSubdivisionResult {
     this.#visitDependency(stats, depth, { role: 'cell-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const owner = classifyCellSubdivisionOwner(cell);
+    const owner = classifyCanonicalCellSubdivisionOwner(cell);
     if (owner === undefined) {
       throw new RangeError('Cell does not own a Birds spatial subdivision');
     }
@@ -581,7 +594,7 @@ export class BirdsEngine {
   ): CellIncidenceSubdivisionResult {
     this.#visitDependency(stats, depth, { role: 'outflow-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const owner = classifyCellOutflowSubdivisionOwner(cell);
+    const owner = classifyCanonicalCellOutflowSubdivisionOwner(cell);
     if (owner === undefined) {
       throw new RangeError('Cell does not own a Birds outflow subdivision');
     }
@@ -600,7 +613,7 @@ export class BirdsEngine {
     }
 
     stats.incidenceBatchesEvaluated += 1;
-    const parentFlows = possibleFlowDestinations(
+    const parentFlows = possibleCanonicalFlowDestinations(
       cell,
       owner.flowDuration,
       this.#diffusionRate,
@@ -644,7 +657,7 @@ export class BirdsEngine {
   ): CellIncidenceSubdivisionResult {
     this.#visitDependency(stats, depth, { role: 'inflow-subdivision', cell });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const owner = classifyCellInflowSubdivisionOwner(cell);
+    const owner = classifyCanonicalCellInflowSubdivisionOwner(cell);
     if (owner === undefined) {
       throw new RangeError('Cell does not own a Birds inflow subdivision');
     }
@@ -663,7 +676,7 @@ export class BirdsEngine {
     }
 
     stats.incidenceBatchesEvaluated += 1;
-    const parentFlows = possibleFlowSources(
+    const parentFlows = possibleCanonicalFlowSources(
       cell,
       owner.flowDuration,
       this.#diffusionRate,
@@ -707,7 +720,7 @@ export class BirdsEngine {
   ): FlowSpaceSubdivisionResult {
     this.#visitDependency(stats, depth, { role: 'flow-space-subdivision', flow });
     stats.maximumDepth = Math.max(stats.maximumDepth, depth);
-    const owner = classifyFlowSpaceSubdivisionOwner(flow);
+    const owner = classifyCanonicalFlowSpaceSubdivisionOwner(flow);
     if (owner === undefined) {
       throw new RangeError('Flow does not own a Birds spatial subdivision');
     }

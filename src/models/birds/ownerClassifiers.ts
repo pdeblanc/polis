@@ -1,4 +1,11 @@
-import { classifyCell, classifyFlow } from './classifiers';
+import {
+  classifyCanonicalCell,
+  classifyCanonicalFlow,
+  classifyCell,
+  classifyFlow,
+  type CellConstruction,
+  type FlowConstruction,
+} from './classifiers';
 import { cellLength, type BirdCell, type BirdFlow } from './entities';
 import { BIRDS_COARSE_FLOW_DURATION } from './scales';
 
@@ -66,7 +73,19 @@ export interface FlowSpaceSubdivisionOwner {
 export function classifyFlowTimeSubdivisionOwner(
   flow: BirdFlow,
 ): FlowTimeSubdivisionOwner | undefined {
-  const construction = classifyFlow(flow);
+  return flowTimeSubdivisionOwner(flow, classifyFlow(flow));
+}
+
+export function classifyCanonicalFlowTimeSubdivisionOwner(
+  flow: BirdFlow,
+): FlowTimeSubdivisionOwner | undefined {
+  return flowTimeSubdivisionOwner(flow, classifyCanonicalFlow(flow));
+}
+
+function flowTimeSubdivisionOwner(
+  flow: BirdFlow,
+  construction: FlowConstruction | undefined,
+): FlowTimeSubdivisionOwner | undefined {
   if (construction === undefined) return undefined;
 
   const duration = flow.destination.time - flow.source.time;
@@ -107,7 +126,19 @@ export function classifyFlowTimeSubdivisionOwner(
 export function classifyCellSubdivisionOwner(
   cell: BirdCell,
 ): CellSubdivisionOwner | undefined {
-  const facts = cellOwnerFacts(cell);
+  return cellSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCell));
+}
+
+export function classifyCanonicalCellSubdivisionOwner(
+  cell: BirdCell,
+): CellSubdivisionOwner {
+  return cellSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCanonicalCell))!;
+}
+
+function cellSubdivisionOwner(
+  cell: BirdCell,
+  facts: CellOwnerFacts | undefined,
+): CellSubdivisionOwner | undefined {
   if (facts === undefined) return undefined;
   return {
     kind: 'cell-subdivision',
@@ -122,7 +153,19 @@ export function classifyCellSubdivisionOwner(
 export function classifyCellOutflowSubdivisionOwner(
   cell: BirdCell,
 ): CellOutflowSubdivisionOwner | undefined {
-  const facts = cellOwnerFacts(cell);
+  return cellOutflowSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCell));
+}
+
+export function classifyCanonicalCellOutflowSubdivisionOwner(
+  cell: BirdCell,
+): CellOutflowSubdivisionOwner {
+  return cellOutflowSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCanonicalCell))!;
+}
+
+function cellOutflowSubdivisionOwner(
+  cell: BirdCell,
+  facts: CellOwnerFacts | undefined,
+): CellOutflowSubdivisionOwner | undefined {
   if (facts === undefined) return undefined;
   return {
     kind: 'cell-outflow-subdivision',
@@ -140,7 +183,19 @@ export function classifyCellOutflowSubdivisionOwner(
 export function classifyCellInflowSubdivisionOwner(
   cell: BirdCell,
 ): CellInflowSubdivisionOwner | undefined {
-  const facts = cellOwnerFacts(cell);
+  return cellInflowSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCell));
+}
+
+export function classifyCanonicalCellInflowSubdivisionOwner(
+  cell: BirdCell,
+): CellInflowSubdivisionOwner {
+  return cellInflowSubdivisionOwner(cell, cellOwnerFacts(cell, classifyCanonicalCell))!;
+}
+
+function cellInflowSubdivisionOwner(
+  cell: BirdCell,
+  facts: CellOwnerFacts | undefined,
+): CellInflowSubdivisionOwner | undefined {
   if (facts === undefined) return undefined;
   return {
     kind: 'cell-inflow-subdivision',
@@ -158,7 +213,19 @@ export function classifyCellInflowSubdivisionOwner(
 export function classifyFlowSpaceSubdivisionOwner(
   flow: BirdFlow,
 ): FlowSpaceSubdivisionOwner | undefined {
-  const construction = classifyFlow(flow);
+  return flowSpaceSubdivisionOwner(flow, classifyFlow(flow));
+}
+
+export function classifyCanonicalFlowSpaceSubdivisionOwner(
+  flow: BirdFlow,
+): FlowSpaceSubdivisionOwner | undefined {
+  return flowSpaceSubdivisionOwner(flow, classifyCanonicalFlow(flow));
+}
+
+function flowSpaceSubdivisionOwner(
+  flow: BirdFlow,
+  construction: FlowConstruction | undefined,
+): FlowSpaceSubdivisionOwner | undefined {
   if (
     construction?.kind !== 'temporal-aggregation' ||
     construction.stage !== 'D'
@@ -191,8 +258,11 @@ interface CellOwnerFacts {
   readonly children: readonly [BirdCell, BirdCell];
 }
 
-function cellOwnerFacts(cell: BirdCell): CellOwnerFacts | undefined {
-  const construction = classifyCell(cell);
+function cellOwnerFacts(
+  cell: BirdCell,
+  classify: (cell: BirdCell) => CellConstruction | undefined,
+): CellOwnerFacts | undefined {
+  const construction = classify(cell);
   if (construction === undefined) return undefined;
   const epoch =
     construction.kind === 'spatial-child' ? construction.epoch + 1 : construction.epoch;
