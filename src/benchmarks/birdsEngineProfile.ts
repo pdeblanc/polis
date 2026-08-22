@@ -17,11 +17,13 @@ interface ProfileCase {
   readonly cache: 'cold' | 'warm';
   readonly diffusionRate: number;
   readonly epoch: number;
-  readonly query: 'cell' | 'flow' | 'viewport';
+  readonly query: 'cell' | 'flow' | 'viewport' | 'viewport-4000';
 }
 
 const VIEWPORT_COLUMNS = 20;
 const VIEWPORT_ROWS = 8;
+const LARGE_VIEWPORT_COLUMNS = 80;
+const LARGE_VIEWPORT_ROWS = 50;
 
 const cases: readonly ProfileCase[] = [
   { query: 'cell', epoch: 2, diffusionRate: 0.5, cache: 'cold' },
@@ -35,6 +37,10 @@ const cases: readonly ProfileCase[] = [
   { query: 'viewport', epoch: 1, diffusionRate: 0.5, cache: 'cold' },
   { query: 'viewport', epoch: 2, diffusionRate: 0.5, cache: 'cold' },
   { query: 'viewport', epoch: 3, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport-4000', epoch: 0, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport-4000', epoch: 1, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport-4000', epoch: 2, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport-4000', epoch: 3, diffusionRate: 0.5, cache: 'cold' },
 ];
 
 const distributions: readonly ProfiledDistribution[] = [
@@ -161,14 +167,17 @@ function prepare(profileCase: ProfileCase, cacheProfiler?: BirdsCacheProfiler): 
   if (profileCase.query === 'cell') {
     return { engine, query: () => void engine.queryCell(source) };
   }
-  if (profileCase.query === 'viewport') {
+  if (profileCase.query === 'viewport' || profileCase.query === 'viewport-4000') {
+    const columns =
+      profileCase.query === 'viewport' ? VIEWPORT_COLUMNS : LARGE_VIEWPORT_COLUMNS;
+    const rows = profileCase.query === 'viewport' ? VIEWPORT_ROWS : LARGE_VIEWPORT_ROWS;
     return {
       engine,
       query: () => {
-        for (let timeIndex = 0; timeIndex < VIEWPORT_ROWS; timeIndex += 1) {
+        for (let timeIndex = 0; timeIndex < rows; timeIndex += 1) {
           for (
-            let spatialIndex = -VIEWPORT_COLUMNS / 2;
-            spatialIndex < VIEWPORT_COLUMNS / 2;
+            let spatialIndex = -columns / 2;
+            spatialIndex < columns / 2;
             spatialIndex += 1
           ) {
             const min = spatialIndex * scale.cellLength;
