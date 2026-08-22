@@ -77,8 +77,8 @@ export function BirdsCanvas() {
   });
   const { cursor, prepareContext, size, state, world } = viewport;
   const resolution = useMemo(
-    () => birdsRenderResolution(birds, size, world, state),
-    [birds, size, state, world],
+    () => birdsRenderResolution(birds, size, world),
+    [birds, size, world],
   );
   const hoveredSpatialIndex =
     resolution === undefined
@@ -738,30 +738,20 @@ function birdsRenderResolution(
   birds: Birds,
   size: Size2D,
   world: Size2D,
-  viewport: ViewportState,
 ): BirdsPopulationResolution | undefined {
   const requested = birds.resolvePopulationResolution({
     targetCellWidth: (world.width / size.width) * TARGET_CELL_PIXELS,
     targetTimeStep: (world.height / size.height) * TARGET_TIME_STEP_PIXELS,
   });
   if (requested === undefined) return undefined;
-  const bounds = {
-    minX: viewport.centerX - world.width / 2,
-    maxX: viewport.centerX + world.width / 2,
-    minTime: viewport.centerY - world.height / 2,
-    maxTime: viewport.centerY + world.height / 2,
-  };
   const nearby = birds.getNearbyPopulationResolutions(requested, 16);
   let selected = nearby[0] ?? requested;
   for (const candidate of nearby) {
     if (candidate.cellWidth < requested.cellWidth) break;
-    const columns =
-      Math.ceil(bounds.maxX / candidate.cellWidth) -
-      Math.floor(bounds.minX / candidate.cellWidth);
-    const rows =
-      Math.ceil(bounds.maxTime / candidate.timeStep) -
-      Math.floor(bounds.minTime / candidate.timeStep) +
-      1;
+    // Use a translation-independent upper bound. Counting grid boundaries from
+    // rounded world coordinates makes the selected epoch flicker while panning.
+    const columns = Math.ceil(world.width / candidate.cellWidth) + 1;
+    const rows = Math.ceil(world.height / candidate.timeStep) + 2;
     if (columns * rows > MAX_RENDER_SAMPLES) break;
     selected = candidate;
   }
