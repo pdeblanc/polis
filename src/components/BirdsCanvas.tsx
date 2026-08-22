@@ -47,6 +47,9 @@ const TRACKED_STEP_QUERY_BUDGET = 256;
 const TRACKED_STEP_REFINEMENT_BUDGET = 16;
 const SCALE_FADE_DURATION_MS = 500;
 const SCALE_TRANSITION_LOG_INTERVAL = (TIME_ZOOM_EXPONENT + 1) * Math.log(2);
+const POPULATION_BACKGROUND_RGB = [8, 13, 19] as const;
+const POPULATION_FOREGROUND_RGB = [105, 215, 255] as const;
+const cachedPopulationCanvases = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
 
 interface HoveredPopulationCell {
   readonly max: number;
@@ -633,14 +636,18 @@ function drawCachedPopulationLayer(
   overlay: PopulationScaleOverlay,
   populationDensity: number,
 ): void {
+  const layer = cachedPopulationCanvas(context.canvas);
+  const layerContext = layer.getContext('2d');
+  if (layerContext === null) return;
+  layerContext.resetTransform();
+  layerContext.clearRect(0, 0, layer.width, layer.height);
+  layerContext.setTransform(context.getTransform());
   const firstTimeIndex = Math.floor(
     bounds.minTime / overlay.resolution.timeStep,
   );
   const finalTimeIndex = Math.ceil(
     bounds.maxTime / overlay.resolution.timeStep,
   );
-  context.save();
-  context.globalAlpha = overlay.opacity;
   for (
     let timeIndex = firstTimeIndex;
     timeIndex <= finalTimeIndex;
@@ -656,7 +663,7 @@ function drawCachedPopulationLayer(
     for (const sample of result.samples) {
       if (sample.count === undefined) continue;
       drawPopulationSample(
-        context,
+        layerContext,
         size,
         viewport,
         result.sampledTime,
@@ -666,7 +673,21 @@ function drawCachedPopulationLayer(
       );
     }
   }
+  context.save();
+  context.globalAlpha = overlay.opacity;
+  context.drawImage(layer, 0, 0, size.width, size.height);
   context.restore();
+}
+
+function cachedPopulationCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  let layer = cachedPopulationCanvases.get(canvas);
+  if (layer === undefined) {
+    layer = document.createElement('canvas');
+    cachedPopulationCanvases.set(canvas, layer);
+  }
+  if (layer.width !== canvas.width) layer.width = canvas.width;
+  if (layer.height !== canvas.height) layer.height = canvas.height;
+  return layer;
 }
 
 function drawFlows(
@@ -1049,13 +1070,24 @@ function drawPopulationSample(
   const thickness = Math.max(1, Math.ceil(rowSpacing) + 1);
   const expected = populationDensity * resolution.cellWidth;
   const intensity = expected === 0 ? 0 : 1 - Math.exp(-sample.count / expected);
-  context.fillStyle = `rgb(105 215 255 / ${0.08 + 0.92 * intensity})`;
+  const brightness = 0.08 + 0.92 * intensity;
+  context.fillStyle = opaquePopulationColor(brightness);
   context.fillRect(
     left.x,
     left.y - thickness / 2,
     Math.max(1, right.x - left.x),
     thickness,
   );
+}
+
+function opaquePopulationColor(brightness: number): string {
+  const channel = (index: 0 | 1 | 2) =>
+    Math.round(
+      POPULATION_BACKGROUND_RGB[index] +
+        brightness *
+          (POPULATION_FOREGROUND_RGB[index] - POPULATION_BACKGROUND_RGB[index]),
+    );
+  return `rgb(${channel(0)} ${channel(1)} ${channel(2)})`;
 }
 
 function drawHoveredCell(
