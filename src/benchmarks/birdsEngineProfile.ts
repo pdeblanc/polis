@@ -17,8 +17,11 @@ interface ProfileCase {
   readonly cache: 'cold' | 'warm';
   readonly diffusionRate: number;
   readonly epoch: number;
-  readonly query: 'cell' | 'flow';
+  readonly query: 'cell' | 'flow' | 'viewport';
 }
+
+const VIEWPORT_COLUMNS = 20;
+const VIEWPORT_ROWS = 8;
 
 const cases: readonly ProfileCase[] = [
   { query: 'cell', epoch: 2, diffusionRate: 0.5, cache: 'cold' },
@@ -28,6 +31,10 @@ const cases: readonly ProfileCase[] = [
   { query: 'flow', epoch: 2, diffusionRate: 0.5, cache: 'warm' },
   { query: 'flow', epoch: 3, diffusionRate: 0.5, cache: 'cold' },
   { query: 'flow', epoch: 2, diffusionRate: 2, cache: 'cold' },
+  { query: 'viewport', epoch: 0, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport', epoch: 1, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport', epoch: 2, diffusionRate: 0.5, cache: 'cold' },
+  { query: 'viewport', epoch: 3, diffusionRate: 0.5, cache: 'cold' },
 ];
 
 const distributions: readonly ProfiledDistribution[] = [
@@ -153,6 +160,27 @@ function prepare(profileCase: ProfileCase, cacheProfiler?: BirdsCacheProfiler): 
   const source = { min: 0, max: scale.cellLength, time: 0 };
   if (profileCase.query === 'cell') {
     return { engine, query: () => void engine.queryCell(source) };
+  }
+  if (profileCase.query === 'viewport') {
+    return {
+      engine,
+      query: () => {
+        for (let timeIndex = 0; timeIndex < VIEWPORT_ROWS; timeIndex += 1) {
+          for (
+            let spatialIndex = -VIEWPORT_COLUMNS / 2;
+            spatialIndex < VIEWPORT_COLUMNS / 2;
+            spatialIndex += 1
+          ) {
+            const min = spatialIndex * scale.cellLength;
+            engine.queryCell({
+              min,
+              max: min + scale.cellLength,
+              time: timeIndex * scale.nextFlowDuration,
+            });
+          }
+        }
+      },
+    };
   }
   const destination = possibleFlowDestinations(
     source,
