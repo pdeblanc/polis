@@ -1,6 +1,6 @@
 import { classifyCell, classifyFlow } from './classifiers';
-import { cellLength, flowDuration, type BirdCell, type BirdFlow } from './entities';
-import { birdsScale, epochForCellLength } from './scales';
+import { cellLength, type BirdCell, type BirdFlow } from './entities';
+import { BIRDS_COARSE_FLOW_DURATION } from './scales';
 
 export type FlowTimeSubdivisionOwner =
   | {
@@ -66,41 +66,36 @@ export interface FlowSpaceSubdivisionOwner {
 export function classifyFlowTimeSubdivisionOwner(
   flow: BirdFlow,
 ): FlowTimeSubdivisionOwner | undefined {
-  const epoch = epochForEqualResolutionFlow(flow);
-  const scale = epoch === undefined ? undefined : birdsScale(epoch);
   const construction = classifyFlow(flow);
-  if (epoch === undefined || scale === undefined || construction === undefined) return undefined;
+  if (construction === undefined) return undefined;
 
-  const duration = flowDuration(flow);
+  const duration = flow.destination.time - flow.source.time;
   const midpointTime = flow.source.time + duration / 2;
-  if (
-    duration === scale.flowDuration &&
-    (construction.kind === 'coarse-initialized' ||
-      construction.kind === 'fully-spatially-refined')
-  ) {
+  if (construction.kind === 'coarse-initialized' || construction.kind === 'fully-spatially-refined') {
+    const epoch =
+      construction.kind === 'coarse-initialized' ? 0 : construction.epoch + 1;
     return {
       kind: 'epoch-flow-time-subdivision',
       epoch,
       stage: 'A',
       ownerFlow: flow,
       midpointTime,
-      midpointCellLength: scale.cellLength,
+      midpointCellLength: flow.source.max - flow.source.min,
       normalizedDuration: 1,
     };
   }
 
   if (
-    duration === scale.halfFlowDuration &&
     construction.kind === 'temporal-aggregation' &&
     construction.stage === 'B'
   ) {
     return {
       kind: 'half-flow-time-subdivision',
-      epoch,
+      epoch: construction.epoch,
       stage: 'C',
       ownerFlow: flow,
       midpointTime,
-      midpointCellLength: scale.cellLength,
+      midpointCellLength: flow.source.max - flow.source.min,
       normalizedDuration: 0.5,
     };
   }
@@ -163,13 +158,8 @@ export function classifyCellInflowSubdivisionOwner(
 export function classifyFlowSpaceSubdivisionOwner(
   flow: BirdFlow,
 ): FlowSpaceSubdivisionOwner | undefined {
-  const epoch = epochForEqualResolutionFlow(flow);
-  const scale = epoch === undefined ? undefined : birdsScale(epoch);
   const construction = classifyFlow(flow);
   if (
-    epoch === undefined ||
-    scale === undefined ||
-    flowDuration(flow) !== scale.nextFlowDuration ||
     construction?.kind !== 'temporal-aggregation' ||
     construction.stage !== 'D'
   ) {
@@ -180,7 +170,7 @@ export function classifyFlowSpaceSubdivisionOwner(
   const destinationChildren = subdivideCell(flow.destination);
   return {
     kind: 'flow-space-subdivision',
-    epoch,
+    epoch: construction.epoch,
     stage: 'H',
     ownerFlow: flow,
     sourceChildren,
@@ -202,22 +192,17 @@ interface CellOwnerFacts {
 }
 
 function cellOwnerFacts(cell: BirdCell): CellOwnerFacts | undefined {
-  if (classifyCell(cell) === undefined) return undefined;
-  const epoch = epochForCellLength(cellLength(cell));
-  const scale = epoch === undefined ? undefined : birdsScale(epoch);
-  if (epoch === undefined || scale === undefined) return undefined;
+  const construction = classifyCell(cell);
+  if (construction === undefined) return undefined;
+  const epoch =
+    construction.kind === 'spatial-child' ? construction.epoch + 1 : construction.epoch;
+  const length = cell.max - cell.min;
   return {
     epoch,
-    cellLength: scale.cellLength,
-    nextFlowDuration: scale.nextFlowDuration,
+    cellLength: length,
+    nextFlowDuration: BIRDS_COARSE_FLOW_DURATION / 4 ** (epoch + 1),
     children: subdivideCell(cell),
   };
-}
-
-function epochForEqualResolutionFlow(flow: BirdFlow): number | undefined {
-  const sourceEpoch = epochForCellLength(cellLength(flow.source));
-  const destinationEpoch = epochForCellLength(cellLength(flow.destination));
-  return sourceEpoch === destinationEpoch ? sourceEpoch : undefined;
 }
 
 function subdivideCell(cell: BirdCell): readonly [BirdCell, BirdCell] {

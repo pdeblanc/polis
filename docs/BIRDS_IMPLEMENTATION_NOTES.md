@@ -326,3 +326,24 @@ and scale-helper samples from `75` to `44`; total samples fell from `1,435` to `
 Although sampling and wall-clock variation require treating exact percentages cautiously,
 both measurements support continuing with direct classifier simplification before adding
 a structural-fact cache.
+
+The remaining construction and owner classifiers were then flattened around the same
+principle. `classifyFlow` validates each endpoint geometry and temporal lattice once and
+passes those scales to `classifyFlowFromValidCells`; `classifyTwoStageFlow` reuses those
+facts for its parent flow. Parent cells, child indices, equal-resolution stages, and
+temporal-aggregation facts are calculated directly without helper rediscovery. Flow owner
+classifiers now derive their epoch and normalized stage from the already-validated flow
+construction. Cell owners derive the actual cell epoch from `CellConstruction` and
+compute their next duration directly, rather than calling epoch inversion and scale
+construction again.
+
+Against the preceding geometry-only version, calibrated cold-flow baselines fell from
+about `27.7` to `21.9 ms` at epoch 2 with `D = 0.5`, `69.1` to `46.0 ms` at epoch 3 with
+`D = 0.5`, and `117.2` to `90.1 ms` at epoch 2 with `D = 2`. Relative to the original
+pre-inlining profile, those cases are about `36%`, `45%`, and `38%` faster. Classifier and
+owner CPU self samples fell again from `269` to `102`, scale-helper samples from `44` to
+`14`, and total samples from `1,271` to `1,034`. The remaining classifier samples were
+concentrated in `classifyFlowFromValidCells` (`30`), `classifyFlow` (`27`),
+`classifyCellGeometry` (`16`), `classifyTwoStageFlow` (`13`), and
+`classifyFlowTimeSubdivisionOwner` (`10`). This leaves LRU activity and motion-support
+construction as larger targets than classification in this workload.

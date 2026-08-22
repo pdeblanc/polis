@@ -1,5 +1,4 @@
 import {
-  cellLength,
   flowDuration,
   type BirdCell,
   type BirdFlow,
@@ -9,7 +8,6 @@ import {
   BIRDS_COARSE_CELL_LENGTH,
   BIRDS_COARSE_FLOW_DURATION,
   euclideanModulo,
-  isAligned,
   type BirdsScale,
 } from './scales';
 
@@ -115,9 +113,11 @@ export type TwoStageFlowConstruction =
 
 export function classifyCell(cell: BirdCell): CellConstruction | undefined {
   const scale = classifyCellGeometry(cell);
-  if (scale === undefined || !isAligned(cell.time, scale.nextFlowDuration)) return undefined;
+  if (scale === undefined || !Number.isInteger(cell.time / scale.nextFlowDuration)) {
+    return undefined;
+  }
 
-  if (scale.epoch === 0 && isAligned(cell.time, scale.flowDuration)) {
+  if (scale.epoch === 0 && Number.isInteger(cell.time / scale.flowDuration)) {
     return {
       kind: 'coarse-initialized',
       epoch: 0,
@@ -126,14 +126,16 @@ export function classifyCell(cell: BirdCell): CellConstruction | undefined {
     };
   }
 
-  if (scale.epoch > 0 && isAligned(cell.time, scale.flowDuration)) {
-    const parentCell = containingParentCell(cell);
+  if (scale.epoch > 0 && Number.isInteger(cell.time / scale.flowDuration)) {
+    const parentLength = 2 * scale.cellLength;
+    const parentMin = Math.floor(cell.min / parentLength) * parentLength;
+    const parentCell = { min: parentMin, max: parentMin + parentLength, time: cell.time };
     return {
       kind: 'spatial-child',
       epoch: scale.epoch - 1,
       stage: 'F',
       parentCell,
-      childIndex: childIndex(cell),
+      childIndex: euclideanModulo(cell.min / scale.cellLength, 2) as 0 | 1,
       subdivisionOwner: parentCell,
     };
   }
@@ -153,31 +155,120 @@ export function classifyFlow(flow: BirdFlow): FlowConstruction | undefined {
   if (
     sourceScale === undefined ||
     destinationScale === undefined ||
-    classifyCell(flow.source) === undefined ||
-    classifyCell(flow.destination) === undefined
+    !Number.isInteger(flow.source.time / sourceScale.nextFlowDuration) ||
+    !Number.isInteger(flow.destination.time / destinationScale.nextFlowDuration)
   ) {
     return undefined;
   }
 
   const duration = flowDuration(flow);
-  if (!Number.isFinite(duration) || duration <= 0 || !isAligned(flow.source.time, duration)) {
+  if (
+    !Number.isFinite(duration) ||
+    duration <= 0 ||
+    !Number.isInteger(flow.source.time / duration)
+  ) {
     return undefined;
   }
 
+  return classifyFlowFromValidCells(flow, sourceScale, destinationScale, duration);
+}
+
+function classifyFlowFromValidCells(
+  flow: BirdFlow,
+  sourceScale: BirdsScale,
+  destinationScale: BirdsScale,
+  duration: number,
+): FlowConstruction | undefined {
   if (sourceScale.epoch === destinationScale.epoch) {
-    return classifyEqualResolutionFlow(flow, sourceScale, duration);
+    if (duration === sourceScale.flowDuration) {
+      const sourceIndex = flow.source.min / sourceScale.cellLength;
+      const destinationIndex = flow.destination.min / destinationScale.cellLength;
+      if (sourceScale.epoch === 0) {
+        return {
+          kind: 'coarse-initialized',
+          epoch: 0,
+          stage: 'initialization',
+          coarseKernelOffset: destinationIndex - sourceIndex,
+        };
+      }
+
+      const parentLength = 2 * sourceScale.cellLength;
+      const sourceParentMin = Math.floor(flow.source.min / parentLength) * parentLength;
+      const destinationParentMin = Math.floor(flow.destination.min / parentLength) * parentLength;
+      const containingFlow = {
+        source: {
+          min: sourceParentMin,
+          max: sourceParentMin + parentLength,
+          time: flow.source.time,
+        },
+        destination: {
+          min: destinationParentMin,
+          max: destinationParentMin + parentLength,
+          time: flow.destination.time,
+        },
+      };
+      return {
+        kind: 'fully-spatially-refined',
+        epoch: sourceScale.epoch - 1,
+        stage: 'H',
+        containingFlow,
+        sourceChildIndex: euclideanModulo(sourceIndex, 2) as 0 | 1,
+        destinationChildIndex: euclideanModulo(destinationIndex, 2) as 0 | 1,
+        subdivisionOwner: containingFlow,
+      };
+    }
+
+    const stage =
+      duration === sourceScale.halfFlowDuration
+        ? 'B'
+        : duration === sourceScale.nextFlowDuration
+          ? 'D'
+          : undefined;
+    if (stage === undefined) return undefined;
+    const intervalIndex = flow.source.time / duration;
+    const firstLeg = euclideanModulo(intervalIndex, 2) === 0;
+    const enclosingStartTime = firstLeg ? flow.source.time : flow.source.time - duration;
+    const enclosingEndTime = enclosingStartTime + 2 * duration;
+    return {
+      kind: 'temporal-aggregation',
+      epoch: sourceScale.epoch,
+      stage,
+      leg: firstLeg ? 'first' : 'second',
+      enclosingStartTime,
+      enclosingEndTime,
+      parentDuration: 2 * duration,
+      parentFlowSearch: firstLeg
+        ? {
+            kind: 'destinations-from-source',
+            sourceCell: flow.source,
+            midpointCell: flow.destination,
+            destinationTime: enclosingEndTime,
+          }
+        : {
+            kind: 'sources-to-destination',
+            sourceTime: enclosingStartTime,
+            midpointCell: flow.source,
+            destinationCell: flow.destination,
+          },
+    };
   }
 
   if (sourceScale.epoch === destinationScale.epoch + 1) {
     const coarseScale = destinationScale;
     if (duration !== coarseScale.nextFlowDuration) return undefined;
-    const sourceParentCell = containingParentCell(flow.source);
+    const parentLength = 2 * sourceScale.cellLength;
+    const parentMin = Math.floor(flow.source.min / parentLength) * parentLength;
+    const sourceParentCell = {
+      min: parentMin,
+      max: parentMin + parentLength,
+      time: flow.source.time,
+    };
     return {
       kind: 'source-spatial-child',
       epoch: coarseScale.epoch,
       stage: 'G1',
       sourceParentCell,
-      sourceChildIndex: childIndex(flow.source),
+      sourceChildIndex: euclideanModulo(flow.source.min / sourceScale.cellLength, 2) as 0 | 1,
       subdivisionOwner: sourceParentCell,
     };
   }
@@ -185,13 +276,22 @@ export function classifyFlow(flow: BirdFlow): FlowConstruction | undefined {
   if (destinationScale.epoch === sourceScale.epoch + 1) {
     const coarseScale = sourceScale;
     if (duration !== coarseScale.nextFlowDuration) return undefined;
-    const destinationParentCell = containingParentCell(flow.destination);
+    const parentLength = 2 * destinationScale.cellLength;
+    const parentMin = Math.floor(flow.destination.min / parentLength) * parentLength;
+    const destinationParentCell = {
+      min: parentMin,
+      max: parentMin + parentLength,
+      time: flow.destination.time,
+    };
     return {
       kind: 'destination-spatial-child',
       epoch: coarseScale.epoch,
       stage: 'G2',
       destinationParentCell,
-      destinationChildIndex: childIndex(flow.destination),
+      destinationChildIndex: euclideanModulo(
+        flow.destination.min / destinationScale.cellLength,
+        2,
+      ) as 0 | 1,
       subdivisionOwner: destinationParentCell,
     };
   }
@@ -209,9 +309,9 @@ export function classifyTwoStageFlow(
     sourceScale === undefined ||
     midpointScale?.epoch !== sourceScale.epoch ||
     destinationScale?.epoch !== sourceScale.epoch ||
-    classifyCell(flow.source) === undefined ||
-    classifyCell(flow.midpoint) === undefined ||
-    classifyCell(flow.destination) === undefined
+    !Number.isInteger(flow.source.time / sourceScale.nextFlowDuration) ||
+    !Number.isInteger(flow.midpoint.time / sourceScale.nextFlowDuration) ||
+    !Number.isInteger(flow.destination.time / sourceScale.nextFlowDuration)
   ) {
     return undefined;
   }
@@ -221,13 +321,18 @@ export function classifyTwoStageFlow(
     !Number.isFinite(duration) ||
     duration <= 0 ||
     flow.midpoint.time !== flow.source.time + duration / 2 ||
-    !isAligned(flow.source.time, duration)
+    !Number.isInteger(flow.source.time / duration)
   ) {
     return undefined;
   }
 
   const parentFlow = { source: flow.source, destination: flow.destination };
-  const parentConstruction = classifyFlow(parentFlow);
+  const parentConstruction = classifyFlowFromValidCells(
+    parentFlow,
+    sourceScale,
+    destinationScale,
+    duration,
+  );
   if (duration === sourceScale.flowDuration && isEntryFlow(parentConstruction)) {
     return {
       kind: 'epoch-time-subdivision',
@@ -254,81 +359,6 @@ export function classifyTwoStageFlow(
   }
 
   return undefined;
-}
-
-function classifyEqualResolutionFlow(
-  flow: BirdFlow,
-  scale: BirdsScale,
-  duration: number,
-): FlowConstruction | undefined {
-  if (duration === scale.flowDuration) {
-    if (scale.epoch === 0) {
-      return {
-        kind: 'coarse-initialized',
-        epoch: 0,
-        stage: 'initialization',
-        coarseKernelOffset: spatialIndex(flow.destination) - spatialIndex(flow.source),
-      };
-    }
-
-    const containingFlow = {
-      source: containingParentCell(flow.source),
-      destination: containingParentCell(flow.destination),
-    };
-    return {
-      kind: 'fully-spatially-refined',
-      epoch: scale.epoch - 1,
-      stage: 'H',
-      containingFlow,
-      sourceChildIndex: childIndex(flow.source),
-      destinationChildIndex: childIndex(flow.destination),
-      subdivisionOwner: containingFlow,
-    };
-  }
-
-  if (duration === scale.halfFlowDuration) {
-    return temporalAggregation(flow, scale.epoch, 'B', duration);
-  }
-  if (duration === scale.nextFlowDuration) {
-    return temporalAggregation(flow, scale.epoch, 'D', duration);
-  }
-  return undefined;
-}
-
-function temporalAggregation(
-  flow: BirdFlow,
-  epoch: number,
-  stage: 'B' | 'D',
-  duration: number,
-): FlowConstruction {
-  const intervalIndex = flow.source.time / duration;
-  const firstLeg = euclideanModulo(intervalIndex, 2) === 0;
-  const enclosingStartTime = firstLeg ? flow.source.time : flow.source.time - duration;
-  const enclosingEndTime = enclosingStartTime + 2 * duration;
-  const parentFlowSearch: ParentFlowSearch = firstLeg
-    ? {
-        kind: 'destinations-from-source',
-        sourceCell: flow.source,
-        midpointCell: flow.destination,
-        destinationTime: enclosingEndTime,
-      }
-    : {
-        kind: 'sources-to-destination',
-        sourceTime: enclosingStartTime,
-        midpointCell: flow.source,
-        destinationCell: flow.destination,
-      };
-
-  return {
-    kind: 'temporal-aggregation',
-    epoch,
-    stage,
-    leg: firstLeg ? 'first' : 'second',
-    enclosingStartTime,
-    enclosingEndTime,
-    parentDuration: 2 * duration,
-    parentFlowSearch,
-  };
 }
 
 function classifyCellGeometry(cell: BirdCell): BirdsScale | undefined {
@@ -359,21 +389,6 @@ function classifyCellGeometry(cell: BirdCell): BirdsScale | undefined {
     halfFlowDuration: flowDuration / 2,
     nextFlowDuration: flowDuration / 4,
   };
-}
-
-function containingParentCell(cell: BirdCell): BirdCell {
-  const length = cellLength(cell);
-  const parentLength = 2 * length;
-  const min = Math.floor(cell.min / parentLength) * parentLength;
-  return { min, max: min + parentLength, time: cell.time };
-}
-
-function childIndex(cell: BirdCell): 0 | 1 {
-  return euclideanModulo(spatialIndex(cell), 2) as 0 | 1;
-}
-
-function spatialIndex(cell: BirdCell): number {
-  return cell.min / cellLength(cell);
 }
 
 function isEntryFlow(construction: FlowConstruction | undefined): boolean {
