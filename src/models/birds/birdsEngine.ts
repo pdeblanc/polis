@@ -220,6 +220,13 @@ export class BirdsEngine {
     return count;
   }
 
+  queryCachedCell(cell: BirdCell): number | undefined {
+    if (classifyCell(cell) === undefined) {
+      throw new RangeError('Invalid Birds cell geometry');
+    }
+    return this.#cellCache.peek(cellKey(cell));
+  }
+
   queryFlow(flow: BirdFlow): number {
     const stats = emptyStats();
     const count = this.#queryFlow(flow, stats, 0);

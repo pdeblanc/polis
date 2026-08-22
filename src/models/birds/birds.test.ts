@@ -79,6 +79,25 @@ describe('Birds resolution capabilities', () => {
 });
 
 describe('Birds population profiles', () => {
+  it('reports missing cached cells without evaluating them', () => {
+    const birds = new Birds('cached-population-profile', 2, 0.5);
+    const resolution = birds.resolvePopulationResolution({
+      targetCellWidth: 16,
+      targetTimeStep: 64,
+    })!;
+    const request = { min: 0, max: 32, time: 0, resolution };
+
+    expect(birds.queryCachedPopulation(request)).toMatchObject({
+      kind: 'population-profile',
+      samples: [{ count: undefined }, { count: undefined }],
+    });
+    birds.queryPopulation({ ...request, max: 16 });
+    expect(birds.queryCachedPopulation(request)).toMatchObject({
+      kind: 'population-profile',
+      samples: [{ count: expect.any(Number) }, { count: undefined }],
+    });
+  });
+
   it('snaps time, covers the requested interval, and reports exact choices', () => {
     const birds = new Birds('population-profile', 2, 0.5);
     const resolution = birds.resolvePopulationResolution({

@@ -47,6 +47,8 @@ const TRACKED_STEP_REFINEMENT_BUDGET = 16;
 const PREFETCH_FRAME_BUDGET_MS = 2;
 const PREFETCH_LOOKAHEAD_SECONDS = 0.5;
 const MIN_PREFETCH_ZOOM_VELOCITY = 0.05;
+const SCALE_FADE_DURATION_MS = 500;
+const SCALE_TRANSITION_LOG_INTERVAL = (TIME_ZOOM_EXPONENT + 1) * Math.log(2);
 
 interface HoveredPopulationCell {
   readonly max: number;
@@ -57,6 +59,11 @@ interface HoveredPopulationCell {
 interface TrackedTrajectory {
   readonly flows: BirdsFlowListResult;
   readonly partial: false | "budget" | "numeric-resolution";
+}
+
+interface PopulationScaleOverlay {
+  readonly opacity: number;
+  readonly resolution: BirdsPopulationResolution;
 }
 
 export function BirdsCanvas() {
@@ -83,6 +90,12 @@ export function BirdsCanvas() {
   const resolution = useMemo(
     () => birdsRenderResolution(birds, size, world),
     [birds, size, world],
+  );
+  const scaleOverlay = usePopulationScaleTransition(
+    birds,
+    resolution,
+    size,
+    state,
   );
   const hoveredSpatialIndex =
     resolution === undefined
@@ -120,34 +133,36 @@ export function BirdsCanvas() {
           }),
     [birds, resolution],
   );
-  const hoveredFlows = useMemo(
-    () => {
-      if (!showFlows || hoveredCell === undefined || flowResolution === undefined) {
-        return undefined;
-      }
-      const outflows = birds.queryOutflows({
-        source: hoveredCell,
-        resolution: flowResolution,
-      });
-      if (outflows.kind === "size-limit") return outflows;
-      const inflows = birds.queryInflows({
-        destination: hoveredCell,
-        resolution: flowResolution,
-      });
-      if (inflows.kind === "size-limit") return inflows;
-      return {
-        flows: [...inflows.flows, ...outflows.flows],
-        kind: "flows",
-        resolution: flowResolution,
-      } satisfies BirdsFlowListResult;
-    },
-    [birds, flowResolution, hoveredCell, showFlows],
-  );
+  const hoveredFlows = useMemo(() => {
+    if (
+      !showFlows ||
+      hoveredCell === undefined ||
+      flowResolution === undefined
+    ) {
+      return undefined;
+    }
+    const outflows = birds.queryOutflows({
+      source: hoveredCell,
+      resolution: flowResolution,
+    });
+    if (outflows.kind === "size-limit") return outflows;
+    const inflows = birds.queryInflows({
+      destination: hoveredCell,
+      resolution: flowResolution,
+    });
+    if (inflows.kind === "size-limit") return inflows;
+    return {
+      flows: [...inflows.flows, ...outflows.flows],
+      kind: "flows",
+      resolution: flowResolution,
+    } satisfies BirdsFlowListResult;
+  }, [birds, flowResolution, hoveredCell, showFlows]);
   const [tracked, setTracked] = useState<{
     readonly birds: Birds;
     readonly sighting: Sighting;
   }>();
-  const trackedSighting = tracked?.birds === birds ? tracked.sighting : undefined;
+  const trackedSighting =
+    tracked?.birds === birds ? tracked.sighting : undefined;
   const trackedTrajectory = useMemo(
     () =>
       trackedSighting === undefined
@@ -182,6 +197,7 @@ export function BirdsCanvas() {
         hoveredFlows,
         trackedTrajectory,
         populationDensity,
+        scaleOverlay,
       ),
     );
     updateCacheUsage(setCacheUsage, birds.getCacheUsage());
@@ -197,6 +213,7 @@ export function BirdsCanvas() {
     state,
     trackedTrajectory,
     world,
+    scaleOverlay,
   ]);
 
   return (
@@ -248,7 +265,9 @@ export function BirdsCanvas() {
             Math.round(point.y / resolution.timeStep),
             resolution,
           );
-          if (trajectoryContainsCell(trackedTrajectory, trackedSighting, cell)) {
+          if (
+            trajectoryContainsCell(trackedTrajectory, trackedSighting, cell)
+          ) {
             setTracked(undefined);
             return;
           }
@@ -303,6 +322,94 @@ export function BirdsCanvas() {
   );
 }
 
+function usePopulationScaleTransition(
+  birds: Birds,
+  resolution: BirdsPopulationResolution | undefined,
+  size: Size2D,
+  viewport: ViewportState,
+): PopulationScaleOverlay | undefined {
+  const previousRef = useRef<{
+    readonly area: number;
+    readonly birds: Birds;
+    readonly resolution: BirdsPopulationResolution | undefined;
+  }>({ area: viewport.area, birds, resolution });
+  const [transition, setTransition] = useState<{
+    readonly criticalArea: number;
+    readonly direction: -1 | 1;
+    readonly previousResolution: BirdsPopulationResolution;
+    readonly startedAt: number;
+  }>();
+  const [animationTime, setAnimationTime] = useState(0);
+
+  useEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { area: viewport.area, birds, resolution };
+    if (previous.birds !== birds) {
+      setTransition(undefined);
+      return;
+    }
+    if (
+      resolution === undefined ||
+      previous.resolution === undefined ||
+      resolution.cellWidth === previous.resolution.cellWidth
+    ) {
+      return;
+    }
+
+    const zoomingIn = resolution.cellWidth < previous.resolution.cellWidth;
+    const coarseResolution = zoomingIn ? previous.resolution : resolution;
+    const coarseArea = zoomingIn ? previous.area : viewport.area;
+    const fineArea = zoomingIn ? viewport.area : previous.area;
+    const startedAt = performance.now();
+    setAnimationTime(startedAt);
+    setTransition({
+      criticalArea: populationResolutionTransitionArea(
+        birds,
+        size,
+        coarseArea,
+        fineArea,
+        coarseResolution,
+      ),
+      direction: zoomingIn ? -1 : 1,
+      previousResolution: previous.resolution,
+      startedAt,
+    });
+  }, [birds, resolution, size, viewport.area]);
+
+  useEffect(() => {
+    if (transition === undefined) return;
+    let animationFrame: number | undefined;
+    const animate = (time: number) => {
+      setAnimationTime(time);
+      if (time - transition.startedAt < SCALE_FADE_DURATION_MS) {
+        animationFrame = requestAnimationFrame(animate);
+      }
+    };
+    animationFrame = requestAnimationFrame(animate);
+    return () => {
+      if (animationFrame !== undefined) cancelAnimationFrame(animationFrame);
+    };
+  }, [transition]);
+
+  if (transition === undefined) return undefined;
+  const timeOpacity = Math.max(
+    0,
+    1 - (animationTime - transition.startedAt) / SCALE_FADE_DURATION_MS,
+  );
+  const zoomDistance = Math.max(
+    0,
+    transition.direction * Math.log(viewport.area / transition.criticalArea),
+  );
+  const zoomOpacity = Math.max(
+    0,
+    1 - (2 * zoomDistance) / SCALE_TRANSITION_LOG_INTERVAL,
+  );
+  const opacity = Math.min(timeOpacity, zoomOpacity);
+  return opacity === 0
+    ? undefined
+    : { opacity, resolution: transition.previousResolution };
+}
+
 function useBirdsViewportPrefetch(
   birds: Birds,
   resolution: BirdsPopulationResolution | undefined,
@@ -310,11 +417,14 @@ function useBirdsViewportPrefetch(
   viewport: ViewportState,
   zoomVelocity: number,
 ): void {
-  const prefetchedRef = useRef<{
-    readonly birds: Birds;
-    readonly resolution: BirdsPopulationResolution;
-    readonly cells: Set<string>;
-  } | undefined>(undefined);
+  const prefetchedRef = useRef<
+    | {
+        readonly birds: Birds;
+        readonly resolution: BirdsPopulationResolution;
+        readonly cells: Set<string>;
+      }
+    | undefined
+  >(undefined);
 
   useEffect(() => {
     if (
@@ -335,7 +445,11 @@ function useBirdsViewportPrefetch(
       TIME_ZOOM_EXPONENT,
       TIME_WORLD_SCALE,
     );
-    const projectedResolution = birdsRenderResolution(birds, size, projectedWorld);
+    const projectedResolution = birdsRenderResolution(
+      birds,
+      size,
+      projectedWorld,
+    );
     if (
       projectedResolution === undefined ||
       projectedResolution.cellWidth >= resolution.cellWidth
@@ -356,13 +470,22 @@ function useBirdsViewportPrefetch(
       TIME_ZOOM_EXPONENT,
       TIME_WORLD_SCALE,
     );
-    const cells = populationCellsInView(viewport, transitionWorld, nextResolution);
+    const cells = populationCellsInView(
+      viewport,
+      transitionWorld,
+      nextResolution,
+    );
     let record = prefetchedRef.current;
-    if (record?.birds !== birds || record.resolution.cellWidth !== nextResolution.cellWidth) {
+    if (
+      record?.birds !== birds ||
+      record.resolution.cellWidth !== nextResolution.cellWidth
+    ) {
       record = { birds, resolution: nextResolution, cells: new Set() };
       prefetchedRef.current = record;
     }
-    const pending = cells.filter((cell) => !record.cells.has(populationCellKey(cell)));
+    const pending = cells.filter(
+      (cell) => !record.cells.has(populationCellKey(cell)),
+    );
     let index = 0;
     let animationFrame: number | undefined;
     const prefetch = () => {
@@ -406,7 +529,10 @@ function populationResolutionTransitionArea(
       TIME_WORLD_SCALE,
     );
     const candidate = birdsRenderResolution(birds, size, candidateWorld);
-    if (candidate !== undefined && candidate.cellWidth < currentResolution.cellWidth) {
+    if (
+      candidate !== undefined &&
+      candidate.cellWidth < currentResolution.cellWidth
+    ) {
       fineLogArea = candidateLogArea;
     } else {
       coarseLogArea = candidateLogArea;
@@ -431,7 +557,11 @@ function populationCellsInView(
   const centerSpatialIndex = viewport.centerX / resolution.cellWidth;
   const centerTimeIndex = viewport.centerY / resolution.timeStep;
   const cells: HoveredPopulationCell[] = [];
-  for (let timeIndex = firstTimeIndex; timeIndex <= finalTimeIndex; timeIndex += 1) {
+  for (
+    let timeIndex = firstTimeIndex;
+    timeIndex <= finalTimeIndex;
+    timeIndex += 1
+  ) {
     for (
       let spatialIndex = firstSpatialIndex;
       spatialIndex < finalSpatialIndex;
@@ -442,11 +572,14 @@ function populationCellsInView(
   }
   return cells.sort((left, right) => {
     const leftDistance =
-      Math.abs((left.min + left.max) / (2 * resolution.cellWidth) - centerSpatialIndex) +
-      Math.abs(left.time / resolution.timeStep - centerTimeIndex);
+      Math.abs(
+        (left.min + left.max) / (2 * resolution.cellWidth) - centerSpatialIndex,
+      ) + Math.abs(left.time / resolution.timeStep - centerTimeIndex);
     const rightDistance =
-      Math.abs((right.min + right.max) / (2 * resolution.cellWidth) - centerSpatialIndex) +
-      Math.abs(right.time / resolution.timeStep - centerTimeIndex);
+      Math.abs(
+        (right.min + right.max) / (2 * resolution.cellWidth) -
+          centerSpatialIndex,
+      ) + Math.abs(right.time / resolution.timeStep - centerTimeIndex);
     return leftDistance - rightDistance;
   });
 }
@@ -473,11 +606,16 @@ function buildTrackedTrajectory(
   for (let index = 0; index < TRACKED_STEPS_PER_DIRECTION; index += 1) {
     try {
       const previous = current.prev(trackedStepOptions());
-      before.unshift({ count: 1, source: previous.cell, destination: current.cell });
+      before.unshift({
+        count: 1,
+        source: previous.cell,
+        destination: current.cell,
+      });
       current = previous;
     } catch (error) {
       if (error instanceof SightingBudgetExceededError) partial = "budget";
-      else if (error instanceof SightingResolutionLimitError) partial = "numeric-resolution";
+      else if (error instanceof SightingResolutionLimitError)
+        partial = "numeric-resolution";
       else throw error;
       break;
     }
@@ -491,7 +629,8 @@ function buildTrackedTrajectory(
       current = next;
     } catch (error) {
       if (error instanceof SightingBudgetExceededError) partial = "budget";
-      else if (error instanceof SightingResolutionLimitError) partial = "numeric-resolution";
+      else if (error instanceof SightingResolutionLimitError)
+        partial = "numeric-resolution";
       else throw error;
       break;
     }
@@ -515,11 +654,13 @@ function trajectoryContainsCell(
   origin: Sighting | undefined,
   cell: HoveredPopulationCell,
 ): boolean {
-  if (origin !== undefined && cellContainsEndpoint(cell, origin.cell)) return true;
+  if (origin !== undefined && cellContainsEndpoint(cell, origin.cell))
+    return true;
   if (trajectory?.flows.kind !== "flows") return false;
   return trajectory.flows.flows.some(
     ({ source, destination }) =>
-      cellContainsEndpoint(cell, source) || cellContainsEndpoint(cell, destination),
+      cellContainsEndpoint(cell, source) ||
+      cellContainsEndpoint(cell, destination),
   );
 }
 
@@ -542,6 +683,7 @@ function drawBirds(
   hoveredFlows: BirdsFlowListResult | undefined,
   trackedTrajectory: TrackedTrajectory | undefined,
   populationDensity: number,
+  scaleOverlay: PopulationScaleOverlay | undefined,
 ): number {
   drawBackground(context, size, viewport);
   const bounds = {
@@ -597,6 +739,17 @@ function drawBirds(
       queries += 1;
     }
   }
+  if (scaleOverlay !== undefined) {
+    drawCachedPopulationLayer(
+      context,
+      size,
+      viewport,
+      bounds,
+      birds,
+      scaleOverlay,
+      populationDensity,
+    );
+  }
   if (hoveredCell !== undefined) {
     drawHoveredCell(context, size, viewport, resolution, hoveredCell);
   }
@@ -611,6 +764,56 @@ function drawBirds(
   }
   drawDirection(context);
   return queries;
+}
+
+function drawCachedPopulationLayer(
+  context: CanvasRenderingContext2D,
+  size: Size2D,
+  viewport: ViewportState,
+  bounds: {
+    readonly maxTime: number;
+    readonly maxX: number;
+    readonly minTime: number;
+    readonly minX: number;
+  },
+  birds: Birds,
+  overlay: PopulationScaleOverlay,
+  populationDensity: number,
+): void {
+  const firstTimeIndex = Math.floor(
+    bounds.minTime / overlay.resolution.timeStep,
+  );
+  const finalTimeIndex = Math.ceil(
+    bounds.maxTime / overlay.resolution.timeStep,
+  );
+  context.save();
+  context.globalAlpha = overlay.opacity;
+  for (
+    let timeIndex = firstTimeIndex;
+    timeIndex <= finalTimeIndex;
+    timeIndex += 1
+  ) {
+    const result = birds.queryCachedPopulation({
+      min: bounds.minX,
+      max: bounds.maxX,
+      time: timeIndex * overlay.resolution.timeStep,
+      resolution: overlay.resolution,
+    });
+    if (result.kind !== "population-profile") continue;
+    for (const sample of result.samples) {
+      if (sample.count === undefined) continue;
+      drawPopulationSample(
+        context,
+        size,
+        viewport,
+        result.sampledTime,
+        overlay.resolution,
+        { count: sample.count, interval: sample.interval },
+        populationDensity,
+      );
+    }
+  }
+  context.restore();
 }
 
 function drawFlows(
@@ -653,7 +856,8 @@ function drawFlows(
     const perpendicularX = -directionY;
     const perpendicularY = directionX;
     const zoomThicknessScale = Math.sqrt(
-      Math.abs(destinationCenter.y - sourceCenter.y) / FLOW_REFERENCE_STEP_PIXELS,
+      Math.abs(destinationCenter.y - sourceCenter.y) /
+        FLOW_REFERENCE_STEP_PIXELS,
     );
     const lineWidth = (1.5 + 3 * strength) * zoomThicknessScale;
     const haloLineWidth = lineWidth + 4 * zoomThicknessScale;
@@ -685,10 +889,17 @@ function drawFlows(
       y: sourceCenter.y + directionY * (sourceInset + haloLineWidth / 2),
     };
     const destination = {
-      x: destinationCenter.x - directionX * (destinationInset + haloForwardPadding),
-      y: destinationCenter.y - directionY * (destinationInset + haloForwardPadding),
+      x:
+        destinationCenter.x -
+        directionX * (destinationInset + haloForwardPadding),
+      y:
+        destinationCenter.y -
+        directionY * (destinationInset + haloForwardPadding),
     };
-    const distance = Math.hypot(destination.x - source.x, destination.y - source.y);
+    const distance = Math.hypot(
+      destination.x - source.x,
+      destination.y - source.y,
+    );
     if (distance <= 0) continue;
     const arrowLength = Math.min(
       (10 + 3 * strength) * zoomThicknessScale,
@@ -718,7 +929,8 @@ function drawFlows(
 
   for (const flow of renderedFlows) {
     const arrowWidth = (7 + 3 * flow.strength) * flow.zoomThicknessScale;
-    const haloScale = 1 + (3 * flow.haloForwardPadding) / (2 * flow.arrowLength);
+    const haloScale =
+      1 + (3 * flow.haloForwardPadding) / (2 * flow.arrowLength);
     const haloTip = {
       x: flow.destination.x + flow.directionX * flow.haloForwardPadding,
       y: flow.destination.y + flow.directionY * flow.haloForwardPadding,
@@ -853,7 +1065,10 @@ function flowTileSize(
     TIME_ZOOM_EXPONENT,
     TIME_WORLD_SCALE,
   );
-  return { width: Math.abs(right.x - left.x), height: Math.abs(bottom.y - top.y) };
+  return {
+    width: Math.abs(right.x - left.x),
+    height: Math.abs(bottom.y - top.y),
+  };
 }
 
 function centerSubtileBoundaryDistance(
@@ -862,9 +1077,13 @@ function centerSubtileBoundaryDistance(
   tile: Size2D,
 ): number {
   const horizontalDistance =
-    directionX === 0 ? Number.POSITIVE_INFINITY : tile.width / 6 / Math.abs(directionX);
+    directionX === 0
+      ? Number.POSITIVE_INFINITY
+      : tile.width / 6 / Math.abs(directionX);
   const verticalDistance =
-    directionY === 0 ? Number.POSITIVE_INFINITY : tile.height / 6 / Math.abs(directionY);
+    directionY === 0
+      ? Number.POSITIVE_INFINITY
+      : tile.height / 6 / Math.abs(directionY);
   return Math.min(horizontalDistance, verticalDistance);
 }
 

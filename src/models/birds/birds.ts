@@ -28,6 +28,11 @@ export interface BirdsPopulationSample {
   readonly interval: { readonly max: number; readonly min: number };
 }
 
+export interface BirdsCachedPopulationSample {
+  readonly count: number | undefined;
+  readonly interval: { readonly max: number; readonly min: number };
+}
+
 export interface BirdsPopulationCellSample {
   readonly cell: BirdsCell;
   readonly count: number;
@@ -54,6 +59,15 @@ export type BirdsPopulationResult =
       readonly resolution: BirdsPopulationResolution;
       readonly sampledTime: number;
     };
+
+export type BirdsCachedPopulationResult =
+  | {
+      readonly kind: 'population-profile';
+      readonly resolution: BirdsPopulationResolution;
+      readonly sampledTime: number;
+      readonly samples: readonly BirdsCachedPopulationSample[];
+    }
+  | Extract<BirdsPopulationResult, { readonly kind: 'size-limit' }>;
 
 export interface BirdsCell {
   readonly max: number;
@@ -349,6 +363,53 @@ export class Birds {
       const min = index * scale.cellLength;
       samples.push({
         count: this.#engine.queryCell({ min, max: min + scale.cellLength, time: sampledTime }),
+        interval: { min, max: min + scale.cellLength },
+      });
+    }
+    return {
+      kind: 'population-profile',
+      resolution: request.resolution,
+      sampledTime,
+      samples,
+    };
+  }
+
+  queryCachedPopulation(request: {
+    readonly max: number;
+    readonly min: number;
+    readonly resolution: BirdsPopulationResolution;
+    readonly time: number;
+  }): BirdsCachedPopulationResult {
+    const facts = this.#populationResolutionFacts(request.resolution);
+    validateInterval(request.min, request.max, 'Cached population query interval');
+    if (!Number.isFinite(request.time)) {
+      throw new RangeError('Cached population query time must be finite');
+    }
+    const scale = birdsScale(facts.epoch)!;
+    const sampledTime = snapNearest(request.time, scale.nextFlowDuration);
+    const firstIndex = Math.floor(request.min / scale.cellLength);
+    const finalIndex = Math.ceil(request.max / scale.cellLength);
+    validateIndices(firstIndex, finalIndex);
+    const requiredCount = finalIndex - firstIndex;
+    if (requiredCount > BIRDS_MAX_POPULATION_CELLS_PER_QUERY) {
+      return {
+        kind: 'size-limit',
+        limit: BIRDS_MAX_POPULATION_CELLS_PER_QUERY,
+        requiredCount,
+        resolution: request.resolution,
+        sampledTime,
+      };
+    }
+
+    const samples: BirdsCachedPopulationSample[] = [];
+    for (let index = firstIndex; index < finalIndex; index += 1) {
+      const min = index * scale.cellLength;
+      samples.push({
+        count: this.#engine.queryCachedCell({
+          min,
+          max: min + scale.cellLength,
+          time: sampledTime,
+        }),
         interval: { min, max: min + scale.cellLength },
       });
     }
