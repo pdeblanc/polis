@@ -12,6 +12,7 @@
     "characterize:birds-flows": "tsx src/benchmarks/birdsFlowMarginals.ts",
     "characterize:birds-flow-phases": "tsx src/benchmarks/birdsFlowPhaseReport.ts",
     "characterize:birds-trajectories": "tsx src/benchmarks/birdsTrajectories.ts",
+    "characterize:birds-balanced-trajectories": "tsx src/benchmarks/birdsBalancedTrajectories.ts",
     "profile:birds-engine": "tsx src/benchmarks/birdsEngineProfile.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
     "dev": "vite",

@@ -107,6 +107,14 @@ Arguments select the candidate count, retained-path ceiling, and diffusion rates
 npm run characterize:birds-trajectories -- 200 25 0.5 1 2 4
 ```
 
+Build an equal-quota collision-free cohort over every spatial and temporal starting
+phase. Arguments select the candidate ceiling per phase, path quota per phase, and
+diffusion rates:
+
+```sh
+npm run characterize:birds-balanced-trajectories -- 100 2 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 

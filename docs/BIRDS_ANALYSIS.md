@@ -416,14 +416,48 @@ does not explain the elevated long-horizon second moments. The `D = 4` cohort ha
 zero mean yet still has an elevated eight-step moment, indicating that drift alone also
 does not explain the discrepancy.
 
-The next trajectory experiment should balance starting spatial and temporal phases before
-drawing stronger conclusions about increment independence or variance growth.
+### Phase-balanced sparse trajectories
+
+The follow-up experiment assigns the same retention quota to every starting hierarchy
+phase. At epoch 2 this is the Cartesian product of four spatial phases and four temporal
+phases. Each phase has its own deterministic candidate stream and stops as soon as its
+quota is filled. This avoids weighting easy-to-find phases more heavily merely because
+their candidates survive the collision-free screen more often.
+
+With a quota of two paths per phase, density `1/16`, and eight requested steps, all 16
+phases filled for diffusion rates `0.5`, `1`, and `2`:
+
+| Diffusion rate | Candidates attempted | Retained paths | Phase mean range | RMS phase mean | Pooled mean increment | Increment variance | Brownian one-step second moment | Lag-one covariance | Eight-step mean | Eight-step second moment | Brownian eight-step reference |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 182 | 32 | [−0.250, 0.188] | 0.134 | −0.070 | 0.214 | 0.283 | +0.013 | −0.563 | 2.125 | 2.265 |
+| 1 | 191 | 32 | [−0.313, 0.250] | 0.133 | −0.023 | 0.390 | 0.416 | −0.001 | −0.188 | 2.375 | 3.328 |
+| 2 | 226 | 32 | [−0.438, 0.313] | 0.231 | −0.051 | 0.665 | 0.667 | +0.020 | −0.406 | 5.719 | 5.333 |
+
+Balancing removes the conspicuous positive pooled drift in the original fixed-phase
+cohorts. At `D = 2`, the one-step variance nearly equals the Brownian reference; at the
+lower rates it is smaller, plausibly in part because collision-free survival is a
+conditioning event. The eight-step estimates contain only 32 displacements each and are
+correspondingly noisy. Per-phase means remain substantial and change sign, reinforcing
+the earlier finding that hierarchy phases carry compensating directional biases.
+
+The equivalent `D = 4` run was stopped after it spent substantially longer screening a
+phase without completing the report. Strict collision-free retention becomes expensive
+at high diffusion, so an incomplete phase grid must be reported as incomplete rather
+than pooled as though it were balanced. This runtime is also evidence about the selection
+mechanism, not a reason to weaken its definition.
 
 Run the deterministic candidate scan with candidate count, retained-path ceiling, and
 diffusion rates:
 
 ```sh
 npm run characterize:birds-trajectories -- 200 25 0.5 1 2 4
+```
+
+Run the equal-quota phase experiment with candidate ceiling per phase, quota per phase,
+and diffusion rates:
+
+```sh
+npm run characterize:birds-balanced-trajectories -- 100 2 0.5 1 2 4
 ```
 
 ## Planned analysis

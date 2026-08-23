@@ -17,6 +17,7 @@ export interface BirdsTrajectoryOptions {
   readonly seedPrefix?: string;
   readonly sourceSpatialIndex: number;
   readonly sourceTimeIndex: number;
+  readonly stopWhenRetentionFilled?: boolean;
   readonly steps: number;
 }
 
@@ -48,9 +49,66 @@ export interface BirdsTrajectoryMeasurement {
 
 type FailureKind = 'numeric' | 'query-budget' | 'refinement-budget' | 'error';
 
+export interface ScreenedBirdsTrajectoryCohort {
+  readonly attemptedCandidates: number;
+  readonly collisionFreeEligiblePaths: number;
+  readonly collisionRejectedCompletedPaths: number;
+  readonly completedPaths: number;
+  readonly emptyStarts: number;
+  readonly errorFailures: number;
+  readonly numericFailures: number;
+  readonly paths: readonly (readonly number[])[];
+  readonly queryBudgetFailures: number;
+  readonly refinementBudgetFailures: number;
+  readonly retainedCandidateIndices: readonly number[];
+  readonly retentionOverflowPaths: number;
+}
+
+export interface BirdsTrajectoryMoments {
+  readonly brownianOneStepSecondMoment: number;
+  readonly horizon: number;
+  readonly lagOneIncrementCovariance: number;
+  readonly meanDisplacement: number;
+  readonly meanIncrement: number;
+  readonly meanSquaredDisplacement: number;
+  readonly oneStepIncrementVariance: number;
+  readonly referenceMeanSquaredDisplacement: number;
+  readonly retainedDisplacements: number;
+  readonly retainedIncrements: number;
+}
+
 export function measureBirdsTrajectories(
   options: BirdsTrajectoryOptions,
 ): readonly BirdsTrajectoryMeasurement[] {
+  const cohort = screenBirdsTrajectoryCohort(options);
+  const scale = birdsScale(options.epoch)!;
+  return summarizeBirdsTrajectoryPaths(
+    cohort.paths,
+    scale.cellLength,
+    scale.nextFlowDuration,
+    options.diffusionRate,
+    options.steps,
+  ).map((moments) => ({
+    diffusionRate: options.diffusionRate,
+    attemptedCandidates: cohort.attemptedCandidates,
+    emptyStarts: cohort.emptyStarts,
+    completedPaths: cohort.completedPaths,
+    collisionFreePaths: cohort.paths.length,
+    collisionFreeEligiblePaths: cohort.collisionFreeEligiblePaths,
+    collisionRejectedCompletedPaths: cohort.collisionRejectedCompletedPaths,
+    retentionOverflowPaths: cohort.retentionOverflowPaths,
+    queryBudgetFailures: cohort.queryBudgetFailures,
+    refinementBudgetFailures: cohort.refinementBudgetFailures,
+    numericFailures: cohort.numericFailures,
+    errorFailures: cohort.errorFailures,
+    retainedCandidateIndices: cohort.retainedCandidateIndices.join(','),
+    ...moments,
+  }));
+}
+
+export function screenBirdsTrajectoryCohort(
+  options: BirdsTrajectoryOptions,
+): ScreenedBirdsTrajectoryCohort {
   validateOptions(options);
   const scale = birdsScale(options.epoch)!;
   const min = options.sourceSpatialIndex * scale.cellLength;
@@ -66,6 +124,7 @@ export function measureBirdsTrajectories(
   let collisionFreeEligiblePaths = 0;
   let collisionRejectedCompletedPaths = 0;
   let retentionOverflowPaths = 0;
+  let attemptedCandidates = 0;
   const failures: Record<FailureKind, number> = {
     numeric: 0,
     'query-budget': 0,
@@ -74,6 +133,7 @@ export function measureBirdsTrajectories(
   };
 
   for (let candidate = 0; candidate < options.maximumCandidates; candidate += 1) {
+    attemptedCandidates += 1;
     const birds = new Birds(
       `${options.seedPrefix ?? 'Birds trajectories'}:model:${candidate}`,
       options.populationDensity,
@@ -121,6 +181,12 @@ export function measureBirdsTrajectories(
         if (collisionFreePaths.length < options.retainedCollisionFreePaths) {
           collisionFreePaths.push(centers);
           retainedCandidateIndices.push(candidate);
+          if (
+            options.stopWhenRetentionFilled &&
+            collisionFreePaths.length === options.retainedCollisionFreePaths
+          ) {
+            break;
+          }
         } else {
           retentionOverflowPaths += 1;
         }
@@ -132,14 +198,37 @@ export function measureBirdsTrajectories(
     }
   }
 
-  const increments = collisionFreePaths.flatMap((path) =>
+  return {
+    attemptedCandidates,
+    paths: collisionFreePaths,
+    retainedCandidateIndices,
+    emptyStarts,
+    completedPaths,
+    collisionFreeEligiblePaths,
+    collisionRejectedCompletedPaths,
+    retentionOverflowPaths,
+    queryBudgetFailures: failures['query-budget'],
+    refinementBudgetFailures: failures['refinement-budget'],
+    numericFailures: failures.numeric,
+    errorFailures: failures.error,
+  };
+}
+
+export function summarizeBirdsTrajectoryPaths(
+  paths: readonly (readonly number[])[],
+  cellWidth: number,
+  timeStep: number,
+  diffusionRate: number,
+  steps: number,
+): readonly BirdsTrajectoryMoments[] {
+  const increments = paths.flatMap((path) =>
     path.slice(1).map((position, index) => position - path[index]),
   );
   const meanIncrement = mean(increments);
   const oneStepIncrementVariance = mean(
     increments.map((increment) => (increment - meanIncrement) ** 2),
   );
-  const lagProducts = collisionFreePaths.flatMap((path) => {
+  const lagProducts = paths.flatMap((path) => {
     const pathIncrements = path.slice(1).map((position, index) => position - path[index]);
     return pathIncrements.slice(1).map(
       (increment, index) =>
@@ -149,33 +238,20 @@ export function measureBirdsTrajectories(
   const lagOneIncrementCovariance = mean(lagProducts);
   const brownianOneStepSecondMoment =
     brownianBinnedDisplacementMoments(
-      scale.cellLength,
-      scale.nextFlowDuration,
-      options.diffusionRate,
-    ).secondMoment / scale.cellLength ** 2;
-  const horizons = [1, 2, 4, 8].filter((horizon) => horizon <= options.steps);
+      cellWidth,
+      timeStep,
+      diffusionRate,
+    ).secondMoment / cellWidth ** 2;
+  const horizons = [1, 2, 4, 8].filter((horizon) => horizon <= steps);
 
   return horizons.map((horizon) => {
-    const displacements = collisionFreePaths.flatMap((path) =>
+    const displacements = paths.flatMap((path) =>
       path.slice(horizon).map((position, index) => position - path[index]),
     );
     return {
-      diffusionRate: options.diffusionRate,
       horizon,
-      attemptedCandidates: options.maximumCandidates,
-      emptyStarts,
-      completedPaths,
-      collisionFreePaths: collisionFreePaths.length,
-      collisionFreeEligiblePaths,
-      collisionRejectedCompletedPaths,
-      retentionOverflowPaths,
-      queryBudgetFailures: failures['query-budget'],
-      refinementBudgetFailures: failures['refinement-budget'],
-      numericFailures: failures.numeric,
-      errorFailures: failures.error,
       retainedIncrements: increments.length,
       retainedDisplacements: displacements.length,
-      retainedCandidateIndices: retainedCandidateIndices.join(','),
       meanIncrement,
       oneStepIncrementVariance,
       lagOneIncrementCovariance,
