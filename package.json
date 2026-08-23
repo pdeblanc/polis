@@ -7,6 +7,7 @@
     "benchmark:distributions": "vitest bench --run src/benchmarks/distributions.bench.ts",
     "benchmark:complexity": "tsx src/benchmarks/modelComplexity.ts",
     "benchmark:birds-tracker": "tsx src/benchmarks/birdsTracker.ts",
+    "characterize:birds-populations": "tsx src/benchmarks/birdsPopulationMarginals.ts",
     "profile:birds-engine": "tsx src/benchmarks/birdsEngineProfile.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
     "dev": "vite",

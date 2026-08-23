@@ -15,11 +15,12 @@ consumer-facing `Birds` API now provides model-scoped resolution capabilities,
 population profiles, singular flows, complete nonzero inflow/outflow lists, explicit
 result ceilings, cache controls, and query statistics. An initial spacetime visualization
 renders discrete population profiles with space horizontal and future time upward. A
-toggleable cursor-following overlay draws every nonzero outflow from the selected cell to
-the next sampled row, with count-weighted opacity and width. The dependency overlay,
-tagged-bird helper, statistical characterization, and final complexity suite have not yet
-been implemented. Initial cold-cache flow measurements cover epoch depth and
-diffusion-dependent support width.
+toggleable cursor-following flow overlay draws every nonzero inflow and outflow of the
+selected cell, with count-weighted opacity and width. A separate dependency overlay shows
+the recursive query graph. The immutable tagged-bird helper, its viewport path display,
+tracker diagnostics, and initial CLI complexity and performance measurements are also
+implemented. Statistical characterization and the final expanded complexity suite remain
+in progress.
 
 The visualization presents each population sample as a filled temporal band centered on
 its exact sampled time, with adjacent bands touching. This is a display convention for a
@@ -167,6 +168,23 @@ epoch-3 entry flow, diffusion rates `0`, `0.5`, and `2` produced approximately 9
 24,500, and 118,000 recursive calls respectively. These figures are observations rather
 than complexity guarantees, but they identify diffusion/support width as an important
 parameter for the public query budgets and later performance work.
+
+## Population-marginal characterization
+
+The first statistical-characterization tool samples the same public population-cell
+query across independently seeded model instances. Its CLI report includes the empirical
+mean, sample variance, variance-to-mean ratio, zero frequency, and total variation
+distance from the intended `Poisson(populationDensity * cellWidth)` marginal. Standard
+cases include the deterministic coarse root at time zero as an explicit baseline, a
+moved coarse cell, ordinary spatially refined cells, and deep-epoch cases whose density
+increases with refinement to hold the Poisson reference mean constant. The CLI accepts
+case-name filters so expensive deep cases can be sampled separately.
+
+These are measurements, not conformance tests. In particular, the deterministic rounded
+coarse initialization and conditional subdivision of conserved integer totals mean that
+version 1 is not expected to have exact Poisson marginals. Automated tests verify the
+measurement arithmetic and reproducibility, but do not impose a statistical acceptance
+threshold or tune the model toward the report.
 
 ## Immutable sightings
 

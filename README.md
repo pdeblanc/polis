@@ -61,6 +61,21 @@ Pass one or more case names to run a subset, such as:
 npm run benchmark:birds-tracker -- known-polis-3-meeting
 ```
 
+Sample Birds cell populations across independent seeds and compare their empirical
+marginals with the Poisson reference (the optional argument is the trial count):
+
+```sh
+npm run characterize:birds-populations
+npm run characterize:birds-populations -- 5000
+```
+
+Pass case names after the trial count to select a subset, which is useful for more
+expensive deep-epoch cases. These cases are opt-in rather than part of the default run:
+
+```sh
+npm run characterize:birds-populations -- 200 epoch-8-density-compensated
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 
