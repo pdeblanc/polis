@@ -17,6 +17,8 @@ This directory contains the project's technical reference material and design re
 - [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md) is the active record
   of Birds implementation discoveries, provisional limitations, and concrete internal
   choices that do not override the canonical design.
+- [`BIRDS_ANALYSIS.md`](./BIRDS_ANALYSIS.md) is the active record of empirical and
+  mathematical investigations of the implemented Birds model.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
   retained as historical review input.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced

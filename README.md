@@ -76,6 +76,14 @@ expensive deep-epoch cases. These cases are opt-in rather than part of the defau
 npm run characterize:birds-populations -- 200 epoch-8-density-compensated
 ```
 
+Sample every spatial phase across one coarse-cell-width block at a deep epoch. Arguments
+select the epoch and number of paired seeds; the reference mean remains four birds per
+fine cell:
+
+```sh
+npm run characterize:birds-population-phases -- 8 50
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 

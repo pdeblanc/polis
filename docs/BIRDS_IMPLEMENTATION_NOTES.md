@@ -171,6 +171,10 @@ parameter for the public query budgets and later performance work.
 
 ## Population-marginal characterization
 
+Detailed methods, numerical results, interpretations, and follow-up questions now live
+in [`BIRDS_ANALYSIS.md`](./BIRDS_ANALYSIS.md). This section records only the corresponding
+implementation boundary.
+
 The first statistical-characterization tool samples the same public population-cell
 query across independently seeded model instances. Its CLI report includes the empirical
 mean, sample variance, variance-to-mean ratio, zero frequency, and total variation
@@ -179,6 +183,12 @@ cases include the deterministic coarse root at time zero as an explicit baseline
 moved coarse cell, ordinary spatially refined cells, and deep-epoch cases whose density
 increases with refinement to hold the Poisson reference mean constant. The CLI accepts
 case-name filters so expensive deep cases can be sampled separately.
+
+A complementary phase report uses paired seeds to query every fine spatial cell covering
+one complete coarse-cell width. For several temporal residues it reports the least- and
+most-populated phase means as well as the aggregate mean across the block. This tests
+whether isolated positive biases are compensated by negative biases elsewhere without
+mistaking per-seed conservation for exact Poisson behavior.
 
 These are measurements, not conformance tests. In particular, the deterministic rounded
 coarse initialization and conditional subdivision of conserved integer totals mean that
