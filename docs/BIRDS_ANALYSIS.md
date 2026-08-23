@@ -362,6 +362,70 @@ could reduce it only by changing the spatial-refinement coupling—for example, 
 source and destination child memberships conditionally dependent on the parent flow—so
 that would be a semantic model change rather than a version-1 bug fix.
 
+## Trajectory characterization
+
+### Cohorts and collision-free screening
+
+Trajectory analysis keeps two populations conceptually separate. An unconditional
+candidate stream records empty starts, completions, budget failures, numeric limits, and
+other errors without discarding inconvenient outcomes. A conditional cohort retains the
+first `N` qualifying paths from that deterministic stream.
+
+A retained path must start in a singleton requested cell, encounter no asymmetric
+narrowing attempt, and return a singleton at every requested waypoint. Spatial refinement
+is allowed because some hierarchy phases require it solely to reach the requested temporal
+step; every detected multi-bird endpoint increments asymmetric narrowing before any
+collision-driven source refinement. The report includes the retained candidate indices,
+so the same screened population can be reproduced and inspected directly.
+
+This filter conditions the trajectory distribution. Its moments are not unconditional
+Birds marginals, and comparison with an ordinary Brownian reference is descriptive only.
+The later labeled finite-population Brownian experiment must apply an equivalent
+no-co-occupancy filter at the same observation resolution.
+
+### Initial sparse trajectories
+
+The first scan used epoch 2, density `1/16`, eight requested steps, a fixed source phase,
+200 deterministic candidates per diffusion rate, and a ceiling of 25 retained paths.
+
+| Diffusion rate | Empty starts | Completed paths | Refinement-budget failures | Numeric failures | Retained paths |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 142 | 52 | 0 | 6 | 25 |
+| 1 | 138 | 52 | 1 | 9 | 25 |
+| 2 | 148 | 45 | 2 | 5 | 25 |
+| 4 | 139 | 55 | 1 | 5 | 25 |
+
+There were no query-budget or unclassified errors. The original 200-candidate run capped
+retention at 25 before separately reporting eligible overflow, so the table states only
+the retained count, not the total number of qualifying completed paths. The corrected
+report now distinguishes collision rejection from retention overflow.
+
+| Diffusion rate | Mean increment | Increment variance | Brownian one-step second moment | Lag-one covariance | Eight-step mean | Eight-step second moment | Brownian eight-step reference |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 0.140 | 0.280 | 0.283 | −0.020 | 1.12 | 2.72 | 2.26 |
+| 1 | 0.165 | 0.368 | 0.416 | −0.005 | 1.32 | 4.28 | 3.33 |
+| 2 | 0.215 | 0.699 | 0.667 | −0.055 | 1.72 | 7.72 | 5.33 |
+| 4 | 0.005 | 1.255 | 1.167 | −0.114 | 0.04 | 11.32 | 9.33 |
+
+Each retained rate contributes 200 one-step increments but only 25 nonoverlapping
+eight-step displacements; increments within a path are not independent observations.
+The fixed starting phase and collision-free survival filter are serious confounders. The
+positive drift at the first three rates may reflect source hierarchy phase, conditioning,
+or both. Lag-one covariance is nonpositive, so positive adjacent-increment correlation
+does not explain the elevated long-horizon second moments. The `D = 4` cohort has almost
+zero mean yet still has an elevated eight-step moment, indicating that drift alone also
+does not explain the discrepancy.
+
+The next trajectory experiment should balance starting spatial and temporal phases before
+drawing stronger conclusions about increment independence or variance growth.
+
+Run the deterministic candidate scan with candidate count, retained-path ceiling, and
+diffusion rates:
+
+```sh
+npm run characterize:birds-trajectories -- 200 25 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:

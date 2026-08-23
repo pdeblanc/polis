@@ -98,6 +98,15 @@ Measure complete-outflow drift across every source phase in one coarse-cell-widt
 npm run characterize:birds-flow-phases -- 4 50 0.5 1 2 4
 ```
 
+Screen deterministic candidate seeds and characterize retained collision-free trajectories.
+Structural resolution refinement is allowed; candidates are rejected when the tracker
+detects a multi-bird endpoint or a requested waypoint is not a singleton.
+Arguments select the candidate count, retained-path ceiling, and diffusion rates:
+
+```sh
+npm run characterize:birds-trajectories -- 200 25 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 
