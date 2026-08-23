@@ -151,7 +151,7 @@ export function summarizePopulationCounts(
   };
 }
 
-function poissonTotalVariation(
+export function poissonTotalVariation(
   counts: readonly number[],
   mean: number,
   maximumObserved: number,

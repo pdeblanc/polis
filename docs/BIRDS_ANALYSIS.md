@@ -163,11 +163,67 @@ Append one or more diffusion rates to compare them over the same phase grid:
 npm run characterize:birds-population-phases -- 8 50 1 2 4
 ```
 
+## Flow marginals
+
+### Brownian reference
+
+For source interval `A`, destination interval `B`, duration `T`, and diffusion rate `D`,
+the reference probability is evaluated analytically as:
+
+```text
+(1 / width(A)) integral_A P(x + Normal(0, D T) is in B) dx
+```
+
+The implementation integrates the normal CDF over the complete source and destination
+intervals. When `D T = 0`, it uses the exact overlap fraction `width(A intersect B) /
+width(A)`. Tests cover reflection symmetry, zero-variance overlap, and probability
+conservation over a wide destination partition.
+
+### Initial equal-resolution study
+
+The initial flow experiment used epoch 4, density `4`, cell width `1`, duration `0.25`,
+source spatial index `1`, source temporal index `1`, and 200 independent seeds. The source
+cell therefore had reference mean `4`. Five destination offsets were sampled, while the
+complete public outflow list was independently summed on every trial.
+
+| Diffusion rate | Source mean | Reference neighbor mean | Left mean | Right mean | Right-minus-left | Reference center mean | Center mean |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 4.355 | 0.562 | 0.465 | 0.800 | 0.335 | 2.874 | 3.075 |
+| 1 | 4.315 | 0.764 | 0.675 | 0.960 | 0.285 | 2.438 | 2.610 |
+| 2 | 4.050 | 0.929 | 0.750 | 1.100 | 0.350 | 1.944 | 1.935 |
+| 4 | 4.020 | 0.963 | 0.920 | 1.010 | 0.090 | 1.475 | 1.490 |
+
+Every one of the 800 trials had exact equality between the queried source population and
+the sum of its complete nonzero outflow list. The first three rates show a substantial
+rightward imbalance even though the Brownian reference is reflection symmetric. At
+`D = 2`, the source and center means are nearly centered while the neighboring flows
+remain asymmetric, separating directional motion bias from aggregate population bias.
+At `D = 4`, the measured center and both neighbors are close to their references and the
+left/right difference is small relative to the earlier cases.
+
+Most non-tail flow variance-to-mean ratios were near one. Empirical total variation was
+generally modest, but was largest for the positively biased right neighbor at low
+diffusion (`0.155` at `D = 0.5`). Rare far-tail estimates have high relative uncertainty
+at 200 trials and should not be overinterpreted.
+
+These results support the same qualitative conclusion as the population-phase study:
+stronger diffusion reduces visible hierarchy-phase artifacts. They also identify a
+specifically directional effect that population counts alone cannot reveal. Follow-up
+work should repeat paired left/right measurements across source spatial phases, temporal
+residues, reflected coordinates, and deeper epochs to determine which structural phase
+owns the asymmetry and whether opposite phases compensate globally.
+
+Run the density-compensated flow marginal report with epoch, trial count, and diffusion
+rates:
+
+```sh
+npm run characterize:birds-flows -- 4 200 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:
 
-- flow-count marginals against integrated Brownian transition probabilities;
 - increment, displacement, bridge, and crossing statistics;
 - tagged trajectories and the finite-population quotient-space reference comparison;
 - deterministic cell-population bound analysis;

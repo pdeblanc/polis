@@ -85,6 +85,13 @@ npm run characterize:birds-population-phases -- 8 50
 npm run characterize:birds-population-phases -- 8 50 1 2 4
 ```
 
+Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
+and optional diffusion rates:
+
+```sh
+npm run characterize:birds-flows -- 4 200 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 
