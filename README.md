@@ -92,6 +92,12 @@ and optional diffusion rates:
 npm run characterize:birds-flows -- 4 200 0.5 1 2 4
 ```
 
+Measure complete-outflow drift across every source phase in one coarse-cell-width block:
+
+```sh
+npm run characterize:birds-flow-phases -- 4 50 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 

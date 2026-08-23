@@ -220,6 +220,43 @@ rates:
 npm run characterize:birds-flows -- 4 200 0.5 1 2 4
 ```
 
+### Paired source-phase drift
+
+A follow-up experiment sampled every epoch-4 source cell spanning `[0, 16)` with 50
+paired seeds. For each source it queried the complete nonzero outflow list and measured
+the population-weighted displacement between source and destination cell centers. Drift
+is reported in cell widths per bird; the Brownian reference drift is zero. Temporal
+indices 1 through 3 use duration `0.25` (`duration / width² = 0.25`), while index 4 is a
+spatial-child cell whose canonical incidence uses duration `1`.
+
+| Diffusion rate | Short-duration aggregate drift range | Short-duration RMS phase drift | Long-duration aggregate drift | Long-duration RMS phase drift | Long-duration reflection-pair residual |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | −0.0059–0.0069 | 0.074–0.111 | −0.0276 | 0.560 | 0.137 |
+| 1 | −0.0075–0.0082 | 0.063–0.096 | −0.0228 | 0.540 | 0.157 |
+| 2 | −0.0216–0.0147 | 0.053–0.075 | −0.0149 | 0.514 | 0.191 |
+| 4 | −0.0205–0.0084 | 0.063–0.074 | −0.0270 | 0.574 | 0.117 |
+
+All 12,800 source/outflow comparisons conserved population exactly. Aggregate block drift
+never exceeded `0.028` cell widths per bird in magnitude, even when individual
+long-duration source phases ranged roughly from `−0.92` to `+0.78`. The long-duration
+reflection-pair residual is much smaller than its phase RMS, consistent with an
+approximately antisymmetric pattern of compensating leftward and rightward phases.
+
+The short-duration phase RMS generally decreases through `D = 2`, although this initial
+50-seed report does not remove sampling variance from drift estimates. The long-duration
+phase RMS remains near `0.5–0.57` at every diffusion rate and is not monotonically
+improved by stronger diffusion. This distinguishes two effects: diffusion smooths the
+finest temporally introduced flows, while the larger artifact follows the longer
+canonical incidence owned by spatial-child cells. The result argues for grouping later
+motion analysis by construction case and normalized duration rather than by diffusion
+rate alone.
+
+Run the complete source-phase report with epoch, trial count, and diffusion rates:
+
+```sh
+npm run characterize:birds-flow-phases -- 4 50 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:

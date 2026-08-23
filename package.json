@@ -10,6 +10,7 @@
     "characterize:birds-populations": "tsx src/benchmarks/birdsPopulationMarginals.ts",
     "characterize:birds-population-phases": "tsx src/benchmarks/birdsPopulationPhaseReport.ts",
     "characterize:birds-flows": "tsx src/benchmarks/birdsFlowMarginals.ts",
+    "characterize:birds-flow-phases": "tsx src/benchmarks/birdsFlowPhaseReport.ts",
     "profile:birds-engine": "tsx src/benchmarks/birdsEngineProfile.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
     "dev": "vite",
