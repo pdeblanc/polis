@@ -5,6 +5,53 @@ export interface Interval1D {
   readonly min: number;
 }
 
+export interface BrownianBinnedDisplacementMoments {
+  readonly probability: number;
+  readonly secondMoment: number;
+}
+
+/** Moments observed by binning both endpoints into equal-width cells and using centers. */
+export function brownianBinnedDisplacementMoments(
+  cellWidth: number,
+  duration: number,
+  diffusionRate: number,
+): BrownianBinnedDisplacementMoments {
+  if (!Number.isFinite(cellWidth) || cellWidth <= 0) {
+    throw new RangeError('Brownian cell width must be finite and positive');
+  }
+  // Delegate duration and diffusion validation, including exact zero-variance behavior.
+  const source = { min: -cellWidth / 2, max: cellWidth / 2 };
+  let probability = brownianIntervalTransitionProbability(
+    source,
+    source,
+    duration,
+    diffusionRate,
+  );
+  let secondMoment = 0;
+  if (duration === 0 || diffusionRate === 0) return { probability, secondMoment };
+
+  const tailTolerance = 1e-14;
+  for (let offset = 1; offset <= 100_000; offset += 1) {
+    const destination = {
+      min: (offset - 0.5) * cellWidth,
+      max: (offset + 0.5) * cellWidth,
+    };
+    const oneSide = brownianIntervalTransitionProbability(
+      source,
+      destination,
+      duration,
+      diffusionRate,
+    );
+    const pairProbability = 2 * oneSide;
+    probability += pairProbability;
+    secondMoment += pairProbability * (offset * cellWidth) ** 2;
+    if (1 - probability <= tailTolerance && pairProbability <= tailTolerance) {
+      return { probability: Math.min(1, probability), secondMoment };
+    }
+  }
+  throw new RangeError('Brownian binned moment summation did not converge');
+}
+
 /**
  * Probability that Brownian motion starting uniformly in `source` lies in `destination`.
  * The displacement variance is `diffusionRate * duration`.

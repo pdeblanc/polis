@@ -257,6 +257,46 @@ Run the complete source-phase report with epoch, trial count, and diffusion rate
 npm run characterize:birds-flow-phases -- 4 50 0.5 1 2 4
 ```
 
+### Displacement second moments
+
+The same complete-outflow samples were extended to measure squared cell-center
+displacement. The reference is not the raw continuous Brownian variance: it integrates
+the Brownian transition probability into every canonical destination cell and assigns
+that probability the destination center's displacement. The symmetric infinite sum is
+evaluated until its omitted probability is below `1e-14`. Tests cover convergence,
+zero-diffusion behavior, and parabolic scale covariance.
+
+| Diffusion rate | Short-duration reference | Short-duration empirical range | Long-duration reference | Long-duration empirical | Long-duration excess | Relative excess |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 0.2831 | 0.2781–0.2835 | 0.6667 | 1.6365 | +0.9698 | 145% |
+| 1 | 0.4159 | 0.4195–0.4292 | 1.1667 | 2.1866 | +1.0199 | 87% |
+| 2 | 0.6667 | 0.6714–0.6735 | 2.1667 | 3.2136 | +1.0469 | 48% |
+| 4 | 1.1667 | 1.1601–1.1799 | 4.1667 | 5.1859 | +1.0192 | 24% |
+
+The three short-duration temporal residues agree with the binned Brownian second moment
+to within about `3.2%`, and usually within roughly `1%`. The long-duration spatial-child
+row has an absolute excess close to one squared cell width at every diffusion rate. Its
+relative error decreases only because the Brownian component grows with diffusion.
+
+Total empirical variance was decomposed by source phase:
+
+```text
+total variance = population-weighted within-phase variance
+               + population-weighted variance of phase drifts
+```
+
+The between-phase drift contribution to the long-duration variance was `0.309`, `0.288`,
+`0.266`, and `0.328` for diffusion rates `0.5`, `1`, `2`, and `4`. Thus compensating phase
+drifts explain a substantial minority of the roughly one-unit excess, while most of it
+remains as excess motion within individual phases.
+
+The nearly diffusion-independent absolute error suggests an additional scale-normalized
+variance contribution in the spatial-child flow construction rather than a simple error
+in the diffusion multiplier. This is a characterization result, not yet a diagnosis of a
+specific stage or kernel. A focused recurrence calculation should next derive the
+expected second moment contributed by F/G/H spatial refinement and determine where the
+extra squared cell width enters.
+
 ## Planned analysis
 
 Future sections will record:

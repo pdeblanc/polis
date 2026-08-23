@@ -21,5 +21,10 @@ describe('Birds flow phase measurements', () => {
       .toBe(true);
     expect(first.summaries.every(({ aggregateDriftInCellWidths }) =>
       Number.isFinite(aggregateDriftInCellWidths))).toBe(true);
+    for (const summary of first.summaries) {
+      expect(summary.referenceSecondMoment).toBeGreaterThan(0);
+      expect(summary.withinPhaseVariance + summary.betweenPhaseDriftVariance)
+        .toBeCloseTo(summary.aggregateVariance, 12);
+    }
   });
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { brownianIntervalTransitionProbability } from './brownian';
+import {
+  brownianBinnedDisplacementMoments,
+  brownianIntervalTransitionProbability,
+} from './brownian';
 
 describe('brownianIntervalTransitionProbability', () => {
   it('uses exact overlap for zero displacement variance', () => {
@@ -45,5 +48,17 @@ describe('brownianIntervalTransitionProbability', () => {
     expect(() =>
       brownianIntervalTransitionProbability({ min: 0, max: 1 }, { min: 0, max: 1 }, -1, 1),
     ).toThrow(RangeError);
+  });
+
+  it('computes converged cell-center displacement moments', () => {
+    expect(brownianBinnedDisplacementMoments(1, 1, 0)).toEqual({
+      probability: 1,
+      secondMoment: 0,
+    });
+    const unit = brownianBinnedDisplacementMoments(1, 1, 1);
+    const scaled = brownianBinnedDisplacementMoments(2, 4, 1);
+    expect(unit.probability).toBeCloseTo(1, 13);
+    expect(unit.secondMoment).toBeGreaterThan(1);
+    expect(scaled.secondMoment).toBeCloseTo(4 * unit.secondMoment, 12);
   });
 });

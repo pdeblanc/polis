@@ -1,5 +1,6 @@
 import { Birds } from '../models/birds/birds';
 import { birdsScale } from '../models/birds/scales';
+import { brownianBinnedDisplacementMoments } from '../utils/math/brownian';
 
 export interface BirdsFlowPhaseOptions {
   readonly diffusionRate: number;
@@ -19,6 +20,9 @@ export interface BirdsFlowPhaseDetail {
 
 export interface BirdsFlowPhaseSummary {
   readonly aggregateDriftInCellWidths: number;
+  readonly aggregateSecondMoment: number;
+  readonly aggregateVariance: number;
+  readonly betweenPhaseDriftVariance: number;
   readonly conservationFailures: number;
   readonly diffusionRate: number;
   readonly duration: number;
@@ -31,10 +35,13 @@ export interface BirdsFlowPhaseSummary {
   readonly minimumPhaseDrift: number;
   readonly minimumPhaseIndex: number;
   readonly reflectionPairRmsResidual: number;
+  readonly referenceSecondMoment: number;
+  readonly secondMomentError: number;
   readonly rmsPhaseDrift: number;
   readonly samples: number;
   readonly spatialPhases: number;
   readonly timeIndex: number;
+  readonly withinPhaseVariance: number;
 }
 
 export interface BirdsFlowPhaseMeasurement {
@@ -56,6 +63,9 @@ export function measureBirdsFlowPhases(
     new Array<number>(spatialPhases).fill(0),
   );
   const displacementTotals = options.timeIndices.map(() =>
+    new Array<number>(spatialPhases).fill(0),
+  );
+  const squaredDisplacementTotals = options.timeIndices.map(() =>
     new Array<number>(spatialPhases).fill(0),
   );
   const durations = new Array<number | undefined>(options.timeIndices.length);
@@ -99,8 +109,13 @@ export function measureBirdsFlowPhases(
           const destinationCenter = (flow.destination.min + flow.destination.max) / 2;
           return total + flow.count * (destinationCenter - sourceCenter);
         }, 0);
+        const squaredDisplacement = outflows.flows.reduce((total, flow) => {
+          const destinationCenter = (flow.destination.min + flow.destination.max) / 2;
+          return total + flow.count * ((destinationCenter - sourceCenter) / scale.cellLength) ** 2;
+        }, 0);
         populationTotals[timePhase][spatialIndex] += population;
         displacementTotals[timePhase][spatialIndex] += displacement;
+        squaredDisplacementTotals[timePhase][spatialIndex] += squaredDisplacement;
       }
     }
   }
@@ -123,6 +138,10 @@ export function measureBirdsFlowPhases(
       (sum, value) => sum + value,
       0,
     );
+    const aggregateSquaredDisplacement = squaredDisplacementTotals[timePhase].reduce(
+      (sum, value) => sum + value,
+      0,
+    );
     const minimumPhaseDrift = Math.min(...phaseDrifts);
     const maximumPhaseDrift = Math.max(...phaseDrifts);
     let reflectionResidualSquares = 0;
@@ -131,6 +150,29 @@ export function measureBirdsFlowPhases(
     }
     const duration = durations[timePhase];
     if (duration === undefined) throw new Error('No flow phase duration was evaluated');
+    const aggregateDriftInCellWidths =
+      aggregatePopulation === 0
+        ? 0
+        : aggregateDisplacement / aggregatePopulation / scale.cellLength;
+    const aggregateSecondMoment =
+      aggregatePopulation === 0 ? 0 : aggregateSquaredDisplacement / aggregatePopulation;
+    const aggregateVariance = aggregateSecondMoment - aggregateDriftInCellWidths ** 2;
+    const withinPhaseVariance =
+      aggregatePopulation === 0
+        ? 0
+        : populationTotals[timePhase].reduce(
+            (total, population, spatialIndex) => {
+              if (population === 0) return total;
+              const phaseSecondMoment =
+                squaredDisplacementTotals[timePhase][spatialIndex] / population;
+              return total + population * (phaseSecondMoment - phaseDrifts[spatialIndex] ** 2);
+            },
+            0,
+          ) / aggregatePopulation;
+    const betweenPhaseDriftVariance = aggregateVariance - withinPhaseVariance;
+    const referenceSecondMoment =
+      brownianBinnedDisplacementMoments(scale.cellLength, duration, options.diffusionRate)
+        .secondMoment / scale.cellLength ** 2;
     return {
       epoch: options.epoch,
       samples: options.sampleCount,
@@ -140,10 +182,13 @@ export function measureBirdsFlowPhases(
       duration,
       durationOverCellWidthSquared: duration / scale.cellLength ** 2,
       meanPopulationPerCell: aggregatePopulation / options.sampleCount / spatialPhases,
-      aggregateDriftInCellWidths:
-        aggregatePopulation === 0
-          ? 0
-          : aggregateDisplacement / aggregatePopulation / scale.cellLength,
+      aggregateDriftInCellWidths,
+      referenceSecondMoment,
+      aggregateSecondMoment,
+      secondMomentError: aggregateSecondMoment - referenceSecondMoment,
+      aggregateVariance,
+      withinPhaseVariance,
+      betweenPhaseDriftVariance,
       meanAbsolutePhaseDrift:
         phaseDrifts.reduce((sum, drift) => sum + Math.abs(drift), 0) / spatialPhases,
       rmsPhaseDrift: Math.sqrt(
