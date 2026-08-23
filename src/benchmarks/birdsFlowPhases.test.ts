@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { measureBirdsFlowPhases } from './birdsFlowPhases';
+import { brownianBinnedDisplacementMoments } from '../utils/math/brownian';
+import {
+  measureBirdsFlowPhases,
+  predictSpatialRefinementSecondMoment,
+} from './birdsFlowPhases';
 
 describe('Birds flow phase measurements', () => {
   it('samples complete phase blocks reproducibly and conservatively', () => {
@@ -26,5 +30,18 @@ describe('Birds flow phase measurements', () => {
       expect(summary.withinPhaseVariance + summary.betweenPhaseDriftVariance)
         .toBeCloseTo(summary.aggregateVariance, 12);
     }
+    expect(first.summaries[0].spatialRefinementPredictedSecondMoment).toBeNull();
+    expect(first.summaries[1].spatialRefinementPredictedSecondMoment).not.toBeNull();
+    const spatial = first.summaries[1];
+    expect(
+      spatial.spatialRefinementParentContribution! +
+        spatial.spatialRefinementEndpointContribution! +
+        spatial.spatialRefinementCrossContribution!,
+    ).toBeCloseTo(spatial.aggregateSecondMoment, 12);
+  });
+
+  it('adds independent endpoint-half variance after rescaling the parent displacement', () => {
+    const parent = brownianBinnedDisplacementMoments(2, 1, 0.5).secondMoment;
+    expect(predictSpatialRefinementSecondMoment(1, 1, 0.5)).toBeCloseTo(parent + 0.5, 14);
   });
 });

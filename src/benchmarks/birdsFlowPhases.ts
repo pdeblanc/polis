@@ -37,6 +37,11 @@ export interface BirdsFlowPhaseSummary {
   readonly reflectionPairRmsResidual: number;
   readonly referenceSecondMoment: number;
   readonly secondMomentError: number;
+  readonly spatialRefinementPredictedSecondMoment: number | null;
+  readonly spatialRefinementPredictionError: number | null;
+  readonly spatialRefinementParentContribution: number | null;
+  readonly spatialRefinementEndpointContribution: number | null;
+  readonly spatialRefinementCrossContribution: number | null;
   readonly rmsPhaseDrift: number;
   readonly samples: number;
   readonly spatialPhases: number;
@@ -68,6 +73,9 @@ export function measureBirdsFlowPhases(
   const squaredDisplacementTotals = options.timeIndices.map(() =>
     new Array<number>(spatialPhases).fill(0),
   );
+  const parentContributions = new Array<number>(options.timeIndices.length).fill(0);
+  const endpointContributions = new Array<number>(options.timeIndices.length).fill(0);
+  const crossContributions = new Array<number>(options.timeIndices.length).fill(0);
   const durations = new Array<number | undefined>(options.timeIndices.length);
   const conservationFailures = new Array<number>(options.timeIndices.length).fill(0);
 
@@ -113,6 +121,26 @@ export function measureBirdsFlowPhases(
           const destinationCenter = (flow.destination.min + flow.destination.max) / 2;
           return total + flow.count * ((destinationCenter - sourceCenter) / scale.cellLength) ** 2;
         }, 0);
+        if (options.epoch > 0 && options.timeIndices[timePhase] % 4 === 0) {
+          const parentWidth = 2 * scale.cellLength;
+          const sourceParentMin = Math.floor(source.min / parentWidth) * parentWidth;
+          const sourceParentCenter = sourceParentMin + parentWidth / 2;
+          for (const flow of outflows.flows) {
+            const destinationCenter = (flow.destination.min + flow.destination.max) / 2;
+            const destinationParentMin =
+              Math.floor(flow.destination.min / parentWidth) * parentWidth;
+            const destinationParentCenter = destinationParentMin + parentWidth / 2;
+            const parentDisplacement =
+              (destinationParentCenter - sourceParentCenter) / parentWidth;
+            const childDisplacement =
+              (destinationCenter - sourceCenter) / scale.cellLength;
+            const endpointOffset = childDisplacement - 2 * parentDisplacement;
+            parentContributions[timePhase] += flow.count * 4 * parentDisplacement ** 2;
+            endpointContributions[timePhase] += flow.count * endpointOffset ** 2;
+            crossContributions[timePhase] +=
+              flow.count * 4 * parentDisplacement * endpointOffset;
+          }
+        }
         populationTotals[timePhase][spatialIndex] += population;
         displacementTotals[timePhase][spatialIndex] += displacement;
         squaredDisplacementTotals[timePhase][spatialIndex] += squaredDisplacement;
@@ -173,6 +201,23 @@ export function measureBirdsFlowPhases(
     const referenceSecondMoment =
       brownianBinnedDisplacementMoments(scale.cellLength, duration, options.diffusionRate)
         .secondMoment / scale.cellLength ** 2;
+    const isSpatialRefinementFlow = options.epoch > 0 && options.timeIndices[timePhase] % 4 === 0;
+    const spatialRefinementPredictedSecondMoment = isSpatialRefinementFlow
+      ? predictSpatialRefinementSecondMoment(
+          scale.cellLength,
+          duration,
+          options.diffusionRate,
+        )
+      : null;
+    const spatialRefinementParentContribution = isSpatialRefinementFlow
+      ? aggregatePopulation === 0 ? 0 : parentContributions[timePhase] / aggregatePopulation
+      : null;
+    const spatialRefinementEndpointContribution = isSpatialRefinementFlow
+      ? aggregatePopulation === 0 ? 0 : endpointContributions[timePhase] / aggregatePopulation
+      : null;
+    const spatialRefinementCrossContribution = isSpatialRefinementFlow
+      ? aggregatePopulation === 0 ? 0 : crossContributions[timePhase] / aggregatePopulation
+      : null;
     return {
       epoch: options.epoch,
       samples: options.sampleCount,
@@ -186,6 +231,14 @@ export function measureBirdsFlowPhases(
       referenceSecondMoment,
       aggregateSecondMoment,
       secondMomentError: aggregateSecondMoment - referenceSecondMoment,
+      spatialRefinementPredictedSecondMoment,
+      spatialRefinementPredictionError:
+        spatialRefinementPredictedSecondMoment === null
+          ? null
+          : aggregateSecondMoment - spatialRefinementPredictedSecondMoment,
+      spatialRefinementParentContribution,
+      spatialRefinementEndpointContribution,
+      spatialRefinementCrossContribution,
       aggregateVariance,
       withinPhaseVariance,
       betweenPhaseDriftVariance,
@@ -204,6 +257,25 @@ export function measureBirdsFlowPhases(
   });
 
   return { details, summaries };
+}
+
+/**
+ * Predicts Stage-H cell-center displacement under independent uniform endpoint halves.
+ * Parent displacement scales by two in child-cell units; the two endpoint half-cell
+ * offsets independently contribute variance 1/4.
+ */
+export function predictSpatialRefinementSecondMoment(
+  childCellWidth: number,
+  duration: number,
+  diffusionRate: number,
+): number {
+  const parentCellWidth = 2 * childCellWidth;
+  const parentSecondMoment = brownianBinnedDisplacementMoments(
+    parentCellWidth,
+    duration,
+    diffusionRate,
+  ).secondMoment;
+  return parentSecondMoment / childCellWidth ** 2 + 0.5;
 }
 
 function validateOptions(options: BirdsFlowPhaseOptions): void {

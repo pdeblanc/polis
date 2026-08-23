@@ -292,10 +292,75 @@ remains as excess motion within individual phases.
 
 The nearly diffusion-independent absolute error suggests an additional scale-normalized
 variance contribution in the spatial-child flow construction rather than a simple error
-in the diffusion multiplier. This is a characterization result, not yet a diagnosis of a
-specific stage or kernel. A focused recurrence calculation should next derive the
-expected second moment contributed by F/G/H spatial refinement and determine where the
-extra squared cell width enters.
+in the diffusion multiplier. The following recurrence analysis locates that contribution.
+
+### Spatial-refinement recurrence
+
+Let a Stage-D parent flow join cells of width `2L`, and let `h` be its center displacement
+measured in those parent-cell widths. Stage H produces flows between width-`L` children.
+For source and destination child indices `i,j` in `{0,1}`, the child flow's displacement
+in child-cell widths is:
+
+```text
+Z = 2 h + (j - i)
+```
+
+Stage F gives each endpoint a uniform half-cell membership in expectation. G1 and G2
+assign those memberships across incidence margins, and H uses a uniform matching
+conditional on the margins. Under the resulting exchangeability approximation:
+
+```text
+E[(j - i)^2] = 1/2
+E[h (j - i)] = 0
+```
+
+Therefore, if `M_1/4` is the parent Stage-D cell-center second moment in parent-width
+units, the idealized spatial-refinement recurrence predicts:
+
+```text
+M_H = 4 M_1/4 + 1/2
+```
+
+Using the binned Brownian parent moment gives:
+
+| Diffusion rate | Direct duration-1 Brownian | F/G/H prediction | Empirical H moment | Empirical minus prediction |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 0.6667 | 1.6323 | 1.6365 | +0.0042 |
+| 1 | 1.1667 | 2.1638 | 2.1866 | +0.0228 |
+| 2 | 2.1667 | 3.1666 | 3.2136 | +0.0469 |
+| 4 | 4.1667 | 5.1667 | 5.1859 | +0.0192 |
+
+The child-flow samples were also decomposed directly, without using the Brownian
+reference:
+
+```text
+E[Z^2] = 4 E[h^2] + E[(j-i)^2] + 4 E[h(j-i)]
+```
+
+| Diffusion rate | Parent contribution | Endpoint contribution | Cross contribution | Sum |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 1.1131 | 0.4983 | +0.0251 | 1.6365 |
+| 1 | 1.6975 | 0.5016 | −0.0125 | 2.1866 |
+| 2 | 2.7360 | 0.5000 | −0.0224 | 3.2136 |
+| 4 | 4.6354 | 0.4908 | +0.0597 | 5.1859 |
+
+The endpoint term is approximately `1/2` and the cross term is small at every tested
+rate. The recurrence prediction accounts for the empirical moment to within `0.047`.
+The remaining differences are consistent with finite-sample variation and the sampled
+parent flow differing slightly from its own Brownian reference.
+
+For sufficiently broad rounded kernels, a binned Brownian transition has approximately
+`M_q = Dq + 1/6`. The recurrence then gives `4 M_1/4 + 1/2 ≈ D + 7/6`, while a direct
+duration-1 transition gives `D + 1/6`: exactly one squared cell width less. Half of that
+difference is the explicit independent endpoint-half variance; the other half comes from
+amplifying the parent transition's cell-center quantization by spatial rescaling.
+
+This is therefore a consequence of the specified F/G/H exchangeability approximation,
+not evidence of sampler failure, address reuse, or broken conservation. The design
+already permits additional variance from within-cell mixing. A future model revision
+could reduce it only by changing the spatial-refinement coupling—for example, by making
+source and destination child memberships conditionally dependent on the parent flow—so
+that would be a semantic model change rather than a version-1 bug fix.
 
 ## Planned analysis
 
