@@ -83,11 +83,50 @@ looking for hierarchy-phase effects. The reported minimum and maximum are select
 and sampling noise. This run alone does not establish the expectation of any individual
 phase or prove lack of translation invariance.
 
+### Diffusion-rate comparison
+
+The complete epoch-8 phase-block experiment was repeated at diffusion rates `1`, `2`,
+and `4`, again with density `64`, 50 paired seeds, and temporal indices 1 through 4. The
+table summarizes the envelope across all four temporal rows. The `D = 0.5` row is the
+preceding experiment.
+
+| Diffusion rate | Range of block mean per cell | Observed RMS error | Noise-corrected RMS bias | Lowest cell mean | Highest cell mean | Largest absolute block-total error |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 4.00031–4.00109 | 0.429–0.558 | 0.322–0.482 | 2.66 | 5.44 | 0.28 |
+| 1 | 3.99945–4.00094 | 0.395–0.478 | 0.276–0.386 | 2.80 | 5.34 | 0.24 |
+| 2 | 3.99961–4.00125 | 0.343–0.383 | 0.193–0.258 | 3.10 | 5.02 | 0.32 |
+| 4 | 4.00000–4.00203 | 0.282–0.324 | 0.000–0.152 | 3.16 | 4.90 | 0.52 |
+
+All aggregate errors are negligible relative to the reference block population of
+`1,024`. The observed cell-mean envelope narrows as diffusion increases: its width falls
+from `2.78` at `D = 0.5` to `1.74` at `D = 4`. More importantly, both raw and
+noise-corrected RMS errors decrease monotonically over the tested diffusion rates. This
+supports the hypothesis that stronger motion reduces spatial hierarchy-phase differences.
+Each extrema envelope still selects from 256 noisy cell means, and wider diffusion may
+change correlations between estimates, but the RMS comparison does not depend on selecting
+only the most extreme cells.
+
+The phase report now includes both the observed RMS cell-mean error and a
+noise-corrected RMS bias estimate. For cell `i`, it estimates the sampling contribution
+as `sampleVariance_i / sampleCount`, averages that contribution across phases, subtracts
+it from the mean squared cell-mean error, clamps the result at zero, and takes the square
+root. This removes ordinary within-cell Monte Carlo variance in expectation; it does not
+provide a confidence interval or correct selection effects in reported extrema.
+At `D = 4`, two temporal phases have corrected estimates near zero. A clamped zero means
+that sampling variance explains all observed spatial mean-square variation at this sample
+size; it is not evidence that the underlying phase bias is exactly zero.
+
+The higher-diffusion phase runs were materially more expensive because motion-support
+width increases with diffusion. Future multi-rate reports should emit each completed
+rate progressively or run rates separately.
+
 ### Current interpretation and follow-ups
 
 - Fixed coarse totals explain the strong initial underdispersion.
 - Fine-cell dispersion becomes approximately Poisson-sized in the tested deep cases.
 - The complete epoch-8 spatial block has the correct aggregate mean to high accuracy.
+- The observed spread among cell means decreases with diffusion rate while the aggregate
+  remains centered, consistent with stronger diffusion smoothing hierarchy-phase effects.
 - An isolated phase has repeatedly shown a positive mean difference, but more paired
   trials are needed to separate a persistent phase bias from selection and sampling noise.
 - Repeat phase measurements with enough trials to estimate each phase's uncertainty, and
@@ -116,6 +155,12 @@ Run the paired complete-spatial-phase report with an epoch and trial count:
 
 ```sh
 npm run characterize:birds-population-phases -- 8 50
+```
+
+Append one or more diffusion rates to compare them over the same phase grid:
+
+```sh
+npm run characterize:birds-population-phases -- 8 50 1 2 4
 ```
 
 ## Planned analysis

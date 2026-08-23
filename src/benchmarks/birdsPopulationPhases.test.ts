@@ -23,5 +23,10 @@ describe('Birds population phase measurements', () => {
       aggregateMeanError: 0,
     });
     expect(first[0].meanPerCell).toBe(4);
+    expect(first[0].observedRmsCellMeanError).toBeGreaterThanOrEqual(0);
+    expect(first[0].noiseCorrectedRmsCellBias).toBeGreaterThanOrEqual(0);
+    expect(first[0].noiseCorrectedRmsCellBias).toBeLessThanOrEqual(
+      first[0].observedRmsCellMeanError,
+    );
   });
 });

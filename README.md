@@ -77,11 +77,12 @@ npm run characterize:birds-populations -- 200 epoch-8-density-compensated
 ```
 
 Sample every spatial phase across one coarse-cell-width block at a deep epoch. Arguments
-select the epoch and number of paired seeds; the reference mean remains four birds per
-fine cell:
+select the epoch, number of paired seeds, and optional diffusion rates; the reference mean
+remains four birds per fine cell:
 
 ```sh
 npm run characterize:birds-population-phases -- 8 50
+npm run characterize:birds-population-phases -- 8 50 1 2 4
 ```
 
 Profile Birds engine time inside distributions, hashing, address encoding, and other
