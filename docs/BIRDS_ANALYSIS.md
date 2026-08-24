@@ -629,11 +629,87 @@ Run the bridge and child-crossing report with trial count and diffusion rates:
 npm run characterize:birds-bridges-crossings -- 100 0 0.5 1 2 4
 ```
 
+## Deterministic cell-population bounds
+
+Every sampler used by the Birds hierarchy has finite support. Binomial, multinomial,
+and multivariate hypergeometric samples partition finite integer populations; their
+outputs cannot exceed their supplied totals or margins. The rounded-normal midpoint
+kernels are also finite because their tails are clamped at the global normal cutoff.
+Consequently, every population and flow query has a deterministic, seed-independent
+upper bound for a fully parameterized model and finite epoch.
+
+The simplest bound follows the stage structure. Spatial subdivision and reconciliation
+cannot increase the total population available to a child beyond their input margins.
+Only the two temporal midpoint constructions in an epoch can aggregate populations
+from multiple source cells. Let `F1(D)` be the number of distinct source-cell offsets
+whose duration-1 midpoint support can reach a fixed midpoint cell, and let `F1/2(D)` be
+the analogous number for a duration-1/2 midpoint. If
+
+```text
+N0 = round(populationDensity * BIRDS_COARSE_CELL_LENGTH),
+C(D) = F1(D) * F1/2(D),
+```
+
+then a cell introduced at epoch `e` obeys
+
+```text
+population(cell) <= N0 * C(D)^e.
+```
+
+This proof deliberately allows every contributing parent to concentrate its entire
+population into the target. It therefore remains valid without independence or typical-
+case assumptions, but repeatedly charges the same conserved coarse birds through
+different support paths. For the current support construction, the factors are:
+
+| Diffusion rate | Duration-1 fan-in | Duration-1/2 fan-in | Per-epoch factor |
+| ---: | ---: | ---: | ---: |
+| 0 | 5 | 3 | 15 |
+| 0.5 | 19 | 13 | 247 |
+| 1 | 24 | 17 | 408 |
+| 2 | 33 | 23 | 759 |
+| 4 | 44 | 31 | 1,364 |
+
+The large factors make this closed-form bound unsuitable as a practical materialization
+threshold. At density 2, for example, its epoch-3 values range from `108,000` at `D = 0`
+to `81,206,929,408` at `D = 4`.
+
+A second diagnostic computes a tighter support-capacity bound. It refines the reachable
+support of every nonzero deterministic coarse flow, then charges each distinct ancestral
+coarse flow at most once for a target cell. This respects conservation across paths,
+although it still assumes that the complete capacity of every reachable coarse flow can
+arrive simultaneously. At density 2 it gives:
+
+| Diffusion rate | Epoch 0 | Epoch 1 | Epoch 2 | Epoch 3 |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 32 | 34 | 34 | 34 |
+| 0.5 | 32 | 199 | 271 | 303 |
+| 1 | 32 | 276 | 382 | 436 |
+| 2 | 32 | 360 | 515 | 579 |
+| 4 | 32 | 496 | 713 | 810 |
+
+This calculation is an exhaustive analysis of hierarchy support, not a runtime model
+query. Its intermediate flow sets grow rapidly; epoch 4 was already too expensive for
+the intended CLI diagnostic. The shallow results suggest much slower growth than the
+closed-form bound, but they do not prove convergence or a uniform bound over all epochs.
+
+The conclusion needed for this project is therefore limited but firm: all finite-epoch
+populations are deterministically bounded, and a general explicit bound has been
+derived, but no sufficiently tight epoch-only bound has been established to justify a
+particular future materialization strategy. Spatial splitting can place an entire finite
+population in one child, so deterministic scale decay cannot be assumed. Choosing
+between a population cutoff and an epoch cutoff remains work for the next model design,
+as intended.
+
+Run the report with maximum epoch, population density, and diffusion rates:
+
+```sh
+npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:
 
-- deterministic cell-population bound analysis;
 - likelihood-ratio-monotone multinomial coupling investigation; and
 - a final high-level synthesis that separates reusable, model-agnostic evaluation
   metrics from version-1-specific anomaly investigations and root-cause findings; and

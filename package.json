@@ -9,6 +9,7 @@
     "benchmark:birds-tracker": "tsx src/benchmarks/birdsTracker.ts",
     "characterize:birds-populations": "tsx src/benchmarks/birdsPopulationMarginals.ts",
     "characterize:birds-population-phases": "tsx src/benchmarks/birdsPopulationPhaseReport.ts",
+    "analyze:birds-population-bounds": "tsx src/benchmarks/birdsPopulationBoundReport.ts",
     "characterize:birds-flows": "tsx src/benchmarks/birdsFlowMarginals.ts",
     "characterize:birds-flow-phases": "tsx src/benchmarks/birdsFlowPhaseReport.ts",
     "characterize:birds-bridges-crossings": "tsx src/benchmarks/birdsBridgeCrossingReport.ts",

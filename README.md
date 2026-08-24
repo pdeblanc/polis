@@ -85,6 +85,14 @@ npm run characterize:birds-population-phases -- 8 50
 npm run characterize:birds-population-phases -- 8 50 1 2 4
 ```
 
+Calculate the structural deterministic cell-population bound. Arguments select maximum
+epoch, population density, and diffusion rates. The report also computes the tighter,
+more expensive reachability bound through epoch 3:
+
+```sh
+npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
+```
+
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
 and optional diffusion rates:
 
