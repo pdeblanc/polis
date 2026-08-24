@@ -446,6 +446,48 @@ at high diffusion, so an incomplete phase grid must be reported as incomplete ra
 than pooled as though it were balanced. This runtime is also evidence about the selection
 mechanism, not a reason to weaken its definition.
 
+### Labeled Brownian quotient-space reference
+
+The reference experiment samples a stationary finite Poisson population on a ring 256
+observation cells in circumference. Every bird has a persistent label, an independent
+uniform initial position, and independent Gaussian increments with variance `D dt`.
+Population totals and increments use the library quantiles directly rather than the
+model's bounded-distribution wrappers. Positions are observed through the same cell width
+and time step as the epoch-2 Birds cohort. Ring cells determine occupancy, while the
+selected label's lifted cell centers determine displacement.
+
+Labels are used only as ground truth. The retained cohort applies the same requested-
+resolution condition as the Birds cohort: the selected bird must be alone initially and
+at all eight waypoints. The reference does not yet reproduce the Birds tracker's internal
+asymmetric-narrowing and refinement search, so this is a finite-observation comparison,
+not the complete budgeted-tracker comparison required by the design.
+
+With 20 retained paths in each of the 16 nominal phase buckets, the reference results
+were:
+
+| Diffusion rate | Candidates attempted | Collision-rejected paths | Collision then separation | Join–split–rejoin | Mean increment | Increment variance | Lag-one covariance | Eight-step second moment | Unconditioned Brownian eight-step moment |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 2,298 | 240 | 203 | 123 | +0.0066 | 0.2582 | −0.0679 | 1.0406 | 2.2646 |
+| 1 | 2,723 | 339 | 295 | 177 | +0.0141 | 0.3857 | −0.0743 | 1.7750 | 3.3275 |
+| 2 | 3,350 | 477 | 416 | 252 | +0.0156 | 0.6646 | −0.0855 | 3.6750 | 5.3333 |
+| 4 | 3,960 | 603 | 546 | 328 | +0.0188 | 1.1715 | −0.1179 | 7.6438 | 9.3333 |
+
+The rejected-path denominator excludes empty starts: it is the collision-rejected paths
+plus the 320 retained collision-free paths. On that basis, rejection rises from about
+`43%` at `D = 0.5` to `65%` at `D = 4`. Among rejected paths, `85–91%` later separate and
+about `51–54%` exhibit a join–split–rejoin subsequence at the requested waypoints. Thus
+repeated meetings are ordinary in the labeled one-dimensional Brownian reference and are
+not, by themselves, evidence of address reuse or a discrete-sampler defect.
+
+Conditioning on no co-occupancy is not innocuous. It introduces substantial negative
+adjacent-increment covariance and suppresses long-horizon displacement. Comparing the
+32-path balanced Birds cohorts with this larger reference, Birds has much weaker
+negative covariance (`+0.013`, `−0.001`, and `+0.020` versus `−0.068`, `−0.074`, and
+`−0.086` for `D = 0.5`, `1`, and `2`) and larger eight-step moments (`2.125` versus
+`1.041`, `2.375` versus `1.775`, and `5.719` versus `3.675`). The Birds estimates have
+only 32 eight-step displacements, so these differences motivate a larger matched cohort;
+they do not yet establish a hierarchy-induced trajectory discrepancy.
+
 Run the deterministic candidate scan with candidate count, retained-path ceiling, and
 diffusion rates:
 
@@ -460,12 +502,18 @@ and diffusion rates:
 npm run characterize:birds-balanced-trajectories -- 100 2 0.5 1 2 4
 ```
 
+Run the corresponding labeled Brownian quotient-space reference:
+
+```sh
+npm run characterize:brownian-balanced-trajectories -- 1000 20 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:
 
 - increment, displacement, bridge, and crossing statistics;
-- tagged trajectories and the finite-population quotient-space reference comparison;
+- a matched budgeted-tracker comparison against the labeled quotient-space reference;
 - deterministic cell-population bound analysis;
 - likelihood-ratio-monotone multinomial coupling investigation; and
 - any further empirical performance investigations that affect mathematical analysis.

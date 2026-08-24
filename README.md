@@ -115,6 +115,12 @@ diffusion rates:
 npm run characterize:birds-balanced-trajectories -- 100 2 0.5 1 2 4
 ```
 
+Run the corresponding labeled finite-population Brownian reference on a quotient space:
+
+```sh
+npm run characterize:brownian-balanced-trajectories -- 100 2 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 
