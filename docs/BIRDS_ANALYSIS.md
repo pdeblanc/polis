@@ -635,4 +635,15 @@ Future sections will record:
 
 - deterministic cell-population bound analysis;
 - likelihood-ratio-monotone multinomial coupling investigation; and
+- a final high-level synthesis that separates reusable, model-agnostic evaluation
+  metrics from version-1-specific anomaly investigations and root-cause findings; and
 - any further empirical performance investigations that affect mathematical analysis.
+
+The reusable metrics must remain meaningful for a future model with a different
+spacetime construction. They should be stated in terms of public observables, invariants,
+reference-process comparisons, scaling behavior, statistical dependence, and resource
+costs. Hierarchy phases, F/G/H stages, classifier costs, or a known version-1 failure may
+motivate an investigation, but tests aimed specifically at those mechanisms belong in
+the model-specific findings rather than the reusable scorecard. This prevents a new
+model from appearing superior merely because it lacks the old model's particular
+pathologies while introducing different ones.

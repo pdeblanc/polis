@@ -724,6 +724,8 @@ the next major Birds revision.
     why sequential binomials remain.
 17. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
     changes or document why not.
+18. Produce a high-level analysis summary separating reusable, model-agnostic evaluation
+    metrics from version-1-specific investigations and root causes.
 
 ## 18. Acceptance criteria
 
@@ -737,7 +739,9 @@ The broader Birds project additionally requires a budgeted singleton-tube tracke
 Poisson–Brownian characterization including the reference tracker comparison,
 end-to-end performance measurements, a documented population-bound analysis, the
 completed multinomial monotonicity investigation, and the documented Starfield/Terrain
-classifier audit.
+classifier audit. Before analysis is closed, publish a high-level synthesis and a
+reusable metric suite defined independently of the version-1 hierarchy and its known
+pathologies.
 
 Any later approximate sampler requires a separate specification and tests. Any follow-up
 not implemented must be closed by an explicit documented decision rather than silently
