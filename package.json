@@ -11,6 +11,7 @@
     "characterize:birds-population-phases": "tsx src/benchmarks/birdsPopulationPhaseReport.ts",
     "characterize:birds-flows": "tsx src/benchmarks/birdsFlowMarginals.ts",
     "characterize:birds-flow-phases": "tsx src/benchmarks/birdsFlowPhaseReport.ts",
+    "characterize:birds-bridges-crossings": "tsx src/benchmarks/birdsBridgeCrossingReport.ts",
     "characterize:birds-trajectories": "tsx src/benchmarks/birdsTrajectories.ts",
     "characterize:birds-balanced-trajectories": "tsx src/benchmarks/birdsBalancedTrajectories.ts",
     "characterize:brownian-balanced-trajectories": "tsx src/benchmarks/brownianBalancedTrajectories.ts",

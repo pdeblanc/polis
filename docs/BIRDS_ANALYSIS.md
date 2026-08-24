@@ -536,6 +536,66 @@ and a fixed hierarchy phase. Their nonempty completion rates were about `90%`, `
 `96%` for the reference at budget 32. Those differences merit larger matched sampling
 only if tracker failure rates become a version-1 quality target.
 
+### Temporal bridges
+
+Temporal bridge counts are internal hierarchy facts, so this measurement queries
+`BirdsEngine` rather than the hierarchy-free public API. For equal-width parent flows it
+aggregates the owned midpoint multinomials across 100 seeds at epoch 2 and density `16`.
+The external reference integrates over a uniform position in the complete source cell,
+the first Brownian half-increment, the midpoint cell, the second half-increment, and the
+condition that the endpoint lies in the complete destination cell. This differs
+deliberately from the configured kernel, which represents both endpoint cells by their
+centers.
+
+The table reports total variation distance between each configured midpoint kernel and
+the integrated Brownian conditional distribution. Even endpoint offset means the
+endpoint-center average lies at a cell center; odd offset means it lies on a cell
+boundary.
+
+| Diffusion rate | Duration 1, even | Duration 1, odd | Duration 1/2, even | Duration 1/2, odd |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 0 | — | 0 | — |
+| 0.5 | 0.0702 | 0.0086 | 0.0894 | 0.0009 |
+| 1 | 0.0395 | 0.0186 | 0.0702 | 0.0086 |
+| 2 | 0.0180 | 0.0172 | 0.0395 | 0.0186 |
+| 4 | 0.0081 | 0.0100 | 0.0180 | 0.0172 |
+
+The empirical Birds midpoint tables track their configured kernels: empirical-to-
+configured distances were at most about `0.029` with roughly 1,100–5,100 parent birds per
+case. The main structural discrepancy is the centered, even-offset bridge at low
+diffusion, where ignoring within-cell endpoint positions makes the configured midpoint
+too concentrated. Boundary-aligned bridges are much closer at the lowest rates. The
+difference decreases as Brownian innovation dominates endpoint uncertainty.
+
+### Child crossing and retention
+
+For a parent flow returning to the same cell over normalized duration `1/4`, spatial
+refinement produces a `2 x 2` table of source-child to destination-child counts. Diagonal
+entries retain the same child; off-diagonal entries cross the parent midpoint. The
+external reference integrates each child-to-child Brownian transition and conditions on
+the complete parent-to-same-parent flow.
+
+| Diffusion rate | Birds retention | Birds crossing | Brownian retention | Brownian crossing |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 0.5086 | 0.4914 | 1.0000 | 0.0000 |
+| 0.5 | 0.5066 | 0.4934 | 0.6766 | 0.3234 |
+| 1 | 0.5145 | 0.4855 | 0.6050 | 0.3950 |
+| 2 | 0.5041 | 0.4959 | 0.5573 | 0.4427 |
+| 4 | 0.5032 | 0.4968 | 0.5299 | 0.4701 |
+
+Birds remains near `1/2` retention at every rate, with negligible left/right directional
+imbalance. This is the expected signature of Stage H: conditional on its separately
+constructed row and column margins, the hypergeometric reconciliation treats source and
+destination child membership as exchangeable. Brownian retention approaches `1/2` only
+as diffusion becomes large. At `D = 0`, Birds assigns about half of the refined flow to
+crossing children even though a stationary Brownian path has perfect retention.
+
+This is not a newly discovered implementation bug: the canonical design explicitly
+permits additional within-cell mixing from the F/G/H exchangeability approximation. It
+is, however, a large and now quantified model discrepancy. It provides a concrete target
+for a future coupling that preserves more source-to-destination child correlation and
+helps explain why fine-scale tagged motion can persist even at low diffusion.
+
 Run the deterministic candidate scan with candidate count, retained-path ceiling, and
 diffusion rates:
 
@@ -563,11 +623,16 @@ npm run characterize:brownian-reference-tracker -- 500 0.5 1 2 4
 npm run characterize:brownian-reference-tracker -- 500 --max-refinements=64 0.5 1 2 4
 ```
 
+Run the bridge and child-crossing report with trial count and diffusion rates:
+
+```sh
+npm run characterize:birds-bridges-crossings -- 100 0 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:
 
-- increment, displacement, bridge, and crossing statistics;
 - deterministic cell-population bound analysis;
 - likelihood-ratio-monotone multinomial coupling investigation; and
 - any further empirical performance investigations that affect mathematical analysis.

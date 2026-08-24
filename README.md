@@ -98,6 +98,13 @@ Measure complete-outflow drift across every source phase in one coarse-cell-widt
 npm run characterize:birds-flow-phases -- 4 50 0.5 1 2 4
 ```
 
+Measure temporal bridge kernels and child-cell crossing/retention against the integrated
+Brownian reference. Arguments select trial count and diffusion rates:
+
+```sh
+npm run characterize:birds-bridges-crossings -- 100 0 0.5 1 2 4
+```
+
 Screen deterministic candidate seeds and characterize retained collision-free trajectories.
 Structural resolution refinement is allowed; candidates are rejected when the tracker
 detects a multi-bird endpoint or a requested waypoint is not a singleton.
