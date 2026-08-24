@@ -14,6 +14,7 @@
     "characterize:birds-trajectories": "tsx src/benchmarks/birdsTrajectories.ts",
     "characterize:birds-balanced-trajectories": "tsx src/benchmarks/birdsBalancedTrajectories.ts",
     "characterize:brownian-balanced-trajectories": "tsx src/benchmarks/brownianBalancedTrajectories.ts",
+    "characterize:brownian-reference-tracker": "tsx src/benchmarks/brownianReferenceTrackerReport.ts",
     "profile:birds-engine": "tsx src/benchmarks/birdsEngineProfile.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
     "dev": "vite",

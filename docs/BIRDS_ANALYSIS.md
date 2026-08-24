@@ -458,9 +458,8 @@ selected label's lifted cell centers determine displacement.
 
 Labels are used only as ground truth. The retained cohort applies the same requested-
 resolution condition as the Birds cohort: the selected bird must be alone initially and
-at all eight waypoints. The reference does not yet reproduce the Birds tracker's internal
-asymmetric-narrowing and refinement search, so this is a finite-observation comparison,
-not the complete budgeted-tracker comparison required by the design.
+at all eight waypoints. This first measurement is a finite-observation comparison; the
+following experiment adds the anonymous adaptive tracking procedure.
 
 With 20 retained paths in each of the 16 nominal phase buckets, the reference results
 were:
@@ -488,6 +487,55 @@ negative covariance (`+0.013`, `−0.001`, and `+0.020` versus `−0.068`, `−0
 only 32 eight-step displacements, so these differences motivate a larger matched cohort;
 they do not yet establish a hierarchy-induced trajectory discrepancy.
 
+### Anonymous adaptive reference tracker
+
+The tracking reference exposes dyadic population counts and source-to-destination flow
+counts while keeping labels private. Initial selection uses the same addressed rank and
+ordered child-count descent as `Sighting`; the hidden label becomes known to the
+experiment only after the selected cell is a singleton. Movement follows the same policy
+shape as the Birds helper: query a singleton flow, accept a singleton endpoint, otherwise
+try one asymmetric destination refinement, and refine the singleton source and shorten
+time only as a fallback. Query and spatial-refinement budgets reset for each requested
+step just as they do for `Sighting`.
+
+Adaptive temporal queries are consistent by construction. Integer observation-time
+positions use independent Brownian increments. A newly requested dyadic midpoint uses a
+Brownian bridge conditional on its already fixed endpoints, with an addressed noise
+sample owned by that interval. Cached or differently ordered queries therefore reveal
+the same labeled paths. The tracker itself never receives labels; after each completed
+step the experiment verifies its singleton against hidden ground truth.
+
+The standard run uses the epoch-2 dimensions (`cell width = 4`, `time step = 4`), density
+`1/16`, a 256-cell ring, eight steps, and 500 candidates. Exactly 114 candidates have a
+nonempty starting cell at every diffusion rate because diffusion does not affect the
+stationary initial sample.
+
+| Diffusion rate | Complete, budget 32 | Refinement failures | Numeric failures | Complete, budget 64 | Refinement failures | Numeric failures | Join–split–rejoin paths | Completed recurrent paths at 32 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.5 | 91 | 22 | 1 | 91 | 13 | 10 | 21 | 9 |
+| 1 | 96 | 18 | 0 | 103 | 8 | 3 | 33 | 22 |
+| 2 | 110 | 4 | 0 | 114 | 0 | 0 | 41 | 38 |
+| 4 | 109 | 5 | 0 | 114 | 0 | 0 | 43 | 40 |
+
+There were no query-budget or unclassified errors and no completed path ever switched
+hidden labels. At budget 32 the hardest `D = 0.5` case reached a time step of about
+`3.55e-15`; at budget 64 it reached `1.39e-17`. Increasing the budget converts many
+low-diffusion refinement failures into explicit binary64 resolution failures rather than
+completions. At `D = 2` and `4`, in contrast, all nonempty candidates complete with the
+larger budget. Slow diffusion can keep paths close enough that adaptive source refinement
+converges toward a meeting, whereas stronger diffusion more readily separates them.
+
+This reproduces the qualitative Birds failure mechanism in an independent labeled
+Brownian population: an omniscient observer knows which path continues, but anonymous
+finite-resolution counts and flows may approach the numeric limit without establishing
+a singleton correspondence. The occurrence of such failures is therefore not evidence
+that the Birds tracker itself is defective. Rates are not an exact model-to-reference
+comparison: the existing 200-candidate Birds cohorts use different random populations
+and a fixed hierarchy phase. Their nonempty completion rates were about `90%`, `84%`,
+`87%`, and `90%` at `D = 0.5`, `1`, `2`, and `4`, compared with `80%`, `84%`, `96%`, and
+`96%` for the reference at budget 32. Those differences merit larger matched sampling
+only if tracker failure rates become a version-1 quality target.
+
 Run the deterministic candidate scan with candidate count, retained-path ceiling, and
 diffusion rates:
 
@@ -508,12 +556,18 @@ Run the corresponding labeled Brownian quotient-space reference:
 npm run characterize:brownian-balanced-trajectories -- 1000 20 0.5 1 2 4
 ```
 
+Run the anonymous adaptive reference tracker with candidate count and diffusion rates:
+
+```sh
+npm run characterize:brownian-reference-tracker -- 500 0.5 1 2 4
+npm run characterize:brownian-reference-tracker -- 500 --max-refinements=64 0.5 1 2 4
+```
+
 ## Planned analysis
 
 Future sections will record:
 
 - increment, displacement, bridge, and crossing statistics;
-- a matched budgeted-tracker comparison against the labeled quotient-space reference;
 - deterministic cell-population bound analysis;
 - likelihood-ratio-monotone multinomial coupling investigation; and
 - any further empirical performance investigations that affect mathematical analysis.

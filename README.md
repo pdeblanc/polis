@@ -121,6 +121,14 @@ Run the corresponding labeled finite-population Brownian reference on a quotient
 npm run characterize:brownian-balanced-trajectories -- 100 2 0.5 1 2 4
 ```
 
+Run the anonymous, adaptively refined tracker against labeled Brownian ground truth.
+Arguments select the candidate count and diffusion rates. An optional
+`--max-refinements=N` changes the per-step refinement budget:
+
+```sh
+npm run characterize:brownian-reference-tracker -- 500 0.5 1 2 4
+```
+
 Profile Birds engine time inside distributions, hashing, address encoding, and other
 model work:
 

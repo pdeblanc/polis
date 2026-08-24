@@ -243,12 +243,15 @@ itself establish that the empirical recurrence frequency matches independent Bro
 trajectories. That frequency remains a statistical-characterization question rather than
 an identified address or discrete-sampler defect.
 
-The end-of-project statistical work will include a controlled tracker comparison against
-a finite population of labeled Brownian motions on a quotient space. Applying comparable
-finite-resolution and work-budget constraints to the reference paths will test whether
-the same join/split/rejoin behavior and tracking failure arise even without the hierarchy.
-This is characterization work: recurrent meetings in the reference process would explain
-the observed limitation rather than count as a defect to eliminate.
+The controlled reference tracker now constructs a finite stationary Poisson population
+of labeled Brownian motions on a quotient space. Its anonymous query surface exposes
+dyadic population and flow counts; addressed Brownian bridges keep adaptively refined
+times consistent. It applies the same rank isolation, asymmetric endpoint narrowing,
+source-refinement fallback, per-step budgets, and numeric-resolution checks as the Birds
+helper, while labels are used only to score identity afterward. The reference reproduces
+join/split/rejoin behavior and Zeno-like refinement through the binary64 time limit, with
+no completed path switching its hidden label. Detailed methodology and results are in
+[`BIRDS_ANALYSIS.md`](./BIRDS_ANALYSIS.md).
 
 The tracker now tries the supported one-level asymmetric incidence before refining its
 singleton source. This narrows only the collided endpoint while retaining the longest
