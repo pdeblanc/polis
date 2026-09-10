@@ -19,6 +19,7 @@
     "characterize:brownian-reference-tracker": "tsx src/benchmarks/brownianReferenceTrackerReport.ts",
     "profile:birds-engine": "tsx src/benchmarks/birdsEngineProfile.ts",
     "experiment:birds-support": "tsx src/experiments/birdsFlowSupportReport.ts",
+    "experiment:gamma-process": "node --import tsx src/experiments/gammaProcessReport.ts",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -41,6 +42,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@stdlib/random-base-beta": "^0.2.2",
+    "@stdlib/random-base-gamma": "^0.2.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.19.15",

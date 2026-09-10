@@ -93,6 +93,12 @@ more expensive reachability bound through epoch 3:
 npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
 ```
 
+Run the gamma-process/Dirichlet research diagnostic (optional number of trials per case):
+
+```sh
+npm run experiment:gamma-process -- 2000
+```
+
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
 and optional diffusion rates:
 

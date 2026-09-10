@@ -708,7 +708,8 @@ npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
 
 ## Multinomial coupling: gamma processes and Poisson races
 
-**Status:** Research direction selected; experiments and adoption decision pending.
+**Status:** Initial gamma-process/Dirichlet experiment completed; multinomial experiments
+and adoption decision pending.
 The current sequential-binomial sampler remains the implementation. The constructions
 below describe ideal probability laws; floating-point behavior and sampler costs still
 need evaluation.
@@ -830,11 +831,66 @@ for fixed category count. This is an algorithmic direction, not a measured compl
 or throughput result for our implementation. Scalar sampling, tree traversal, hashing,
 and selection overhead may still make it slower than sequential binomials.
 
-### Planned experiments and unresolved decisions
+### Initial gamma-process and Dirichlet experiment
 
-1. Prototype the addressed gamma hierarchy and normalized Dirichlet coupling. Check
-   gamma increments, Dirichlet moments, query-order/cache independence, and the pairwise
-   ratio property for elementary transfers.
+`src/experiments/gammaProcess.ts` implements the proposed addressed dyadic hierarchy
+using stdlib gamma and beta generators with a private addressed uniform stream for each
+scalar draw. A fresh factory per draw isolates library generator state; its setup cost
+is included in timings. The prototype intentionally uses untruncated laws to investigate
+the construction. A 4,096-uniform budget per scalar draw throws instead of substituting
+a fallback. It lives under `experiments/`, with the library dependencies scoped to
+development, and is not connected to model execution.
+
+The deterministic report uses 2,000 trials per case. No pairwise ratio violations above
+an absolute cross-product tolerance of `1e-15` occurred in the elementary transfers.
+Separate tests check exact replay under reversed query order and cache clearing, joint
+gamma increment means/variances/covariance, Dirichlet means/variances/covariance, and
+logarithmic scalar work for a large arrival index.
+
+| Dirichlet parameters | Expected means | Observed means | Failed trials | Zero output coordinates |
+| --- | --- | --- | ---: | ---: |
+| `(2, 3, 5)` | `(0.200, 0.300, 0.500)` | `(0.203, 0.302, 0.495)` | 0 | 0 |
+| `(0.125, 0.25, 0.625)` | `(0.125, 0.250, 0.625)` | `(0.121, 0.243, 0.636)` | 0 | 0 |
+| `(0.001, 0.002, 0.007)` | `(0.100, 0.200, 0.700)` | `(0.098, 0.195, 0.707)` | 3 | 1,617 |
+
+Means are consistent with sampling noise at this trial count, but the small-shape case
+exposes a numerical limitation. All three failures were normalization underflows, and
+the displayed moments exclude failed trials. The zero coordinates violate the ideal
+positive-parameter Dirichlet support. They are not intentional truncation. Even the
+middle case produced some intermediate beta endpoint samples and collapsed splits,
+despite no zero coordinates in its final outputs. Thus monotonicity checks passing does
+not establish numerical distributional accuracy at arbitrarily small shapes.
+
+Cold single-arrival queries (fresh process/cache per trial) gave the following costs.
+These are rough local wall-clock measurements, including factory construction, hashing,
+and traversal, rather than isolated scalar-sampler benchmarks:
+
+| Arrival index | Gamma draws | Beta draws | Approximate microseconds/query |
+| ---: | ---: | ---: | ---: |
+| 17 | 6 | 4 | 164 |
+| 1,023 | 11 | 9 | 327 |
+| 1,048,575 | 21 | 19 | 642 |
+| 1,073,741,823 | 31 | 29 | 968 |
+| 1,099,511,627,775 | 41 | 39 | 1,355 |
+
+Across these cases, observed arrival means were within 1.3 theoretical standard errors
+of the gamma means. Scalar work grows logarithmically with the index, as intended, but
+the absolute cost is substantial. Cache sharing across selection probes and factory
+overhead deserve measurement before judging multinomial performance. Integer-index
+arrival queries only require root shapes and split shapes of at least one, so the
+small-shape Dirichlet failure does not directly block that experiment. Large-index
+floating-point ties remain a separate concern.
+
+Run the bounded diagnostic with an optional trial count (default 2,000):
+
+```sh
+npm run experiment:gamma-process -- 2000
+```
+
+### Remaining experiments and unresolved decisions
+
+1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.
+   Retain small-shape numerical accuracy as an explicit limitation for further study.
 2. Build a small direct Poisson-race reference, then evaluate the same streams lazily.
    Compare outputs exactly when both traversals reveal the same canonical hierarchy.
 3. Verify multinomial moments and conservation, categorical behavior at `n = 1`,
