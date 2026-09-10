@@ -11,6 +11,8 @@ export interface GammaProcessStats {
   cacheHits: number;
   betaEndpoints: number;
   collapsedSplits: number;
+  gammaMilliseconds: number;
+  betaMilliseconds: number;
 }
 
 /** Research prototype: untruncated unit-scale gamma process, not a production sampler. */
@@ -18,15 +20,20 @@ export class GammaProcess {
   readonly stats: GammaProcessStats = {
     gammaSamples: 0, betaSamples: 0, uniforms: 0, cacheHits: 0,
     betaEndpoints: 0, collapsedSplits: 0,
+    gammaMilliseconds: 0, betaMilliseconds: 0,
   };
   readonly #random: AddressedRandom;
   readonly #address: Address;
+  readonly #profile: boolean;
   readonly #values = new Map<number, number>([[0, 0]]);
 
-  constructor(random: AddressedRandom, address: Address) {
+  constructor(random: AddressedRandom, address: Address, profile = false) {
     this.#random = random;
     this.#address = [...address];
+    this.#profile = profile;
   }
+
+  get cacheEntries(): number { return this.#values.size; }
 
   clearCache(): void {
     this.#values.clear();
@@ -45,7 +52,9 @@ export class GammaProcess {
     while (true) {
       if (!this.#values.has(right)) {
         this.stats.gammaSamples += 1;
+        const start = this.#profile ? performance.now() : 0;
         const sample = gamma.factory({ prng: this.#uniforms(['root', left, right]) })(right - left, 1);
+        if (this.#profile) this.stats.gammaMilliseconds += performance.now() - start;
         const endpoint = this.#values.get(left)! + sample;
         if (!Number.isFinite(endpoint)) throw new RangeError('Gamma endpoint overflow');
         this.#values.set(right, endpoint);
@@ -61,7 +70,9 @@ export class GammaProcess {
       if (!this.#values.has(mid)) {
         const shape = (right - left) / 2;
         this.stats.betaSamples += 1;
+        const start = this.#profile ? performance.now() : 0;
         const fraction = beta.factory({ prng: this.#uniforms(['split', left, right]) })(shape, shape);
+        if (this.#profile) this.stats.betaMilliseconds += performance.now() - start;
         if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) {
           throw new RangeError('Invalid beta sample');
         }

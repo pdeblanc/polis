@@ -708,8 +708,9 @@ npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
 
 ## Multinomial coupling: gamma processes and Poisson races
 
-**Status:** Initial gamma-process/Dirichlet experiment completed; multinomial experiments
-and adoption decision pending.
+**Status:** Initial gamma-process/Dirichlet and Poisson-race multinomial experiments
+completed. The race is retained as a research baseline; the model keeps sequential
+binomials. Stronger sample-ratio monotonicity remains unresolved.
 The current sequential-binomial sampler remains the implementation. The constructions
 below describe ideal probability laws; floating-point behavior and sampler costs still
 need evaluation.
@@ -887,35 +888,114 @@ Run the bounded diagnostic with an optional trial count (default 2,000):
 npm run experiment:gamma-process -- 2000
 ```
 
-### Remaining experiments and unresolved decisions
+### Poisson-race multinomial experiment
+
+`src/experiments/poissonRace.ts` now provides a direct arrival merge and a lazy rank-based
+selector. Both evaluate the same canonically addressed gamma paths. The direct method
+advances one winning stream per draw; it serves as a small-population reference. The
+lazy method keeps a candidate index range per stream, chooses a midpoint from a largest
+range, and uses binary searches to rank that arrival across all streams. It discards
+the side that cannot contain the global `n`th arrival and repeats. It returns counts,
+not a materialized list of arrivals.
+
+This is a simple selection baseline, not the optimal sorted-list algorithm cited above.
+There are `O(k log(n+1))` pivots and `O(k^2 log^2(n+1))` arrival probes for `k` categories.
+Each previously unseen arrival may require logarithmic gamma-tree traversal and scalar
+draws, so the comparison bound is not a bound on all sampler work. Cache sharing reduces
+repeated draws. Probabilities never enter path addresses. Numerical ties are ordered by
+semantic category ID, then arrival index; that produces reproducible selection without
+claiming exact ideal-law coupling at floating-point limits. Aggregate ranks use bigint
+because `k*n` can exceed the safe integer range even when `n` does not.
+
+Tests establish direct/lazy equality with fresh paths and reordered categories, count
+conservation, componentwise monotonicity in `n`, categorical behavior at `n = 1`, and
+the tested likelihood-ratio and population-monotonicity inequalities. They also check
+multinomial means, variances, and covariance over 1,200 seeds at `n = 20`, deterministic
+tie behavior, zero-probability categories, and a structural probe bound at `n = 10^9`.
+These finite tests supplement the mathematical construction; they do not establish
+distributional accuracy throughout the numeric range.
+
+The stronger sample-ratio counterexample is an explicit regression test. With first
+unit-rate arrival times `A: (0.1, 1, 2)`, `B: (0.2, 0.4, 2)`, and
+`C: (0.35, 0.9, 2)`, changing probabilities from `(1/3, 1/3, 1/3)` to
+`(0.4, 1/3, 4/15)` changes the first-three-arrival counts from `(1, 1, 1)` to
+`(1, 2, 0)`. Thus a passing likelihood-ratio test must not be read as solving that
+stronger requirement.
+
+The report compares fresh-cache races over 20 samples per case with at least 200
+sequential-binomial samples, after a warmup call to both implementations. Timings include
+path construction, scalar factory creation, addressing, hashing, selection, and allocation.
+The Birds cases use actual duration-1, mid-cell kernels. A separate one-seed instrumented
+pass reports scalar calls, stored endpoints, encoding, and hashing; those profile timings
+are not added to the uninstrumented benchmark times.
+
+| Probabilities | Categories | Population | Lazy race, ms | Sequential binomials, µs |
+| --- | ---: | ---: | ---: | ---: |
+| Uniform | 3 | 1,024 | 3.32 | 24.1 |
+| Uniform | 3 | 1,000,000,000 | 205 | 90.0 |
+| `(0.0001, 0.0099, 0.99)` | 3 | 1,024 | 2.82 | 20.0 |
+| `(0.0001, 0.0099, 0.99)` | 3 | 1,000,000,000 | 179 | 16.6 |
+| Birds `D = 1` | 7 | 1,024 | 4.89 | 14.9 |
+| Birds `D = 1` | 7 | 1,000,000,000 | 313 | 58.6 |
+| Birds `D = 4` | 13 | 1,024 | 9.62 | 23.6 |
+| Birds `D = 4` | 13 | 1,000,000,000 | 639 | 129 |
+
+The direct merge took roughly 20 ms at `n = 1,024`; it was intentionally not run at large
+populations. The lazy construction avoids that linear growth but remains much slower
+than the production sampler. In the separately profiled `D = 4`, billion-count case,
+36 pivots made 14,010 arrival probes and generated 403 gamma draws and 36,336 beta draws,
+storing 36,752 endpoints including origin entries. About 97.3% of instrumented time was
+inside beta draw calls, 1.2% in gamma draws, and 1.5% elsewhere. Scalar times include
+factory setup and RNG work: encoding consumed about 19.8% and hashing about 9.9% of the
+total, nested within those scalar times. No collapsed splits occurred in the reported
+profile cases; this is not a test of the full safe-integer boundary.
+
+Retain sequential binomials for the current model. This prototype demonstrates the
+exact mathematical race construction and useful coupling, but its measured cost rules
+out adopting it as-is. Potential follow-up experiments are a better selector that avoids
+repeated full-range searches, dyadically aligned probes that share more bridge nodes,
+and reducing scalar factory overhead after auditing generator state. These are hypotheses
+for optimization, not demonstrated speedups. The stronger sampled-ratio question remains
+open independently of performance.
+
+Run the bounded report with an optional number of race samples per case (default 20,
+maximum 200; the default takes on the order of tens of seconds locally):
+
+```sh
+npm run experiment:poisson-race -- 20
+```
+
+### Experiment checklist and unresolved decisions
 
 1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.
    Retain small-shape numerical accuracy as an explicit limitation for further study.
-2. Build a small direct Poisson-race reference, then evaluate the same streams lazily.
-   Compare outputs exactly when both traversals reveal the same canonical hierarchy.
-3. Verify multinomial moments and conservation, categorical behavior at `n = 1`,
+2. Completed: build a small direct Poisson-race reference, then evaluate the same streams
+   lazily and compare outputs using the same canonical hierarchy.
+3. Completed for the tested cases: verify multinomial moments and conservation, categorical behavior at `n = 1`,
    componentwise monotonicity in `n`, population monotonicity, and the complete-outcome
    likelihood-ratio inequality. Retain explicit counterexamples to the stronger ratio
    property so that passing weaker tests cannot be mistaken for satisfying it.
-4. Benchmark increasing population and category counts against sequential binomials,
+4. Initial benchmark completed: compare increasing population and category counts against sequential binomials,
    including representative Birds parameters. Measure work, memory, hashing, and scalar
    sampler costs separately. Investigate extreme shapes and arrival-time precision.
-5. Record whether the guarantees and performance justify adopting the sampler. The
-   stronger multinomial ratio requirement remains open; success with the Poisson race
-   alone does not resolve it.
+5. Decision: retain sequential binomials, for the performance reasons above. The stronger
+   multinomial ratio requirement remains open; success with the Poisson race alone does
+   not resolve it.
 
 Exact gamma increments and exponential gaps are unbounded. If prototype policy requires
 truncating them, document that approximation explicitly: arbitrary clamping need not
 preserve the gamma-bridge identities, Dirichlet law, or exact multinomial law. The
 implementation decision must account for this alongside numerical limits and performance.
-This investigation remains an outstanding milestone, followed by the high-level analysis
-synthesis below.
+The basic likelihood-ratio coupling investigation now has a tested candidate and an
+explicit decision to retain the current sampler. Further optimization and the stronger
+sample-ratio question remain possible follow-ups. The high-level analysis synthesis
+below is still outstanding.
 
 ## Planned analysis
 
 Future sections will record:
 
-- experiments and an adoption decision for the multinomial coupling investigation above;
+- any further multinomial coupling experiments, including the open sampled-ratio question;
 - a final high-level synthesis that separates reusable, model-agnostic evaluation
   metrics from version-1-specific anomaly investigations and root-cause findings; and
 - any further empirical performance investigations that affect mathematical analysis.

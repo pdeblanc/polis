@@ -99,6 +99,13 @@ Run the gamma-process/Dirichlet research diagnostic (optional number of trials p
 npm run experiment:gamma-process -- 2000
 ```
 
+Compare the direct/lazy Poisson-race multinomial experiments with sequential binomials
+(optional race samples per case; default run takes tens of seconds):
+
+```sh
+npm run experiment:poisson-race -- 20
+```
+
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
 and optional diffusion rates:
 
