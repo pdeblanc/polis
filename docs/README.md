@@ -18,7 +18,8 @@ This directory contains the project's technical reference material and design re
   of Birds implementation discoveries, provisional limitations, and concrete internal
   choices that do not override the canonical design.
 - [`BIRDS_ANALYSIS.md`](./BIRDS_ANALYSIS.md) is the active record of empirical and
-  mathematical investigations of the implemented Birds model.
+  mathematical investigations of the implemented Birds model, including population
+  bounds and the proposed gamma-process/Poisson-race sampler experiments.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
   retained as historical review input.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced

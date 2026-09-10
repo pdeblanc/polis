@@ -386,6 +386,11 @@ count-space alternatives.
 The milestone ends with a practical tested sampler or an explicit justification for
 retaining sequential binomials.
 
+The current research direction and additional open questions about sampled-ratio
+monotonicity are recorded in the
+[gamma-process and Poisson-race investigation](./BIRDS_ANALYSIS.md#multinomial-coupling-gamma-processes-and-poisson-races).
+This is a candidate under investigation, not an adopted replacement sampler.
+
 Approximate binomial or hypergeometric fast paths are deferred until end-to-end profiling
 identifies real parameter regimes. Any approximation must specify error, feasible bounds,
 addressing, maximum work, and dispatch threshold.

@@ -706,11 +706,160 @@ Run the report with maximum epoch, population density, and diffusion rates:
 npm run analyze:birds-population-bounds -- 12 2 0 0.5 1 2 4
 ```
 
+## Multinomial coupling: gamma processes and Poisson races
+
+**Status:** Research direction selected; experiments and adoption decision pending.
+The current sequential-binomial sampler remains the implementation. The constructions
+below describe ideal probability laws; floating-point behavior and sampler costs still
+need evaluation.
+
+### Distinguishing the coupling properties
+
+Fix the total `n`, seed, address, and semantic category identities. Let `x` and `y` be
+the outputs for probability vectors `p` and `q`. The existing likelihood-ratio criterion
+compares the complete multinomial laws `P = Multinomial(n, p)` and
+`Q = Multinomial(n, q)`:
+
+```text
+Q(y) / P(y) >= Q(x) / P(x).
+```
+
+For positive probabilities, cancelling the multinomial coefficients gives
+
+```text
+sum_i (y_i - x_i) * log(q_i / p_i) >= 0.
+```
+
+At `n = 1`, this is precisely the categorical criterion. Independent categorical
+couplings satisfying that criterion also satisfy it after their counts are aggregated.
+However, it permits the following behavior: increasing `p_A` and decreasing `p_C` by
+the same amount, with `p_B` fixed, can change `(1, 1, 1)` into `(1, 2, 0)`. The sampled
+`B/A` ratio increases even though the probability ratio decreases.
+
+A further candidate property is pairwise sample-ratio monotonicity. If parameter `i`
+increases and parameter `j` decreases or stays fixed, require
+
+```text
+y_i * x_j >= x_i * y_j.
+```
+
+This avoids division by zero, but can be uninformative when both old counts are zero.
+It must be assessed separately from the complete-outcome likelihood-ratio criterion.
+The discussion has not established whether an exact multinomial sampler can satisfy
+this property universally. Requiring every unchanged-probability category to keep its
+sampled count exactly fixed is a different, stronger restriction that we have not adopted.
+For changes in `n`, retain the separate requirement that every category count be
+nondecreasing under the same address.
+
+### Continuous starting point: normalized gamma processes
+
+For fixed concentration `kappa > 0`, set `alpha_i = kappa * p_i`. Take independent
+unit-scale gamma processes `G_i`, with independent increments satisfying
+
+```text
+G_i(t + h) - G_i(t) ~ Gamma(shape = h, scale = 1).
+```
+
+Then `X_i = G_i(alpha_i) / sum_j G_j(alpha_j)` has the Dirichlet law with parameters
+`alpha`. Holding these paths fixed makes each unnormalized sample nondecreasing in its
+own parameter. Because normalization cancels in `X_i / X_j`, increasing `alpha_i` and
+decreasing or fixing `alpha_j` gives the proposed pairwise ratio inequality. This does
+not assert ratio monotonicity for arbitrary changes where both parameters increase or
+both decrease. An unaffected normalized coordinate can move as the denominator changes.
+
+We can construct the paths recursively. A gamma increment covering a parameter interval
+of length `a + b`, conditional on total `S`, splits into
+
+```text
+B ~ Beta(a, b),
+S_left = S * B,
+S_right = S * (1 - B).
+```
+
+This conditional construction is established gamma-bridge sampling; see
+[Avramidis, L'Ecuyer, and Tremblay, Section 3.1](https://informs-sim.org/wsc03papers/039.pdf).
+Our proposed adaptation uses canonically addressed dyadic blocks and independent
+expansion blocks, so different query orders reveal the same path. Positive increments
+provide monotonicity; the scalar gamma and beta implementations need not themselves
+couple different shape parameters monotonically. This supplies a concrete alternative
+to using a gamma inverse CDF at every requested parameter value.
+
+### Exact multinomial candidate: shared Poisson arrival streams
+
+At integer arguments, `T_i(m) = G_i(m)` is the arrival-time sequence of a unit-rate
+Poisson process: consecutive gaps are independent `Gamma(1, 1)` exponential variables.
+Scale each arrival to `T_i(m) / p_i` and select the first `n` arrivals across categories.
+Their category counts have exactly the multinomial law. A zero-probability category
+contributes no arrivals. This construction appears in
+[Gölz, Peters, and Procaccia, Section 3.2](https://dominik-peters.de/publications/apportionment-journal.pdf).
+
+With streams fixed, increasing `n` adds one arrival. For `n = 1`, the construction is
+the categorical exponential race. It also has the paper's population monotonicity:
+when `p_i / p_j` increases, `i` cannot lose counts while `j` gains counts. This is weaker
+than sampled-ratio monotonicity: the `(1, 1, 1) -> (1, 2, 0)` example remains possible.
+
+The following direct argument also establishes complete-outcome likelihood-ratio
+monotonicity for this candidate. For fixed streams, selecting the earliest arrivals
+maximizes, over count vectors `z` summing to `n`,
+
+```text
+score_p(z) = sum_i z_i * log(p_i)
+             - sum_i sum_{m=1}^{z_i} log(T_i(m)).
+```
+
+Adding `score_p(x) >= score_p(y)` and `score_q(y) >= score_q(x)` cancels the random
+terms and yields the required inequality. This proof assumes positive probabilities;
+support changes and deterministic handling of numerical ties need explicit treatment
+in an implementation.
+
+### Avoiding work proportional to the population
+
+The gamma hierarchy could answer `T_i(m)` by revealing only a logarithmic number of
+blocks in `m`, without generating all preceding gaps. Canonical block boundaries must
+be independent of both `n` and `p`; making a fresh root for each call would destroy the
+shared coupling. For example, independent blocks on `[0, 1]`, `[1, 2]`, `[2, 4]`, and
+successive doubled intervals can be subdivided with gamma bridges. Addresses identify
+the category and block, not the requested probability vector or evaluation order.
+
+Selection across these increasing streams is a sorted-list selection problem. Existing
+algorithms use `O(k + sum_i log(x_i + 1))` comparisons for `k` lists contributing `x_i`
+selected entries, assuming random access; see
+[Kaplan et al., Selection from heaps, row-sorted matrices and X+Y using soft heaps](https://arxiv.org/abs/1802.07041).
+Our proposed combination with lazy gamma bridges suggests work polylogarithmic in `n`
+for fixed category count. This is an algorithmic direction, not a measured complexity
+or throughput result for our implementation. Scalar sampling, tree traversal, hashing,
+and selection overhead may still make it slower than sequential binomials.
+
+### Planned experiments and unresolved decisions
+
+1. Prototype the addressed gamma hierarchy and normalized Dirichlet coupling. Check
+   gamma increments, Dirichlet moments, query-order/cache independence, and the pairwise
+   ratio property for elementary transfers.
+2. Build a small direct Poisson-race reference, then evaluate the same streams lazily.
+   Compare outputs exactly when both traversals reveal the same canonical hierarchy.
+3. Verify multinomial moments and conservation, categorical behavior at `n = 1`,
+   componentwise monotonicity in `n`, population monotonicity, and the complete-outcome
+   likelihood-ratio inequality. Retain explicit counterexamples to the stronger ratio
+   property so that passing weaker tests cannot be mistaken for satisfying it.
+4. Benchmark increasing population and category counts against sequential binomials,
+   including representative Birds parameters. Measure work, memory, hashing, and scalar
+   sampler costs separately. Investigate extreme shapes and arrival-time precision.
+5. Record whether the guarantees and performance justify adopting the sampler. The
+   stronger multinomial ratio requirement remains open; success with the Poisson race
+   alone does not resolve it.
+
+Exact gamma increments and exponential gaps are unbounded. If prototype policy requires
+truncating them, document that approximation explicitly: arbitrary clamping need not
+preserve the gamma-bridge identities, Dirichlet law, or exact multinomial law. The
+implementation decision must account for this alongside numerical limits and performance.
+This investigation remains an outstanding milestone, followed by the high-level analysis
+synthesis below.
+
 ## Planned analysis
 
 Future sections will record:
 
-- likelihood-ratio-monotone multinomial coupling investigation; and
+- experiments and an adoption decision for the multinomial coupling investigation above;
 - a final high-level synthesis that separates reusable, model-agnostic evaluation
   metrics from version-1-specific anomaly investigations and root-cause findings; and
 - any further empirical performance investigations that affect mathematical analysis.
