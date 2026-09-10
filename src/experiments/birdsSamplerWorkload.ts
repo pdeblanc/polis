@@ -3,7 +3,7 @@ import { birdsScale } from '../models/birds/scales';
 import { createAddressedRandom } from '../utils/rng/addressedRandom';
 import type { Address } from '../utils/rng/address';
 import { multinomial, withMultinomialObserver, type MultinomialCategory } from '../utils/distributions/multinomial';
-import { PoissonCountProcess, countPoissonRace, POISSON_MATERIALIZATION_COUNT } from './poissonCountProcess';
+import { PoissonCountProcess, countPoissonRace, POISSON_MATERIALIZATION_COUNT, POISSON_CACHE_OPERATION_TAGS } from './poissonCountProcess';
 import { beginDistributionProfile, endDistributionProfile, profileDistribution } from '../utils/distributions/profiling';
 
 interface Group {
@@ -19,6 +19,9 @@ const detailed = cli.process?.argv.includes('--details') ?? false;
 const profiling = cli.process?.argv.includes('--profile') ?? false;
 const cutoffArgument = cli.process?.argv.find((arg) => arg.startsWith('--cutoffs='));
 const cutoffs = cutoffArgument ? cutoffArgument.slice('--cutoffs='.length).split(',').map(Number) : [POISSON_MATERIALIZATION_COUNT];
+const compareTags = cli.process?.argv.includes('--compare-tags') ?? false;
+const variants = cutoffs.flatMap((cutoff) => (compareTags ? [false, true] : [POISSON_CACHE_OPERATION_TAGS])
+  .map((cacheOperationTags) => ({ cutoff, cacheOperationTags })));
 if (!cutoffs.length || cutoffs.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 256)) throw new RangeError('Use cutoffs from 1 to 256');
 if (!Number.isSafeInteger(samples) || samples < 8 || samples > 512) throw new RangeError('Use 8–512 samples per parameter group');
 const cases = [
@@ -80,39 +83,44 @@ for (const c of cases) {
   }));
   const randoms = Array.from({ length: Math.max(samples, 512) }, (_, i) => createAddressedRandom(`workload-replay-${i}`));
   let estimatedSequentialMs = 0;
-  const estimatedRaceMs = cutoffs.map(() => 0);
+  const estimatedRaceMs = variants.map(() => 0);
   const rows: object[] = [];
-  const profiles = cutoffs.map(() => ({ totalMs: 0, poissonMs: 0, binomialMs: 0, encodingMs: 0, hashingMs: 0,
+  const profiles = variants.map(() => ({ totalMs: 0, poissonMs: 0, binomialMs: 0, encodingMs: 0, hashingMs: 0,
     poissonDraws: 0, binomialDraws: 0, pointDraws: 0, visits: 0, nodes: 0, probes: 0 }));
   for (const g of ordered) {
     const sequential = (i: number) => {
       const e = g.examples[i % g.examples.length];
       return multinomial(randoms[i], e.address, g.n, e.categories);
     };
-    const race = (i: number, cutoff: number, paths?: PoissonCountProcess[], stats = { cutoffs: 0 }) => {
+    const race = (i: number, variant: typeof variants[number], paths?: PoissonCountProcess[], stats = { cutoffs: 0 }) => {
       const e = g.examples[i % g.examples.length];
       // Deterministic cases need no latent process. Preserve semantic category addresses.
       if (g.n === 0) return g.p.map(() => 0);
       if (g.p.filter((p) => p > 0).length === 1) return g.p.map((p) => p ? g.n : 0);
       return countPoissonRace(g.n, e.categories.map((category, j) => {
-        const path = new PoissonCountProcess(randoms[i], [...e.address, 'race-category', ...category.address], paths !== undefined, cutoff);
+        const path = new PoissonCountProcess(randoms[i], [...e.address, 'race-category', ...category.address],
+          paths !== undefined, variant.cutoff, undefined, variant.cacheOperationTags);
         paths?.push(path);
         return { id: String(j), probability: category.probability, path };
       }), stats);
     };
-    for (let i = 0; i < 8; i++) { sequential(i); for (const cutoff of cutoffs) race(i, cutoff); }
+    for (let i = 0; i < 8; i++) { sequential(i); for (const variant of variants) race(i, variant); }
+    if (compareTags) for (const cutoff of cutoffs) for (let i = 0; i < samples; i++) {
+      if (race(i, { cutoff, cacheOperationTags: false }).join(',') !==
+          race(i, { cutoff, cacheOperationTags: true }).join(',')) throw new Error('Operation scopes changed the race');
+    }
     const times: { sequential: number; race: number[] }[] = [];
     // Rotate/reverse candidate order between rounds. Every measured race has fresh paths.
     for (let round = 0; round < 3; round++) {
-      const measured = { sequential: 0, race: cutoffs.map(() => 0) };
-      const modes = [-1, ...cutoffs.map((_, i) => i)];
+      const measured = { sequential: 0, race: variants.map(() => 0) };
+      const modes = [-1, ...variants.map((_, i) => i)];
       if (round % 2) modes.reverse();
       modes.push(...modes.splice(0, round));
       for (const mode of modes) {
         const count = mode >= 0 ? samples : randoms.length;
         const start = performance.now();
         for (let i = 0; i < count; i++) {
-          const result = mode >= 0 ? race(i, cutoffs[mode]) : sequential(i);
+          const result = mode >= 0 ? race(i, variants[mode]) : sequential(i);
           if (result.reduce((s, v) => s + v, 0) !== g.n) throw new Error('Replay conservation failure');
         }
         const elapsed = (performance.now() - start) / count;
@@ -123,13 +131,13 @@ for (const c of cases) {
     }
     const seqMs = times.map((t) => t.sequential).sort((a, b) => a - b)[1];
     estimatedSequentialMs += g.calls * seqMs;
-    const raceUs = cutoffs.map((cutoff, i) => {
+    const raceUs = variants.map((variant, i) => {
       const raceMs = times.map((t) => t.race[i]).sort((a, b) => a - b)[1];
       estimatedRaceMs[i] += g.calls * raceMs;
-      return { cutoff, microseconds: raceMs * 1000 };
+      return { ...variant, microseconds: raceMs * 1000 };
     });
     rows.push({ n: g.n, p: g.p, calls: g.calls, sequentialUs: seqMs * 1000, raceUs });
-    if (profiling) for (const [mode, cutoff] of cutoffs.entries()) {
+    if (profiling) for (const [mode, variant] of variants.entries()) {
       const totals = profiles[mode];
       const weight = g.calls / samples;
       beginDistributionProfile();
@@ -137,7 +145,7 @@ for (const c of cases) {
         for (let i = 0; i < samples; i++) {
           const paths: PoissonCountProcess[] = [];
           const stats = { cutoffs: 0 };
-          profileDistribution('multinomial', () => race(i, cutoff, paths, stats));
+          profileDistribution('multinomial', () => race(i, variant, paths, stats));
           totals.probes += stats.cutoffs * weight;
           for (const { stats: s } of paths) {
             totals.poissonMs += s.poissonScalarMilliseconds * weight;
@@ -159,7 +167,7 @@ for (const c of cases) {
   }
   console.log(JSON.stringify({ kind: 'replay', label, samplesPerGroup: samples, rows: detailed ? rows : undefined,
     weightedSequentialUs: estimatedSequentialMs * 1000 / calls,
-    candidates: cutoffs.map((cutoff, i) => ({ cutoff,
+    candidates: variants.map((variant, i) => ({ ...variant,
       weightedRaceUs: estimatedRaceMs[i] * 1000 / calls,
       samplerRatio: estimatedRaceMs[i] / estimatedSequentialMs,
       estimatedExtraMs: estimatedRaceMs[i] - estimatedSequentialMs,
@@ -167,7 +175,7 @@ for (const c of cases) {
     })),
   }));
   if (profiling) console.log(JSON.stringify({ kind: 'profile', label, samplesPerGroup: samples,
-    candidates: profiles.map((p, i) => ({ cutoff: cutoffs[i],
+    candidates: profiles.map((p, i) => ({ ...variants[i],
       weightedMicroseconds: { total: p.totalMs * 1000 / calls, poisson: p.poissonMs * 1000 / calls,
         binomial: p.binomialMs * 1000 / calls, encoding: p.encodingMs * 1000 / calls, hashing: p.hashingMs * 1000 / calls,
         other: (p.totalMs - p.poissonMs - p.binomialMs - p.encodingMs - p.hashingMs) * 1000 / calls },

@@ -6,6 +6,8 @@ import { uniformUnit } from '../utils/distributions/uniform';
 
 // Fixed per process, never adapted to a query's population or probabilities.
 export const POISSON_MATERIALIZATION_COUNT = 4;
+// Optional experiment: scope setup does not consistently pay off on sparse workloads.
+export const POISSON_CACHE_OPERATION_TAGS = false;
 
 interface Interval {
   start: number;
@@ -29,16 +31,18 @@ export class PoissonCountProcess {
   // Entry i is the total population of roots strictly before root i.
   readonly #rootPrefixes = [0];
   readonly #random: AddressedRandom;
+  readonly #operations?: Partial<Record<'root' | 'split' | 'points', AddressedRandom>>;
   readonly #profile: boolean;
   readonly #materializationCount: number;
   readonly #splitQuantile: HalfBinomialQuantile;
 
   constructor(random: AddressedRandom, address: Address, profile = false, materializationCount = POISSON_MATERIALIZATION_COUNT,
-    splitQuantile: HalfBinomialQuantile = halfBinomialQuantile) {
+    splitQuantile: HalfBinomialQuantile = halfBinomialQuantile, cacheOperationTags = POISSON_CACHE_OPERATION_TAGS) {
     if (!Number.isSafeInteger(materializationCount) || materializationCount < 1) {
       throw new RangeError('Materialization cutoff must be a positive safe integer');
     }
     this.#random = prefixRandom(random, address);
+    if (cacheOperationTags) this.#operations = {};
     this.#profile = profile;
     this.#materializationCount = materializationCount;
     this.#splitQuantile = splitQuantile;
@@ -101,9 +105,13 @@ export class PoissonCountProcess {
     throw new RangeError('Poisson arrival root search exhausted');
   }
 
-  #uniform(suffix: Address): number {
+  #uniform(tag: 'root' | 'split' | 'points', start: number, width: number, index?: number): number {
     this.stats.uniforms++;
-    return uniformUnit(this.#random, suffix);
+    if (!this.#operations) return uniformUnit(this.#random,
+      index === undefined ? [tag, start, width] : [tag, start, width, index]);
+    // Build only operation scopes that are actually used, preserving flat addresses.
+    const random = this.#operations[tag] ??= prefixRandom(this.#random, [tag]);
+    return uniformUnit(random, index === undefined ? [start, width] : [start, width, index]);
   }
 
   #root(index: number): Interval {
@@ -113,7 +121,7 @@ export class PoissonCountProcess {
     const width = index === 0 ? 1 : start;
     if (!Number.isFinite(start + width)) throw new RangeError('Poisson root overflow');
     const begin = this.#profile ? performance.now() : 0;
-    const u = this.#uniform(['root', start, width]);
+    const u = this.#uniform('root', start, width);
     const scalarBegin = this.#profile ? performance.now() : 0;
     const count = poissonQuantile(u, width);
     if (this.#profile) {
@@ -139,7 +147,7 @@ export class PoissonCountProcess {
     if (cell.points === undefined) {
       const { start, width, count } = cell;
       cell.points = Array.from({ length: count }, (_, i) => {
-        const point = start + width * this.#uniform(['points', start, width, i]);
+        const point = start + width * this.#uniform('points', start, width, i);
         if (point < start || point >= start + width) throw new RangeError('Point rounded outside its cell');
         return point;
       }).sort((a, b) => a - b);
@@ -155,7 +163,7 @@ export class PoissonCountProcess {
     const mid = cell.start + half;
     if (mid === cell.start || mid === cell.start + cell.width) throw new RangeError('Poisson refinement exhausted');
     const begin = this.#profile ? performance.now() : 0;
-    const u = this.#uniform(['split', cell.start, cell.width]);
+    const u = this.#uniform('split', cell.start, cell.width);
     const scalarBegin = this.#profile ? performance.now() : 0;
     const left = this.#splitQuantile(u, cell.count);
     if (this.#profile) {

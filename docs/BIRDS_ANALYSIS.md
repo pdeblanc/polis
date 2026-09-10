@@ -1469,6 +1469,40 @@ as part of this profile refresh.
 
 Reproduce with `npm run experiment:birds-sampler-workload -- 32 --profile`.
 
+### Operation-prefix caching experiment
+
+We tried extending each process's encoded category prefix with `root`, `split`, and
+`points`, lazily creating a scoped RNG for an operation on first use. Subsequent draws
+encode only the numeric suffix. This preserves every hash input and random draw; cached
+scopes remain valid across process-cache clearing. Custom RNGs still use the prefix
+wrapper's fallback. The experiment is selectable through the count-process constructor
+and `experiment:birds-sampler-workload -- 32 --profile --compare-tags`.
+
+The comparison uses the same seeds and captured addresses for both paths, verifies race
+equality outside the timed sections, and rotates/reverses candidate order over three
+rounds. Confirmation-run weighted uninstrumented timings were:
+
+| Workload | Existing encoding (µs/call) | Operation scopes (µs/call) |
+| --- | ---: | ---: |
+| Epoch 1, D = 0.5, density 2 | 7.574 | 7.694 |
+| Epoch 2, D = 0.5, density 2 | 5.171 | 5.199 |
+| Epoch 3, D = 0.5, density 2 | 3.813 | 3.767 |
+| Epoch 2, D = 2, density 2 | 7.466 | 8.252 |
+| Epoch 2, D = 0.5, density 32 | 15.927 | 15.442 |
+
+The denser case improved by about 3% (about 5% in the initial trial), but sparse cases
+were approximately unchanged or regressed. Its separately profiled encoding time fell
+from 6.788 to 6.060 µs/call, partly offset by increased residual overhead. Most sparse
+processes make too few draws per operation to amortize scope creation, encoded-prefix
+copying, and lookup costs. Small timing differences remain noisy; this is not a clear
+general improvement.
+
+**Decision:** retain the experiment but leave it disabled by default. Disabled processes
+do not allocate an operation-scope cache. No production Birds behavior changes. Tests
+check cumulative counts, arrival coordinates, random draw counts, cache clearing, and
+custom-RNG fallback; benchmark samples match exactly between the two modes. Revisit a
+lower-setup-cost encoding approach only if justified by a concrete workload.
+
 ### Experiment checklist and unresolved decisions
 
 1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.

@@ -127,6 +127,12 @@ encoding, hashing, residual overhead, and operation counts:
 npm run experiment:birds-sampler-workload -- 32 --profile
 ```
 
+Add `--compare-tags` to compare the optional operation-prefix cache with the default:
+
+```sh
+npm run experiment:birds-sampler-workload -- 32 --profile --compare-tags
+```
+
 Compare materialization cutoffs on captured Birds workloads or larger synthetic races:
 
 ```sh

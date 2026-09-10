@@ -10,6 +10,19 @@ const make = (seed: number, p = [0.2, 0.3, 0.5]) => p.map((probability, i) => ({
 }));
 
 describe('Poisson count hierarchy and race', () => {
+  it('preserves points and draws with cached operation tags, including after clearing', () => {
+    for (const source of [random, { randomU64: random.randomU64 }]) {
+      const cached = new PoissonCountProcess(source, ['operation-tags'], false, 4, undefined, true);
+      const plain = new PoissonCountProcess(source, ['operation-tags'], false, 4, undefined, false);
+      for (let pass = 0; pass < 2; pass++) {
+        for (const t of [0.5, 1000.25, 16, 1e6]) expect(cached.countBefore(t)).toBe(plain.countBefore(t));
+        for (const i of [1, 4, 100]) expect(cached.arrival(i)).toBe(plain.arrival(i));
+        expect(cached.stats.uniforms).toBe(plain.stats.uniforms);
+        cached.clearCache();
+        plain.clearCache();
+      }
+    }
+  });
   it('keeps scalar profiling separate from RNG-inclusive timings without changing draws', () => {
     const plain = new PoissonCountProcess(random, ['profile']);
     const profiled = new PoissonCountProcess(random, ['profile'], true);
