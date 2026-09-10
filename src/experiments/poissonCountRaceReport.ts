@@ -2,7 +2,7 @@ import { createAddressedRandom } from '../utils/rng/addressedRandom';
 import { multinomial } from '../utils/distributions/multinomial';
 import { beginDistributionProfile, endDistributionProfile, profileDistribution } from '../utils/distributions/profiling';
 import { createMidpointKernels } from '../models/birds/midpointKernels';
-import { PoissonCountProcess, countPoissonRace } from './poissonCountProcess';
+import { POISSON_MATERIALIZATION_COUNT, PoissonCountProcess, countPoissonRace } from './poissonCountProcess';
 import { GammaProcess } from './gammaProcess';
 import { lazyPoissonRace } from './poissonRace';
 
@@ -48,7 +48,8 @@ for (const { name, p } of cases) for (const n of [32, 1024, 1e6, 1e9]) {
   const profile = endDistributionProfile().timings.multinomial;
   const sum = (key: keyof PoissonCountProcess['stats']) => detail.paths.reduce((s, path) => s + path.stats[key], 0);
   console.log(JSON.stringify({
-    name, n, categories: p.length, trials, countRaceUs, sequentialUs, gammaTrials, gammaBridgeUs,
+    name, n, categories: p.length, trials, materializationCount: POISSON_MATERIALIZATION_COUNT,
+    countRaceUs, sequentialUs, gammaTrials, gammaBridgeUs,
     ratio: countRaceUs / sequentialUs, averageCutoffs: cutoffs / trials,
     profileSeed: 0, nodes: sum('nodes'), visits: sum('visits'),
     poissonDraws: sum('poissonSamples'), binomialDraws: sum('binomialSamples'),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Address } from '../rng/address';
 import { createAddressedRandom, type AddressedRandom } from '../rng/addressedRandom';
-import { multinomial } from './multinomial';
+import { multinomial, withMultinomialObserver } from './multinomial';
 
 function fixedRandom(bits: bigint, addresses?: Address[]): AddressedRandom {
   return {
@@ -19,6 +19,24 @@ const THREE_CATEGORIES = [
 ] as const;
 
 describe('multinomial', () => {
+  it('captures parameters without changing samples and restores observers after exceptions', () => {
+    const random = createAddressedRandom('multinomial-observer');
+    const expected = multinomial(random, ['batch'], 10, THREE_CATEGORIES);
+    const seen: number[] = [];
+    withMultinomialObserver((n, categories, address) => {
+      seen.push(n);
+      expect(categories).toBe(THREE_CATEGORIES);
+      expect(address).toEqual(['batch']);
+    }, () => {
+      expect(multinomial(random, ['batch'], 10, THREE_CATEGORIES)).toEqual(expected);
+      expect(() => withMultinomialObserver(() => { throw new Error('capture failed'); }, () =>
+        multinomial(random, ['batch'], 10, THREE_CATEGORIES),
+      )).toThrow('capture failed');
+      multinomial(random, ['batch'], 11, THREE_CATEGORIES);
+    });
+    multinomial(random, ['batch'], 12, THREE_CATEGORIES);
+    expect(seen).toEqual([10, 11]);
+  });
   it('conserves the trial total exactly', () => {
     const random = createAddressedRandom('multinomial-conservation');
 

@@ -9,6 +9,25 @@ const make = (seed: number, p = [0.2, 0.3, 0.5]) => p.map((probability, i) => ({
 }));
 
 describe('Poisson count hierarchy and race', () => {
+  it.each([1, 2, 4, 8, 16, 32, 64])('preserves replay, coupling, and moments at cutoff %i', (cutoff) => {
+    const totals = [0, 0, 0];
+    const samples = 400;
+    for (let seed = 0; seed < samples; seed++) {
+      const paths = [0.2, 0.3, 0.5].map((probability, i) => ({
+        id: String(i), probability,
+        path: new PoissonCountProcess(random, ['cutoff-check', seed, String(i)], false, cutoff),
+      }));
+      const x = countPoissonRace(30, paths);
+      x.forEach((v, i) => { totals[i] += v; });
+      expect(countPoissonRace(31, paths).every((v, i) => v >= x[i])).toBe(true);
+      paths.forEach((c) => c.path.clearCache());
+      expect(countPoissonRace(30, paths)).toEqual(x);
+      const q = [0.4, 0.3, 0.3];
+      const y = countPoissonRace(30, paths.map((c, i) => ({ ...c, probability: q[i] })));
+      expect(y.reduce((s, v, i) => s + (v - x[i]) * Math.log(q[i] / paths[i].probability), 0)).toBeGreaterThanOrEqual(-1e-12);
+    }
+    [6, 9, 15].forEach((mean, i) => expect(Math.abs(totals[i] / samples - mean)).toBeLessThan(0.5));
+  });
   it('replays cumulative counts and arrival coordinates after cache clearing', () => {
     const path = new PoissonCountProcess(random, ['order']);
     const times = [0, 0.3, 1, 1.5, 2, 48, 100, 1024, 1e6];

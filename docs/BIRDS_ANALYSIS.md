@@ -1033,6 +1033,187 @@ at 3 per case):
 npm run experiment:poisson-count-race -- 20
 ```
 
+### Replaying multinomial parameters from viewport workloads
+
+`src/experiments/birdsSamplerWorkload.ts` captures actual multinomial calls during
+cold-cache Birds viewport queries. A scoped synchronous observer records parameters
+without changing samples or addresses; it is inactive outside the capture pass and is
+restored even when a diagnostic throws. Calls are grouped by the complete `(n, p)` pair,
+with invocation frequency and up to eight example semantic addresses per group.
+Repeated evaluations caused by model cache eviction count as separate invocations.
+
+The default-density cases use the same 80-by-50 population grid and seeds as the engine
+profiler, with `D = 0.5`, density 2, and epochs 1–3. Two additional 20-by-8 grids test
+higher diffusion and density at epoch 2. Each case uses one fixed model seed; these are
+representative diagnostic workloads rather than a random sample of GUI navigation.
+
+| Workload | Calls | Zero-total calls | Median positive n | 95th percentile positive n | Maximum n |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Epoch 1, density 2, D=0.5, 4,000 cells | 81,004 | 82.7% | 4 | 14 | 29 |
+| Epoch 2, density 2, D=0.5, 4,000 cells | 87,656 | 85.5% | 2 | 8 | 27 |
+| Epoch 3, density 2, D=0.5, 4,000 cells | 90,105 | 88.7% | 2 | 6 | 26 |
+| Epoch 2, density 2, D=2, 160 cells | 14,038 | 86.8% | 2 | 8 | 16 |
+| Epoch 2, density 32, D=0.5, 160 cells | 5,978 | 76.5% | 18 | 147 | 360 |
+
+Every case used four probability vectors, corresponding to the two duration and two
+midpoint-alignment kernels. At `D = 0.5`, their category counts are 4, 4, 5, and 6. The
+centered kernels put about 84.3% or 95.4% in the central category, while the boundary
+kernels are dominated by a nearly equal pair. All include small tail probabilities.
+At `D = 2`, category counts are 7, 7, 9, and 10. The CLI prints the full probability
+vectors and their frequencies; `--details` also prints population histograms and every
+parameter group's timing. The billion-population, 13-category synthetic case is clearly
+not typical of these default model queries.
+
+For replay, each group receives 32 race samples and 512 sequential-binomial samples per
+round, using independent addressed seeds and the captured address shapes. Three rounds
+alternate sampler order; the median per-call time is weighted by the group's captured
+invocation frequency. Every race has fresh process caches. The race bypasses process
+construction for `n = 0` or a single active category; the existing sequential sampler is
+measured unchanged. Both timed loops include a count-conservation check. Warmup and model
+parameter capture are excluded from replay timings. These timings include the cost of
+long model addresses, unlike the earlier short synthetic benchmark addresses.
+
+| Workload | Weighted sequential, µs/call | Weighted count race, µs/call | Sampler multiplier | Estimated model multiplier |
+| --- | ---: | ---: | ---: | ---: |
+| Epoch 1, density 2, D=0.5, 4,000 cells | 1.80 | 11.69 | 6.51× | 1.67× |
+| Epoch 2, density 2, D=0.5, 4,000 cells | 1.46 | 7.07 | 4.84× | 1.39× |
+| Epoch 3, density 2, D=0.5, 4,000 cells | 1.12 | 5.18 | 4.61× | 1.26× |
+| Epoch 2, density 2, D=2, 160 cells | 2.16 | 9.46 | 4.39× | 1.37× |
+| Epoch 2, density 32, D=0.5, 160 cells | 2.32 | 56.35 | 24.27× | 4.98× |
+
+The estimated model multiplier is
+
+```text
+1 + sum_groups calls * (race_time_per_call - sequential_time_per_call)
+    / uninstrumented_model_query_time.
+```
+
+The measured baseline model times were approximately 1,189, 1,253, 1,392, 276, and 81 ms,
+respectively, after separate JIT warmup and with fresh model caches. The default-density
+predictions therefore add roughly 802, 492, and 366 ms to those 4,000-cell batches.
+These are fixed-workload estimates, not measured end-to-end replacement runs. Changing
+the sampler changes realized counts and can change recursive queries, zero-flow pruning,
+cache behavior, and allocation/GC costs. Rendering is excluded. The high-density case
+also has a different grid size, so its absolute time is not directly comparable with
+the default-density 4,000-cell cases. No confidence interval is claimed.
+
+The observed default workload makes the experimental sampler much less disruptive than
+extrapolating the billion-count benchmark suggested: about 26–67% extra model time under
+the fixed-workload assumption, rather than a many-fold slowdown. Its cost remains material,
+and increases sharply with population density. Retain the production sampler while
+considering further count-race optimization or an actual end-to-end replacement experiment.
+
+Run with race samples per parameter group (default 64; the recorded run used 32):
+
+```sh
+npm run experiment:birds-sampler-workload -- 32
+npm run experiment:birds-sampler-workload -- 32 --details
+```
+
+### Fixed race-time hierarchy: which monotonicity survives?
+
+An alternative to scaling fixed unit-rate point coordinates is to keep interval boundaries
+fixed in race time and sample each root count with mean `p_i * interval_length`. With
+shared inverse-Poisson quantiles, root counts are nondecreasing in `p_i`. Shared exact
+inverse-binomial splits preserve this property in both children: increasing a parent
+count by one increases its left-child quantile by either zero or one, so the right-child
+remainder also increases by either zero or one. Recursion therefore makes every dyadic
+interval count nondecreasing in rate, provided materialization does not change the coupling.
+
+This implies a weaker race guarantee: if `q_i >= p_i` and `q_j <= p_j`, category `i`
+cannot lose counts while category `j` gains counts. If `i` lost despite its increased
+rate, the common cutoff must have moved earlier; that earlier cutoff and `j`'s
+nonincreasing rate prevent `j` from gaining. For an elementary probability transfer from
+one donor to one recipient with all other probabilities fixed, conservation further
+implies that the recipient's count cannot decrease and the donor's count cannot increase.
+
+However, interval-count monotonicity does not imply relative-probability population
+monotonicity or the original categorical likelihood-ratio criterion. A concrete
+counterexample uses `p = (0.2, 0.2, 0.6)` and `q = (0.4, 0.3, 0.3)`. For the root
+`[0,1)`, the following shared quantiles give these counts (verified with stdlib):
+
+| Category | Poisson uniform | Count under p | Count under q |
+| --- | ---: | ---: | ---: |
+| A | 0.85 | 1 | 1 |
+| B | 0.80 | 0 | 1 |
+| C | 0.10 | 0 | 0 |
+
+A shared left-child binomial quantile of `0.25` puts A's point in `[0.5,1)`. A quantile
+of `0.75` puts B's new point in `[0,0.5)`. Thus, with `n = 1`, the winning category
+changes from A to B even though `q_B/p_B = 1.5 < 2 = q_A/p_A`. The failure already
+occurs in an exact count-only hierarchy; it is not caused by materialization or numeric
+precision. It rules out assuming that this rate-parameterized construction has the same
+coupling guarantees as the implemented coordinate-scaled race.
+
+The implemented count-process prototype materializes at a **population threshold**,
+not at a fixed hierarchy stage. The initial experiments used 16; the cutoff sweep below
+changes the default to 4. A queried root or child at or below the threshold generates
+their uniform coordinates; subsequent partial queries use those coordinates without
+further subdivision. For its fixed seed and category, the unit-rate hierarchy, counts,
+and materialization decisions do not depend on either the multinomial probability or
+the requested total `n`. Different queries may reveal different parts of that fixed
+process, but never redefine already-determined points. Therefore threshold-based
+materialization preserves the current sampler's coupling.
+
+In the proposed fixed-race-time alternative, changing `p_i` could move a node across the
+materialization threshold. Switching from parent-generated coordinates to independently
+addressed descendant counts/coordinates would invalidate the interval-monotonicity
+argument unless those representations were explicitly coupled. A fixed geometric
+materialization stage, with prefix-coupled point lists, is one possible approach to that
+separate issue, but has not been implemented and would not resolve the counterexample
+above. The current sampler remains the coordinate-scaled construction.
+
+### Materialization cutoff sweep
+
+The count-process constructor now accepts a fixed materialization cutoff. We swept
+1, 2, 4, 8, 16, 32, and 64, then confirmed 1, 4, and 16 with 32 samples per captured
+Birds parameter group. Replay timings use three rounds with rotated/reversed candidate
+order and the median for each group, weighted by observed call frequency. These are
+sampler timings, not end-to-end model replacement measurements.
+
+| Captured workload | Cutoff 1 (µs/call) | Cutoff 4 | Cutoff 16 |
+| --- | ---: | ---: | ---: |
+| Epoch 1, D = 0.5, density 2 | 11.389 | 11.058 | 11.252 |
+| Epoch 2, D = 0.5, density 2 | 7.807 | 6.706 | 6.831 |
+| Epoch 3, D = 0.5, density 2 | 5.185 | 4.816 | 4.777 |
+| Epoch 2, D = 2, density 2 | 10.493 | 9.664 | 9.904 |
+| Epoch 2, D = 0.5, density 32 | 35.968 | 40.854 | 56.378 |
+
+A separate 13-category D = 4 midpoint-kernel sweep uses eight seeds, repeated for three
+rounds, reporting median time per sample:
+
+| Population | Cutoff 1 (ms) | Cutoff 4 | Cutoff 16 |
+| --- | ---: | ---: | ---: |
+| 1,024 | 0.701 | 0.758 | 1.254 |
+| 1,000,000 | 3.522 | 4.160 | 6.212 |
+| 1,000,000,000 | 14.214 | 15.159 | 19.390 |
+
+Smaller cutoffs exchange coordinate generation for more binomial splits and nodes.
+At population 10⁹, moving from 16 to 4 reduces average materialized points from 5,074
+to 1,395, while increasing binomial draws from 2,211 to 2,637 and nodes from 4,695
+to 5,547. That tradeoff is favorable here.
+
+**Decision:** use 4 as the experimental default. Compared with 16, it is approximately
+unchanged on default-density workloads (small differences should not be overinterpreted),
+28% faster on the density-32 replay, and 22–40% faster on these large synthetic cases.
+Cutoff 1 is faster still on the dense/large cases, but less favorable on typical sparse
+workloads. This is a compromise, not a universal optimum. Production Birds continues
+to use sequential binomials.
+
+Changing the cutoff changes seeded realizations: different cells own coordinate
+materialization and therefore use different random addresses. Each fixed choice retains
+the intended Poisson construction and coupling; it must not be chosen afresh from a
+query's `n` or probabilities. Tests cover conservation, moments, cache-clear replay,
+monotonicity in `n`, and the likelihood-ratio inequality for every swept cutoff.
+Earlier measurements in this document retain their original cutoff of 16.
+
+Reproduce with:
+
+```sh
+npm run experiment:birds-sampler-workload -- 32 --cutoffs=1,4,16
+npm run experiment:poisson-materialization
+```
+
 ### Experiment checklist and unresolved decisions
 
 1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.

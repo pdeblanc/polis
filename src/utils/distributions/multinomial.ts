@@ -11,6 +11,16 @@ export interface MultinomialCategory {
   readonly address: Address;
 }
 
+type MultinomialObserver = (trials: number, categories: readonly MultinomialCategory[], address: Address) => void;
+let observer: MultinomialObserver | undefined;
+
+/** Synchronous diagnostic scope; sampling and random addresses remain unchanged. */
+export function withMultinomialObserver<T>(observe: MultinomialObserver, run: () => T): T {
+  const previous = observer;
+  observer = observe;
+  try { return run(); } finally { observer = previous; }
+}
+
 /**
  * Samples multinomial counts as sequential conditional binomials in supplied canonical
  * order. The final positive-probability category receives the exact remainder.
@@ -21,6 +31,7 @@ export function multinomial(
   trials: number,
   categories: readonly MultinomialCategory[],
 ): readonly number[] {
+  observer?.(trials, categories, address);
   return profileDistribution('multinomial', () =>
     sampleMultinomial(random, address, trials, categories),
   );

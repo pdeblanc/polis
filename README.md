@@ -113,6 +113,20 @@ binomials (optional count-race samples per case; gamma samples capped at 3):
 npm run experiment:poisson-count-race -- 20
 ```
 
+Capture viewport multinomial parameters and replay both samplers, weighted by observed
+call frequencies (race samples per parameter group; add `--details` for per-group data):
+
+```sh
+npm run experiment:birds-sampler-workload -- 32
+```
+
+Compare materialization cutoffs on captured Birds workloads or larger synthetic races:
+
+```sh
+npm run experiment:birds-sampler-workload -- 32 --cutoffs=1,4,16
+npm run experiment:poisson-materialization
+```
+
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
 and optional diffusion rates:
 

@@ -4,7 +4,8 @@ import type { Address } from '../utils/rng/address';
 import type { AddressedRandom } from '../utils/rng/addressedRandom';
 import { uniformUnit } from '../utils/distributions/uniform';
 
-const MATERIALIZATION_COUNT = 16;
+// Fixed per process, never adapted to a query's population or probabilities.
+export const POISSON_MATERIALIZATION_COUNT = 4;
 
 interface Interval {
   start: number;
@@ -27,11 +28,16 @@ export class PoissonCountProcess {
   readonly #random: AddressedRandom;
   readonly #address: Address;
   readonly #profile: boolean;
+  readonly #materializationCount: number;
 
-  constructor(random: AddressedRandom, address: Address, profile = false) {
+  constructor(random: AddressedRandom, address: Address, profile = false, materializationCount = POISSON_MATERIALIZATION_COUNT) {
+    if (!Number.isSafeInteger(materializationCount) || materializationCount < 1) {
+      throw new RangeError('Materialization cutoff must be a positive safe integer');
+    }
     this.#random = random;
     this.#address = [...address];
     this.#profile = profile;
+    this.#materializationCount = materializationCount;
   }
 
   clearCache(): void { this.#roots.clear(); }
@@ -92,7 +98,7 @@ export class PoissonCountProcess {
   #cell(start: number, width: number, count: number): Interval {
     this.stats.nodes++;
     const cell: Interval = { start, width, count };
-    if (count <= MATERIALIZATION_COUNT) {
+    if (count <= this.#materializationCount) {
       cell.points = Array.from({ length: count }, (_, i) => {
         const point = start + width * this.#uniform(['points', start, width, i]);
         if (point < start || point >= start + width) throw new RangeError('Point rounded outside its cell');
