@@ -106,6 +106,13 @@ Compare the direct/lazy Poisson-race multinomial experiments with sequential bin
 npm run experiment:poisson-race -- 20
 ```
 
+Compare the one-dimensional count hierarchy against the gamma-bridge race and sequential
+binomials (optional count-race samples per case; gamma samples capped at 3):
+
+```sh
+npm run experiment:poisson-count-race -- 20
+```
+
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,
 and optional diffusion rates:
 

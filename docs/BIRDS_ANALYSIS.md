@@ -965,6 +965,74 @@ maximum 200; the default takes on the order of tens of seconds locally):
 npm run experiment:poisson-race -- 20
 ```
 
+### Count-based Poisson hierarchy experiment
+
+The next prototype, `src/experiments/poissonCountProcess.ts`, represents each unit-rate
+process as a one-dimensional starfield. Independent roots cover `[0,1)`, `[1,2)`,
+`[2,4)`, and successive doubled intervals. Root counts use stdlib's Poisson inverse CDF
+without tail clamping or a normal approximation. A parent owns its exact conditional
+`Binomial(count, 1/2)` split, also sampled with the stdlib inverse CDF. Nodes with at
+most 16 points materialize sorted uniform coordinates. Descendants of a materialized
+node use those coordinates directly, so query order cannot change the point process.
+This borrows the starfield construction, not its approximate distribution utilities.
+
+Let `N_i(t)` count category `i`'s points in `[0,t)`. The race queries `N_i(p_i*t)` for a
+common cutoff `t` and searches for a sum of exactly `n`. It starts at `t = n`, expands
+the bracket if needed, and bisects. Probabilities enter only the query coordinates, not
+the point-generation addresses. In the ideal process, a suitable interval exists between
+the `n`th and `(n+1)`th arrivals almost surely. With finite precision, coincident points
+or scaled coordinates may leave no representable cutoff. The prototype throws when
+the bracket cannot narrow or a 2,048-cutoff guard is exhausted; it does not silently
+return an approximate count. There is no claimed deterministic logarithmic bound on
+refinement independent of arrival separation.
+
+The hierarchy also supports selecting an arrival by index, used to compare the cutoff
+search against the existing direct merge on the same points. Tests cover exact agreement
+with fresh caches and reordered categories, replay of counts and coordinates, conservation,
+coupling in `n`, likelihood-ratio and population monotonicity, the full small-`n`
+multinomial probability table, independent Poisson increment moments, and a billion-count
+query. A synthetic coincident-arrival case checks explicit precision failure. The stronger
+sample-ratio counterexample remains reproducible with this representation as well.
+
+The same-run comparison uses 20 fresh-cache count races, 3 fresh-cache gamma races, and
+at least 200 sequential-binomial samples per case, with a warmup for each method. The
+gamma sample count is small to bound run time; timings are exploratory averages, not
+confidence intervals. Different constructions have different addressed realizations,
+so count and gamma outputs are not expected to agree seed by seed.
+
+| Probabilities | Categories | Population | Count hierarchy, ms | Gamma hierarchy, ms | Sequential binomials, µs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Uniform | 3 | 1,024 | 1.22 | 3.79 | 10.2 |
+| Uniform | 3 | 1,000,000,000 | 16.5 | 195 | 83.0 |
+| `(0.0001, 0.0099, 0.99)` | 3 | 1,000,000,000 | 6.01 | 181 | 13.1 |
+| Birds `D = 1` | 7 | 1,000,000,000 | 12.3 | 312 | 50.1 |
+| Birds `D = 4` | 13 | 1,024 | 1.30 | 9.85 | 21.2 |
+| Birds `D = 4` | 13 | 1,000,000,000 | 20.3 | 644 | 131 |
+
+The count representation is about 32 times faster than the gamma baseline for the
+13-category billion-count case, though still about 155 times slower than sequential
+binomials. That case averaged 30.7 cutoff probes. A separate profile of seed 0 recorded
+266 Poisson draws, 2,108 binomial draws, 5,008 materialized points, and 4,482 stored nodes.
+About 9.6% of profile time was inside Poisson draws, 33.5% inside binomial draws, and
+56.8% in other work, including materialization and traversal. Across all those operations,
+address encoding consumed 36.4% and hashing 17.1% of total time; those percentages are
+nested and must not be added to the scalar/other breakdown. Profiling is performed
+separately from the uninstrumented timings.
+
+This establishes the count hierarchy as a more promising implementation of the same
+mathematical race. It substantially reduces scalar work and avoids gamma/beta factory
+setup, without intentionally approximating the Poisson law. Materialization policy,
+bracketing, redundant traversal, and address-generation costs are possible further
+optimization targets. The current model still keeps sequential binomials, and numeric
+boundary behavior and the stronger ratio condition remain separate limitations.
+
+Run the report (optional count-race samples per case, default 20; gamma samples are capped
+at 3 per case):
+
+```sh
+npm run experiment:poisson-count-race -- 20
+```
+
 ### Experiment checklist and unresolved decisions
 
 1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.
@@ -978,7 +1046,8 @@ npm run experiment:poisson-race -- 20
 4. Initial benchmark completed: compare increasing population and category counts against sequential binomials,
    including representative Birds parameters. Measure work, memory, hashing, and scalar
    sampler costs separately. Investigate extreme shapes and arrival-time precision.
-5. Decision: retain sequential binomials, for the performance reasons above. The stronger
+5. Decision: retain sequential binomials, for the performance reasons above. Both arrival-
+   and count-based race prototypes are available for further experiments. The stronger
    multinomial ratio requirement remains open; success with the Poisson race alone does
    not resolve it.
 
