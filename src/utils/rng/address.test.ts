@@ -6,6 +6,13 @@ function toHex(bytes: Uint8Array): string {
 }
 
 describe('encodeAddress', () => {
+  it('reuses encoded prefixes without changing bytes or component boundaries', () => {
+    const parts: Address = ['🌲', -0, 1.25, -258n, 0n, Uint8Array.of(1, 2), '', 'end'];
+    for (let split = 0; split <= parts.length; split++) {
+      expect(encodeAddress(parts.slice(split), encodeAddress(parts.slice(0, split))))
+        .toEqual(encodeAddress(parts));
+    }
+  });
   it('matches the canonical binary format', () => {
     expect(toHex(encodeAddress(['star', 1.5, -258n, Uint8Array.of(0, 255)]))).toBe(
       [

@@ -120,11 +120,42 @@ call frequencies (race samples per parameter group; add `--details` for per-grou
 npm run experiment:birds-sampler-workload -- 32
 ```
 
+Add `--profile` for a separate weighted race-sampler profile of scalar distributions,
+encoding, hashing, residual overhead, and operation counts:
+
+```sh
+npm run experiment:birds-sampler-workload -- 32 --profile
+```
+
 Compare materialization cutoffs on captured Birds workloads or larger synthetic races:
 
 ```sh
 npm run experiment:birds-sampler-workload -- 32 --cutoffs=1,4,16
 npm run experiment:poisson-materialization
+```
+
+Compare count-guided cutoff search with bisection on identical Poisson processes:
+
+```sh
+npm run experiment:poisson-search
+```
+
+Compare full address encoding with prefix reuse, including separate encoding/hash profiles:
+
+```sh
+npm run experiment:poisson-prefix
+```
+
+Measure splitter count frequencies and compare small-count binomial table limits:
+
+```sh
+npm run experiment:poisson-binomial
+```
+
+Compare cumulative-root caching with root scanning:
+
+```sh
+npm run experiment:poisson-traversal
 ```
 
 Sample density-compensated Birds flow marginals. Arguments select epoch, trial count,

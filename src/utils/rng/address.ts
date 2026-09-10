@@ -36,16 +36,18 @@ type PreparedPart =
  *
  * Fixed-width integers use little-endian byte order. Each tag is part of the encoded
  * identity, so values such as `1`, `1n`, and `"1"` remain distinct.
+ * An optional already-encoded prefix is copied verbatim, without a Bytes tag.
  */
-export function encodeAddress(address: Address): Uint8Array {
+export function encodeAddress(address: Address, encodedPrefix?: Uint8Array): Uint8Array {
   const prepared = address.map(preparePart);
   const totalLength = prepared.reduce(
     (length, part) => addLengths(length, encodedLength(part)),
-    0,
+    encodedPrefix?.length ?? 0,
   );
   const output = new Uint8Array(totalLength);
   const view = new DataView(output.buffer);
-  let offset = 0;
+  let offset = encodedPrefix?.length ?? 0;
+  if (encodedPrefix) output.set(encodedPrefix);
 
   for (const part of prepared) {
     output[offset] = part.tag;

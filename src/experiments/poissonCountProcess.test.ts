@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createAddressedRandom } from '../utils/rng/addressedRandom';
 import { PoissonCountProcess, countPoissonRace } from './poissonCountProcess';
 import { directPoissonRace } from './poissonRace';
+import { createHalfBinomialQuantile } from './halfBinomial';
 
 const random = createAddressedRandom('count-process-tests');
 const make = (seed: number, p = [0.2, 0.3, 0.5]) => p.map((probability, i) => ({
@@ -9,6 +10,102 @@ const make = (seed: number, p = [0.2, 0.3, 0.5]) => p.map((probability, i) => ({
 }));
 
 describe('Poisson count hierarchy and race', () => {
+  it('keeps scalar profiling separate from RNG-inclusive timings without changing draws', () => {
+    const plain = new PoissonCountProcess(random, ['profile']);
+    const profiled = new PoissonCountProcess(random, ['profile'], true);
+    for (const t of [1000.25, 0.5, 1024]) expect(profiled.countBefore(t)).toBe(plain.countBefore(t));
+    expect(profiled.stats.uniforms).toBe(plain.stats.uniforms);
+    expect(profiled.stats.poissonScalarMilliseconds).toBeGreaterThanOrEqual(0);
+    expect(profiled.stats.poissonScalarMilliseconds).toBeLessThanOrEqual(profiled.stats.poissonMilliseconds);
+    expect(profiled.stats.binomialScalarMilliseconds).toBeGreaterThanOrEqual(0);
+    expect(profiled.stats.binomialScalarMilliseconds).toBeLessThanOrEqual(profiled.stats.binomialMilliseconds);
+    expect(plain.stats.poissonScalarMilliseconds).toBe(0);
+    expect(plain.stats.binomialScalarMilliseconds).toBe(0);
+  });
+  it('matches root scanning around powers of two, with mixed access and cache clearing', () => {
+    const view = new DataView(new ArrayBuffer(8));
+    const times = [0, Number.MIN_VALUE, 0.5];
+    for (const exponent of [0, 1, 2, 10, 20, 30]) {
+      view.setFloat64(0, 2 ** exponent);
+      const bits = view.getBigUint64(0);
+      for (const offset of [-1n, 0n, 1n]) {
+        view.setBigUint64(0, bits + offset);
+        times.push(view.getFloat64(0));
+      }
+    }
+    const scan = new PoissonCountProcess(random, ['root-boundaries']);
+    const cached = new PoissonCountProcess(random, ['root-boundaries']);
+    expect(cached.arrival(100)).toBe(scan.arrival(100));
+    for (const t of [...times].reverse()) expect(cached.countBefore(t)).toBe(scan.countBefore(t, 'scan'));
+    expect(cached.stats.uniforms).toBe(scan.stats.uniforms);
+    cached.clearCache();
+    for (const t of times) expect(cached.countBefore(t)).toBe(scan.countBefore(t, 'scan'));
+    expect(cached.arrival(100)).toBe(scan.arrival(100));
+  });
+
+  it('skips preceding roots on repeated whole-root queries', () => {
+    const cached = new PoissonCountProcess(random, ['root-visits']);
+    const count = cached.countBefore(2 ** 20);
+    const { visits, uniforms } = cached.stats;
+    expect(cached.countBefore(2 ** 20)).toBe(count);
+    expect(cached.stats.visits - visits).toBe(1);
+    expect(cached.stats.uniforms).toBe(uniforms);
+  });
+  it('preserves race outputs for every splitter table limit', () => {
+    const reference = createHalfBinomialQuantile(0);
+    for (const limit of [16, 64, 256]) {
+      const split = createHalfBinomialQuantile(limit);
+      for (let seed = 0; seed < 4; seed++) for (const n of [1, 32, 1024, 1e6]) {
+        const paths = (sampler: typeof split) => [0.2, 0.3, 0.5].map((probability, i) => ({
+          id: String(i), probability,
+          path: new PoissonCountProcess(random, [seed, String(i)], false, 4, sampler),
+        }));
+        expect(countPoissonRace(n, paths(split))).toEqual(countPoissonRace(n, paths(reference)));
+      }
+    }
+  });
+  it('matches full-address encoding when using the prefix acceleration', () => {
+    for (let seed = 0; seed < 4; seed++) for (const n of [1, 32, 1024, 1e6]) {
+      const full = [0.2, 0.3, 0.5].map((probability, i) => ({
+        id: String(i), probability,
+        path: new PoissonCountProcess({ randomU64: random.randomU64 }, [seed, String(i)]),
+      }));
+      expect(countPoissonRace(n, make(seed))).toEqual(countPoissonRace(n, full));
+    }
+  });
+  it('matches bisection on fresh processes across populations and probabilities', () => {
+    for (const p of [[0.2, 0.3, 0.5], [0.0001, 0.0099, 0.99], [0, 0.5, 0.5]]) {
+      for (let seed = 0; seed < 12; seed++) for (const n of [1, 8, 1024, 1e6, 1e9]) {
+        expect(countPoissonRace(n, make(seed, p))).toEqual(
+          countPoissonRace(n, make(seed, p), { cutoffs: 0 }, 'bisection'),
+        );
+      }
+    }
+  });
+
+  it('falls back across long gaps and tightly clustered arrivals', () => {
+    for (const times of [[1e12, 1e12 + 100], [0.001, 0.001001]]) {
+      const categories = [{ id: 'one', probability: 1,
+        path: { countBefore: (t: number) => times.filter((v) => v < t).length } }];
+      const stats = { cutoffs: 0 };
+      expect(countPoissonRace(1, categories, stats)).toEqual([1]);
+      expect(stats.cutoffs).toBeLessThan(250);
+    }
+  });
+  it('defers coordinates until needed and preserves the eager construction', () => {
+    const path = new PoissonCountProcess(createAddressedRandom('lazy-regression'), ['path']);
+    expect(path.countBefore(8)).toBe(9);
+    expect(path.stats.materializedPoints).toBe(0);
+    expect(path.stats.binomialSamples).toBe(0);
+    expect([0.5, 1, 2, 8, 8.25, 100].map((t) => path.countBefore(t)))
+      .toEqual([1, 2, 2, 9, 9, 115]);
+    expect([1, 2, 5, 20].map((i) => path.arrival(i))).toEqual([
+      0.43518154924389285, 0.8258306714087589, 6.256278072722431, 14.397043669826985,
+    ]);
+    const points = path.stats.materializedPoints;
+    path.arrival(20);
+    expect(path.stats.materializedPoints).toBe(points);
+  });
   it.each([1, 2, 4, 8, 16, 32, 64])('preserves replay, coupling, and moments at cutoff %i', (cutoff) => {
     const totals = [0, 0, 0];
     const samples = 400;

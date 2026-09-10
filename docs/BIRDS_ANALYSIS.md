@@ -1214,6 +1214,261 @@ npm run experiment:birds-sampler-workload -- 32 --cutoffs=1,4,16
 npm run experiment:poisson-materialization
 ```
 
+### Lazy coordinate materialization
+
+Small cells now generate their coordinates only when a partial prefix query or arrival
+lookup needs them. Whole-cell counts, skipped roots, and unvisited siblings need no
+coordinates. Crucially, the population threshold still determines ownership: an
+unmaterialized small cell cannot instead be subdivided. Point addresses are unchanged,
+so this optimization preserves the eager construction's seeded results. A regression
+test records eager counts and arrival coordinates and checks that whole-root queries
+generate no points; existing replay, direct-merge, and coupling tests remain applicable.
+
+Before/after runs of `experiment:poisson-materialization`, using the same eight seeds
+and three-round medians as above, give the following at the unchanged default cutoff 4:
+
+| Population (13 categories) | Eager (ms) | Lazy (ms) | Eager points | Lazy points |
+| --- | ---: | ---: | ---: | ---: |
+| 1,024 | 0.728 | 0.540 | 203.125 | 107.750 |
+| 1,000,000 | 4.117 | 3.354 | 755.125 | 368.875 |
+| 1,000,000,000 | 14.881 | 13.681 | 1,395.250 | 708.625 |
+
+These exploratory sampler timings improve by about 26%, 19%, and 8%, respectively;
+they are not measured end-to-end Birds speedups. Generated coordinates roughly halve,
+while node counts, binomial draws, and cutoff probes remain identical. The full cutoff
+sweep still supports retaining 4 as a compromise. Production Birds is unchanged.
+
+### Count-guided race cutoff search
+
+The default experimental search now predicts `t + (n - observedCount)`, using the
+superposed process's unit rate. This is a search heuristic, not a replacement for the
+sampled counts. A prediction must be finite and strictly inside the known bracket
+(or above the lower bound before an upper bound is found). Otherwise it falls back
+to bisection or doubling. Every third update also uses that fallback, preventing
+arbitrarily slow count-based progress across empty gaps or dense clusters. The existing
+numerical-exhaustion checks and 2,048-probe guard remain in place.
+
+Both strategies query the same fixed category processes; no points or addresses change.
+The old `bisection` strategy remains selectable for comparison. Fresh-cache tests check
+agreement across balanced, skewed, and zero-probability cases up to population 10⁹,
+alongside long-gap and tightly clustered synthetic cases. Existing direct-merge,
+coupling, and explicit coincident-arrival failure tests exercise the new default.
+
+`experiment:poisson-search` compares both strategies on identical seeds, using 16
+samples per case and three timing rounds with alternating strategy order. Equivalence
+checks run separately before timings, and timed samples construct fresh processes.
+At cutoff 4, the 13-category D = 4 midpoint kernel gives:
+
+| Population | Bisection (ms) | Count-guided (ms) | Bisection probes | Count-guided probes |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 0.043 | 0.043 | 2.375 | 2.250 |
+| 4 | 0.053 | 0.052 | 3.125 | 2.500 |
+| 32 | 0.114 | 0.109 | 5.438 | 3.500 |
+| 1,024 | 0.560 | 0.281 | 11.188 | 6.250 |
+| 1,000,000 | 3.323 | 1.124 | 21.875 | 8.063 |
+| 1,000,000,000 | 13.276 | 4.983 | 31.063 | 10.688 |
+
+For the billion-count case, average binomial draws fall from 2,645 to 534 and nodes
+from 5,562 to 1,333. Balanced and skewed three-category cases and the D = 0.5 kernel
+also improve substantially at large populations. Small populations show mixed probe
+counts and mostly small timing differences; this is not a universal per-sample win.
+These exploratory sampler timings do not establish an end-to-end Birds speedup.
+Production Birds still uses sequential binomials; earlier results above used bisection.
+
+Reproduce with `npm run experiment:poisson-search`.
+
+### Encoded address prefix reuse
+
+After lazy materialization and count-guided search, a refreshed profile of 16
+billion-count, 13-category races with longer synthetic addresses still attributed about
+23% of warmed-up instrumented runtime to address encoding and 10% to hashing. This
+motivated prefix reuse rather than changing the hash or random-address identities.
+
+`encodeAddress` can now copy an already-encoded prefix before encoding a suffix.
+`prefixRandom` scopes an RNG to a snapshotted prefix; the standard addressed RNG supplies
+an optional `withPrefix` acceleration, while custom RNGs can continue implementing only
+`randomU64` and use a component-concatenating fallback. Prefix bytes have no additional
+type tag: the final hash input is byte-for-byte identical to the flat address. Nested
+prefixes preserve this property, and mutable input byte components are snapshotted.
+The count process prepares its category prefix once, including that setup cost in timings.
+
+`experiment:poisson-prefix` compares the accelerated path with the full-encoding fallback,
+using identical seeds, fresh processes, 16 samples, and three alternating-order timing
+rounds. Profiles are collected separately. Both use the count-guided search and cutoff 4.
+The longer synthetic layout is `['birds', seed, 'midpoint', 'flow', 16, 32, 0.5, category]`;
+it is an address-cost scenario, not a replay of actual Birds calls.
+
+| Population (13 categories) | Full encoding (ms) | Prefix reuse (ms) |
+| --- | ---: | ---: |
+| 4 | 0.099 | 0.071 |
+| 1,024 | 0.465 | 0.312 |
+| 1,000,000 | 1.558 | 1.082 |
+| 1,000,000,000 | 6.345 | 5.222 |
+
+These sampler timings improve by about 18–33%. At population 10⁹, separately profiled
+encoding time falls from 1.653 to 0.696 ms per draw. Short `[seed, category]` prefixes
+show smaller, less consistent benefits: approximately unchanged at population 4 and
+6–24% faster for the larger cases in this run. Timings are exploratory, not confidence
+intervals or measured end-to-end Birds speedups. Production Birds does not opt into
+this prefix acceleration.
+
+Tests cover byte-level concatenation for all address component types, nested and empty
+prefixes, mutable input snapshots, RNG fallback behavior, and identical race results.
+The existing seeded integration vector and eager-process regression remain unchanged.
+
+Reproduce with `npm run experiment:poisson-prefix`.
+
+### Small-count half-binomial tables
+
+Every count-process split uses `Binomial(count, 1/2)`. The experimental splitter now
+caches stdlib CDF values for each encountered count up to 256 and binary-searches them
+with the original addressed uniform. Larger counts retain stdlib's inverse CDF. Using
+the same CDF implementation avoids introducing a different recurrence's floating-point
+boundary conventions. This is not a normal approximation or a change to the latent
+process. Stdlib's CDF package, already installed transitively, is now an explicit
+development dependency.
+
+The factory supports limits 0 (the stdlib baseline), 16, 64, and 256 for comparison.
+Tables are deterministic, constructed on first use, and shared across process instances;
+clearing a process cache need not rebuild them. At limit 256 their total numeric storage
+is bounded by 263,168 bytes (257 KiB), plus map/typed-array overhead. Only encountered
+counts allocate tables. The table path returns positive zero where stdlib can sometimes
+return negative zero; these represent the same population and have the same encoded
+address. Race outputs and materialized point coordinates are unchanged in the checks.
+
+`experiment:poisson-binomial` records split-count frequencies and scalar quantile time
+(excluding RNG), then compares table limits with identical seeds. Each case uses 32
+samples and three timing rounds with rotated/reversed candidate order. Timed races have
+fresh process caches but warmed tables. A separately reported first pass includes table
+construction and output-equivalence checks; it is not an isolated initialization timing.
+
+For the 13-category D = 4 kernel:
+
+| Race population | Splits/race | Splits with count ≤ 64 | Count ≤ 256 | Baseline (ms) | Limit 64 (ms) | Limit 256 (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4 | 0.16 | 100% | 100% | 0.048 | 0.054 | 0.052 |
+| 32 | 4.09 | 100% | 100% | 0.088 | 0.082 | 0.079 |
+| 1,024 | 38.38 | 80% | 98% | 0.218 | 0.198 | 0.197 |
+| 1,000,000 | 193.56 | 44% | 61% | 0.919 | 0.871 | 0.827 |
+| 1,000,000,000 | 511.97 | 34% | 47% | 4.685 | 4.541 | 4.475 |
+
+In the separate instrumented capture, scalar binomial evaluation consumed roughly
+14%, 23%, and 19% of total time for the last three rows. The covered fraction is a
+fraction of calls, not of scalar time; the remaining large-count calls are more costly.
+The D = 0.5 kernel also benefits modestly at larger populations. Early small-case
+timings/profile values are more sensitive to JIT warmup and should not be overinterpreted.
+
+**Decision:** retain a limit of 256 for the experimental sampler. Warm sampler throughput
+improves by approximately 9–10% at populations 1,024 and 10⁶, and 4–5% at 10⁹ in the
+13-category cases. There is little to gain when almost no splitting happens. Cold table
+construction can outweigh these savings for short-lived use: at population 1,024 the
+first-pass average was 0.371 ms with limit 256 versus 0.223 ms without tables. The
+shared bounded tables amortize this over subsequent draws. This remains an experimental
+sampler optimization, not a measured production Birds speedup.
+
+Tests compare all CDF boundaries through count 256 and their immediately neighboring
+floating-point values against stdlib, plus addressed draws, fallback counts, full races
+under each table limit, and the existing seeded/coupling regressions. No additional
+random draws or probability-dependent addressing are introduced.
+
+Reproduce with `npm run experiment:poisson-binomial`.
+
+### Cumulative root counts
+
+Each count process now caches the cumulative population strictly before each root.
+A prefix query locates its target root from the time coordinate, generates any missing
+preceding root counts once, and traverses only the target root. Direct comparisons with
+power-of-two boundaries correct possible `log2` rounding at neighboring floats. An exact
+boundary belongs to the preceding root for this query, so the optimization does not
+generate an unnecessary new root. The scan path remains available for experiments.
+
+The extra cache grows linearly with the number of roots reached, rather than the number
+of cutoff probes, and is cleared with the process cache. Arrival queries can populate
+roots independently without invalidating cumulative counts. Tests cover mixed arrival/
+prefix access, reverse query order, cache clearing, subnormal times, exact powers of two
+and adjacent floats, and a repeated whole-root query visiting only one node.
+
+`experiment:poisson-traversal` compares fresh processes on 32 identical seeds, with three
+alternating-order timing rounds. For the 13-category D = 4 kernel:
+
+| Population | Scan (ms) | Cached (ms) | Scan node visits | Cached node visits |
+| --- | ---: | ---: | ---: | ---: |
+| 32 | 0.088 | 0.094 | 129.5 | 69.4 |
+| 1,024 | 0.240 | 0.234 | 556.1 | 260.4 |
+| 1,000,000 | 0.845 | 0.802 | 2,071.9 | 977.3 |
+| 1,000,000,000 | 5.000 | 4.813 | 5,647.7 | 2,697.1 |
+
+Large-case visits roughly halve, while runtime improves only modestly (about 3–9%
+across the two tested kernels at populations 10⁶ and 10⁹). Skipped visits were cheap
+whole-root checks, not stochastic refinement. Small-case timings are mixed and noisy.
+The benchmark verifies identical outputs, random draw counts, allocated nodes, and
+cutoff probes for each sample. We retain the cumulative cache; a traversal cursor has
+not been added. Production Birds remains unchanged.
+
+Reproduce with `npm run experiment:poisson-traversal`.
+
+### Birds workload replay after the optimization series
+
+After lazy materialization, count-guided search, prefix encoding, half-binomial tables,
+and cumulative-root caching, we repeated `experiment:birds-sampler-workload -- 32`.
+The default materialization cutoff remains 4. Weighted timings include zero-population
+calls and use the captured parameter frequencies, as in the original workload study:
+
+| Workload | Sequential (µs/call) | Optimized race (µs/call) | Sampler ratio | Estimated fixed-workload model ratio |
+| --- | ---: | ---: | ---: | ---: |
+| Epoch 1, D = 0.5, density 2 | 1.955 | 7.704 | 3.94× | 1.40× |
+| Epoch 2, D = 0.5, density 2 | 1.611 | 5.245 | 3.26× | 1.26× |
+| Epoch 3, D = 0.5, density 2 | 1.400 | 4.090 | 2.92× | 1.16× |
+| Epoch 2, D = 2, density 2 | 2.542 | 8.054 | 3.17× | 1.29× |
+| Epoch 2, D = 0.5, density 32 | 2.623 | 16.081 | 6.13× | 1.94× |
+
+The optimized race remains slower than sequential binomials, especially for the denser
+case, but the gap has narrowed substantially. The model ratios replace measured sampler
+costs on a frozen captured workload; they are **not actual model runs with the race
+sampler installed**. Different sampled populations could change the recursive workload.
+These results do not revise the decision to retain the production sampler. They establish
+the current comparison point after the initial optimization ideas have been tried.
+
+### Refreshed profile on captured Birds workloads
+
+The workload replay now supports `--profile`. After each group's uninstrumented timing
+rounds, it profiles a separate set of fresh races on the same sample seeds and semantic
+addresses, weighting each group by its captured frequency. Tables and JIT are warmed.
+Scalar Poisson and binomial timers exclude their random draw; RNG instrumentation counts
+address encoding (including prefix setup) and hashing across roots, splits, and points.
+The following columns therefore partition total instrumented race time rather than
+double-counting distribution-inclusive RNG costs:
+
+| Workload | Poisson scalar | Binomial scalar | Encoding | Hashing | Other |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Epoch 1, D = 0.5, density 2 | 6.0% | 0.3% | 33.4% | 27.8% | 32.6% |
+| Epoch 2, D = 0.5, density 2 | 4.1% | 0.1% | 41.0% | 28.0% | 26.7% |
+| Epoch 3, D = 0.5, density 2 | 3.7% | 0.1% | 39.7% | 33.0% | 23.4% |
+| Epoch 2, D = 2, density 2 | 4.0% | 0.1% | 40.6% | 30.4% | 24.9% |
+| Epoch 2, D = 0.5, density 32 | 5.0% | 1.0% | 35.3% | 35.7% | 23.0% |
+
+Rounding may prevent rows summing to exactly 100%. Weighted uninstrumented versus
+instrumented µs/call were respectively 7.66/9.54, 5.20/6.51, 3.83/4.71, 7.67/9.47,
+and 16.23/19.36. Instrumentation adds roughly 19–25% here; these are directional
+attributions, not exact uninstrumented CPU shares. The residual includes process setup,
+validation, traversal, allocations, materialization bookkeeping, uniform conversion,
+and timer/profiler overhead. It has not been broken down further. This is a sampler
+replay, not a profile of the whole Birds engine, and no production sampler was replaced.
+
+The dense case averaged 2.92 Poisson draws, 1.22 binomial draws, 2.98 materialized-point
+uniforms, 7.98 node visits, and 0.96 cutoff probes per captured call. These averages
+include the 76.5% zero-population calls. In the default-density cases binomial calls are
+even rarer; small-count tables make their remaining scalar cost negligible.
+
+**Implication:** further scalar-distribution optimization is a low priority for these
+workloads. The next contained candidate is pre-encoding operation tags (`root`, `split`,
+`points`) alongside category prefixes. A small-population direct-merge search remains
+worth comparing on identical processes, but fewer cutoff probes only help hashing if
+they also avoid revealing new roots, splits, or points. Neither change is implemented
+as part of this profile refresh.
+
+Reproduce with `npm run experiment:birds-sampler-workload -- 32 --profile`.
+
 ### Experiment checklist and unresolved decisions
 
 1. The initial gamma hierarchy and normalized Dirichlet checks are complete above.
