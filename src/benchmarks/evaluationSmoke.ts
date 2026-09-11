@@ -138,11 +138,7 @@ export function runSmokeTrial(caseIndex: number, trial: number, notify: (id: str
   return { caseIndex, trial, seed, status: 'complete', observations, consistency, replayFailures, cache };
 }
 
-export function countStatistics(values: number[], target: number) {
-  const n = values.length;
-  if (!n) return { samples: 0 };
-  const mean = values.reduce((a, b) => a + b, 0) / n;
-  const variance = n > 1 ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1) : null;
+export function poissonReferenceBins(target: number) {
   // Start at the mode: exp(-target) underflows for the largest union means.
   const mode = Math.floor(target);
   let logFactorial = 0;
@@ -157,6 +153,15 @@ export function countStatistics(values: number[], target: number) {
     if (probabilities.length > 10000) throw new Error('Poisson reference did not converge');
   }
   probabilities.push(Math.max(0, 1 - covered));
+  return probabilities;
+}
+
+export function countStatistics(values: number[], target: number) {
+  const n = values.length;
+  if (!n) return { samples: 0 };
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance = n > 1 ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1) : null;
+  const probabilities = poissonReferenceBins(target);
   const histogram = probabilities.map(() => 0);
   for (const v of values) histogram[Math.min(v, histogram.length - 1)]++;
   return { samples: n, mean, variance, meanError: mean - target, varianceToMean: mean && variance !== null ? variance / mean : null,

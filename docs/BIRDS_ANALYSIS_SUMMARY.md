@@ -92,7 +92,8 @@ external sampling rules and retains discovery samples for unfamiliar failures.
 - The accompanying scorecard is a reusable **evaluation specification**, with existing
   evidence and unmeasured items labeled. Its measurement protocol specifies parameter
   grids, scales, trials, observation sets, budgets, and smoke/standard/confirmation tiers.
-  A complete automated cross-model runner has not
+  Standard-A collection and saved-data bootstrap/TV calibration are implemented;
+  the full campaign has not been run. A complete automated cross-model runner has not
   been built. No combined quality score or new statistical acceptance thresholds are imposed.
 - A final project acceptance/documentation audit remains separate. This publication
   completes the synthesis task; it does not certify unexamined implementation requirements.

@@ -19,8 +19,9 @@ is fingerprinted but not archived; a dirty manifest alone cannot reconstruct it.
 16 strata, and 512 seeds per case (61,440 trials). Reverse-order and cache-clear
 replays run for the first 32 seeds only. It also supports the four-case smoke tier.
 Summaries include point estimates, raw TV, covariance, flow moments, and consistency
-checks. Bootstrap intervals, reference Monte Carlo calibration, batches B–F, and
-confirmation-tier scheduling remain unimplemented. This is not yet a runner for
+checks. A separate saved-data command adds bootstrap intervals and reference Monte
+Carlo calibration (below). Batches B–F and confirmation-tier scheduling remain
+unimplemented. This is not yet a runner for
 the entire evaluation scorecard. The full campaign has not been run for this change.
 
 ## Commands
@@ -54,6 +55,48 @@ npm run evaluate:birds -- --resume artifacts/birds-runner-check --max-trials 1
 attempts for this invocation; it does not lower the protocol's expected sample size.
 `--session-minutes` can shorten the default 120-minute session. Resume takes the
 saved case selection and refuses source/dependency/protocol or Node-version changes.
+
+## Analyze saved data
+
+From a revision containing the inference command, analyze a collection directory:
+
+```sh
+npm run analyze:birds-evaluation -- artifacts/birds-v1-standard-a --plan
+npm run analyze:birds-evaluation -- artifacts/birds-v1-standard-a --cases 0
+```
+
+Omit `--cases` to process all cases selected in the collection manifest. This reads
+the resumable runner's JSON checkpoints, never instantiates or queries Birds, and
+leaves collection results unchanged. The earlier smoke-only JSONL format is not
+accepted. The pinned collection baseline above predates this analysis command; use
+the newer analysis code on its artifacts, without recollecting the model data.
+
+Each case receives 2,000 whole-seed bootstrap replicates and 2,000 reference-only
+Poisson TV replicates per count observable. Outputs include nearest-rank 95% intervals
+for count statistics, flow displacement moments, covariances, and aggregate RMS bias
+estimates, plus the median and 95th percentile of reference TV. Calibration uses
+stdlib's exact Poisson inverse CDF, not Birds' bounded/approximate sampler. It uses the
+available sample count for each marginal. All strata share each bootstrap's seed
+selection, preserving their dependence. Reflected populations use their actual
+L-normalized spatial offset in the calibration address; reflected flow checks share
+the same displacement-law calibration. The aggregate flow-tail observable uses the
+string `"tail"` in place of a numeric displacement offset.
+
+Outputs retain denominators and the number of undefined replicates; if any replicate
+is undefined, that metric's interval is unavailable. Missing/failed observations are
+never imputed as zero. Inference uses completed trials and available observations,
+so completion-dependent selection can still bias it. Missing strata make the full-grid
+RMS unavailable rather than silently reducing the grid. Partial collections remain
+partial; intervals are marginal, not a multiple-comparison correction.
+
+Analysis saves each case atomically under `analysis-v1/` in the collection directory.
+Re-running skips finished cases only when their data and analysis identity match.
+Changed source, Node version, collection manifest, or trial data requires a new
+`--output DIRECTORY`; interrupted cases restart, while completed cases are preserved.
+Run one analysis writer per output directory. Analysis is offline CPU work without
+the model collection budgets; full-size calibration may itself be expensive. Use
+`--cases` to schedule manageable batches. Only synthetic validation, not the full
+campaign analysis, was run when adding this command.
 
 ## Checkpoints and limits
 

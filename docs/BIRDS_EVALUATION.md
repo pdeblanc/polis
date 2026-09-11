@@ -357,8 +357,10 @@ with a separate 1536 MiB V8 heap limit; this is **not** continuous enforcement o
 protocol's 2 GiB RSS ceiling during a blocked query. The manifest discloses that limitation.
 Raw checkpoints survive interruption; this legacy command does not resume them.
 The separate `npm run evaluate:birds` command supports resumable smoke and standard-A
-collection; see the [runbook](BIRDS_EVALUATION_RUNBOOK.md). Standard-A inferential analysis,
-batches B–F, and confirmation scheduling remain unimplemented. Do not treat this initial smoke
+collection; see the [runbook](BIRDS_EVALUATION_RUNBOOK.md). The separate
+`npm run analyze:birds-evaluation -- DIRECTORY` command implements saved-data standard-A
+bootstrap intervals and reference TV calibration, including opt-in analysis of smoke
+checkpoints. Batches B–F and confirmation scheduling remain unimplemented. Do not treat this initial smoke
 runner as a complete implementation of all protocol safeguards or the full scorecard.
 
 ## What is not a reusable score
