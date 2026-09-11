@@ -37,6 +37,10 @@ npm run test:watch
 
 ## Run benchmarks
 
+For resumable Birds standard-A evaluation collection, use `npm run evaluate:birds`.
+See the [evaluation runbook](docs/BIRDS_EVALUATION_RUNBOOK.md) for dry runs, limits,
+resumption, and the preserved model baseline. This does not yet implement all batches.
+
 Run the four-case evaluation smoke protocol (32 trials per case, including order/cache
 replays; no bootstrap or reference Monte Carlo):
 

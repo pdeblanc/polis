@@ -1,6 +1,7 @@
 import { Birds } from '../models/birds/birds';
 import { brownianIntervalTransitionProbability } from '../utils/math/brownian';
 import normalCdf from '@stdlib/stats-base-dists-normal-cdf';
+import { evaluationPlan, type EvaluationPlan } from './evaluationProtocol';
 
 export function smokeReferenceMoment(c: SmokeCase, tolerance = 1e-10) {
   const sigma = Math.sqrt(c.D * c.T) / c.L;
@@ -38,9 +39,9 @@ export interface SmokeTrial {
   cache: ReturnType<Birds['getCacheUsage']>;
 }
 
-export function smokeObservations(c: SmokeCase): Observation[] {
+export function smokeObservations(c: SmokeCase, strata: EvaluationPlan['strata'] = SMOKE_STRATA): Observation[] {
   const rows: Observation[] = [];
-  for (const [s, [a, b]] of SMOKE_STRATA.entries()) {
+  for (const [s, [a, b]] of strata.entries()) {
     const add = (kind: Observation['kind'], j: number, h: number, min: number, max: number, reflected = false) => {
       rows.push({ id: `${s}:${kind}:${j}:${h}:${reflected}`, stratum: s, kind, j, h, min, max,
         time: (b + h) * c.T, reflected });
@@ -88,11 +89,12 @@ export function observe(birds: Birds, c: SmokeCase, request: Observation): Sampl
   }
 }
 
-export function runSmokeTrial(caseIndex: number, trial: number, notify: (id: string | null) => void = () => {}): SmokeTrial {
-  const c = SMOKE_CASES[caseIndex];
+export function runSmokeTrial(caseIndex: number, trial: number, notify: (id: string | null) => void = () => {},
+  plan: EvaluationPlan = evaluationPlan('smoke')): SmokeTrial {
+  const c = plan.cases[caseIndex];
   const seed = `Polis evaluation protocol 1 trial ${trial}`;
   const make = () => new Birds(seed, c.rho, c.D);
-  const requests = smokeObservations(c);
+  const requests = smokeObservations(c, plan.strata);
   const run = (model: Birds, request: Observation) => {
     notify(request.id);
     try { return observe(model, c, request); } finally { notify(null); }
@@ -100,15 +102,17 @@ export function runSmokeTrial(caseIndex: number, trial: number, notify: (id: str
   const model = make();
   const observations = requests.map((r) => run(model, r));
   const cache = model.getCacheUsage();
-  const expected = new Map(observations.map((s) => [s.request.id, JSON.stringify({ ...s, elapsedMs: 0 })]));
   const replayFailures: string[] = [];
-  const replay = make();
-  for (const request of [...requests].reverse()) {
-    if (JSON.stringify({ ...run(replay, request), elapsedMs: 0 }) !== expected.get(request.id)) replayFailures.push(`reverse:${request.id}`);
-  }
-  replay.clearCache();
-  for (const request of requests) {
-    if (JSON.stringify({ ...run(replay, request), elapsedMs: 0 }) !== expected.get(request.id)) replayFailures.push(`clear:${request.id}`);
+  if (trial < 32) {
+    const expected = new Map(observations.map((s) => [s.request.id, JSON.stringify({ ...s, elapsedMs: 0 })]));
+    const replay = make();
+    for (const request of [...requests].reverse()) {
+      if (JSON.stringify({ ...run(replay, request), elapsedMs: 0 }) !== expected.get(request.id)) replayFailures.push(`reverse:${request.id}`);
+    }
+    replay.clearCache();
+    for (const request of requests) {
+      if (JSON.stringify({ ...run(replay, request), elapsedMs: 0 }) !== expected.get(request.id)) replayFailures.push(`clear:${request.id}`);
+    }
   }
   const consistency = { checked: 0, failures: [] as string[] };
   const check = (name: string, parts: Sample[], target?: Sample) => {
@@ -123,7 +127,7 @@ export function runSmokeTrial(caseIndex: number, trial: number, notify: (id: str
       if (!Number.isSafeInteger(n) || n < 0) consistency.failures.push(`count:${sample.request.id}`);
     }
   }
-  for (let s = 0; s < 4; s++) {
+  for (let s = 0; s < plan.strata.length; s++) {
     const rows = observations.filter((v) => v.request.stratum === s && !v.request.reflected);
     for (const h of [0, 1, 2, 4]) check(`union:${s}:${h}`, rows.filter((v) => v.request.kind === 'population' && v.request.h === h),
       rows.find((v) => v.request.kind === 'union' && v.request.h === h));
@@ -139,8 +143,14 @@ export function countStatistics(values: number[], target: number) {
   if (!n) return { samples: 0 };
   const mean = values.reduce((a, b) => a + b, 0) / n;
   const variance = n > 1 ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1) : null;
-  let pmf = Math.exp(-target), covered = pmf;
-  const probabilities = [pmf];
+  // Start at the mode: exp(-target) underflows for the largest union means.
+  const mode = Math.floor(target);
+  let logFactorial = 0;
+  for (let k = 2; k <= mode; k++) logFactorial += Math.log(k);
+  const probabilities = Array<number>(mode + 1).fill(0);
+  probabilities[mode] = target === 0 ? 1 : Math.exp(-target + mode * Math.log(target) - logFactorial);
+  for (let k = mode; k > 0; k--) probabilities[k - 1] = probabilities[k] * k / target;
+  let pmf = probabilities[mode], covered = probabilities.reduce((a, b) => a + b, 0);
   while (1 - covered > 1e-10) {
     pmf *= target / probabilities.length;
     probabilities.push(pmf); covered += pmf;
@@ -155,9 +165,9 @@ export function countStatistics(values: number[], target: number) {
     tv: probabilities.reduce((s, p, i) => s + Math.abs(histogram[i] / n - p), 0) / 2 };
 }
 
-export function summarizeSmoke(caseIndex: number, trials: SmokeTrial[]) {
-  const c = SMOKE_CASES[caseIndex];
-  const groups = smokeObservations(c);
+export function summarizeSmoke(caseIndex: number, trials: SmokeTrial[], plan: EvaluationPlan = evaluationPlan('smoke')) {
+  const c = plan.cases[caseIndex];
+  const groups = smokeObservations(c, plan.strata);
   const marginals = groups.filter((r) => r.kind === 'population').map((r) => ({ id: r.id,
     ...countStatistics(trials.flatMap((t) => { const v = t.observations.find((v) => v.request.id === r.id); return v?.status === 'ok' ? [v.count!] : []; }), c.mu) }));
   const flows = groups.filter((r) => r.kind === 'outflows').map((r) => {
@@ -174,7 +184,7 @@ export function summarizeSmoke(caseIndex: number, trials: SmokeTrial[]) {
     return { id: r.id, bins, birds, mean: birds ? first / birds : null, secondMoment: birds ? second / birds : null,
       variance: birds ? second / birds - (first / birds) ** 2 : null };
   });
-  const covariances = SMOKE_STRATA.flatMap((_, s) => [0, 1, 2, 4, 8].flatMap((j) => [0, 1, 2, 4].map((h) => {
+  const covariances = plan.strata.flatMap((_, s) => [0, 1, 2, 4, 8].flatMap((j) => [0, 1, 2, 4].map((h) => {
     const pairs = trials.flatMap((t) => {
       const a = t.observations.find((v) => v.request.id === `${s}:population:0:0:false`);
       const b = t.observations.find((v) => v.request.id === `${s}:population:${j}:${h}:false`);
@@ -191,7 +201,7 @@ export function summarizeSmoke(caseIndex: number, trials: SmokeTrial[]) {
   const meanErrors = marginals.filter((m) => 'meanError' in m && m.meanError !== undefined);
   const observedMse = meanErrors.reduce((s, m) => s + m.meanError! ** 2, 0) / meanErrors.length;
   const correctedMse = meanErrors.reduce((s, m) => s + m.meanError! ** 2 - (m.variance ?? 0) / m.samples, 0) / meanErrors.length;
-  return { caseIndex, ...c, completedTrials: trials.length, expectedTrials: 32, marginals, flows, covariances,
+  return { caseIndex, ...c, completedTrials: trials.length, expectedTrials: plan.trialsPerCase, marginals, flows, covariances,
     meanErrorSummary: { observations: meanErrors.length, rms: Math.sqrt(observedMse), correctedMse,
       correctedRms: Math.sqrt(Math.max(0, correctedMse)) },
     flowReference: { mean: 0, ...referenceMoment, referenceConverged },

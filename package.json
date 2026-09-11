@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "evaluate:birds": "node --import tsx src/benchmarks/evaluationCampaignReport.ts",
     "evaluate:birds-smoke": "node --import tsx src/benchmarks/evaluationSmokeReport.ts",
     "benchmark:distributions": "vitest bench --run src/benchmarks/distributions.bench.ts",
     "benchmark:complexity": "tsx src/benchmarks/modelComplexity.ts",

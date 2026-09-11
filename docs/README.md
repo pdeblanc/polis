@@ -25,6 +25,8 @@ This directory contains the project's technical reference material and design re
 - [`BIRDS_EVALUATION.md`](./BIRDS_EVALUATION.md) defines a reusable, model-independent
   evaluation scorecard and concrete measurement protocol (parameters, observations,
   trials, budgets, and reporting), distinguishing existing evidence from missing coverage.
+- [`BIRDS_EVALUATION_RUNBOOK.md`](./BIRDS_EVALUATION_RUNBOOK.md) records the Birds baseline,
+  resumable standard-A commands, checkpoint behavior, and remaining runner coverage.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
   retained as historical review input.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced
