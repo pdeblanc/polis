@@ -95,6 +95,6 @@ external sampling rules and retains discovery samples for unfamiliar failures.
   Standard-A collection and saved-data bootstrap/TV calibration are implemented;
   the full campaign has not been run. A complete automated cross-model runner has not
   been built. No combined quality score or new statistical acceptance thresholds are imposed.
-- The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) records implementation evidence
-  and two open verification-scope questions. Publication completes the synthesis task;
-  it does not certify those outstanding obligations or unmeasured evaluation cases.
+- The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) closes the v1 prototype and
+  investigation milestone: the tracker regression is implemented and the broader
+  performance matrix explicitly deferred. This does not certify unmeasured evaluation cases.

@@ -1,6 +1,6 @@
 # Birds Model Design
 
-> **Status: Canonical v1 specification — implemented; acceptance review recorded.**
+> **Status: Canonical v1 specification — prototype and investigation milestone complete.**
 >
 > This document is the normative design for the current Birds implementation. Earlier
 > Birds design, Q&A, and review-feedback documents are historical context. If they
@@ -9,8 +9,8 @@
 > Active implementation discoveries and provisional limitations are recorded separately
 > in [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md).
 > The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) maps requirements to evidence and
-> retains two open verification-scope questions. This status does not claim full
-> evaluation-suite coverage or unconditional project acceptance.
+> records closure of the review items, including the explicitly deferred broader
+> performance matrix. This status does not claim full evaluation-suite coverage.
 
 ## 1. Purpose
 

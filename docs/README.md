@@ -15,7 +15,7 @@ This directory contains the project's technical reference material and design re
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
-  to evidence, agreed deferrals, and remaining verification-scope questions.
+  to evidence and agreed deferrals, and records closure of the v1 milestone.
 - [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md) is the active record
   of Birds implementation discoveries, provisional limitations, and concrete internal
   choices that do not override the canonical design.

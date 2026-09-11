@@ -1572,7 +1572,7 @@ measurements. No new simulation runs were performed to produce those documents, 
 publication does not turn incomplete statistical coverage into a passing result.
 
 This completes the requested synthesis. The separate
-[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) now records requirement coverage and open
-verification-scope questions. Larger matched trajectory cohorts, broader
+[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) now records requirement coverage and
+closure of the verification review items. Larger matched trajectory cohorts, broader
 joint-law measurements, new sampler experiments and future-model design remain possible
 follow-ups, not silently added requirements for this investigation cycle.

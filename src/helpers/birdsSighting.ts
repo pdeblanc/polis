@@ -337,7 +337,13 @@ export class Sighting {
       sighting = sighting.#extendCoarser(parent);
     }
     while (sighting.#tube.at(-1)!.resolution.cellWidth > target.cellWidth) {
-      sighting = sighting.#atSingleton().#refineSingleton(budget);
+      // Extend the deepest singleton. Restarting at the first singleton would
+      // repeatedly select an existing child without extending the tube.
+      sighting = new Sighting(
+        sighting.#birds,
+        sighting.#tube,
+        sighting.#tube.length - 1,
+      ).#refineSingleton(budget);
     }
     const publicIndex = sighting.#tube.findIndex(
       ({ resolution }) => resolution.cellWidth === target.cellWidth,

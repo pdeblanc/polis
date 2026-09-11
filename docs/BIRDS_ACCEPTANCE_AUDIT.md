@@ -3,14 +3,16 @@
 Audit of implementation revision `4dceca7f91da37a4439e6fee58c8365e505155f6` against
 [proposal §§16–18](./BIRDS_DESIGN_PROPOSAL.md#16-verification). This is an evidence
 review, not a new model specification or a statistical certification.
+The closure below also includes the subsequent tracker regression and rescaling fix.
 
 ## Conclusion
 
 The **initial model milestone is supported by the implementation and tests**: the full
 inward recurrence, bounded public API, spacetime visualization, and diagnostic overlays
-exist. The broader investigation deliverables are also present. Two verification-scope
-questions below remain open before calling every proposal obligation closed. This audit
-does not silently defer them or claim unconditional project acceptance.
+exist. The broader investigation deliverables are also present. The two review items
+are now closed: R1 by a regression and fix, and R2 by an explicitly approved deferral.
+The v1 prototype and investigation milestone is complete within these documented limits;
+the broader reusable evaluation backlog remains separate.
 
 Brownian fidelity is not a v1 acceptance threshold. The measured biases and incomplete
 tracks remain documented outcomes, not failed conservation tests. Completing this
@@ -31,7 +33,7 @@ representable coordinate, parameter, or seed.
 | Query-order and cache independence | Covered by engine order/clear/eviction tests and support-cache tests. Production uses bounded approximate-LRU caches; strict LRU was explicitly dropped during optimization. |
 | Bounded, hierarchy-free synchronous API | Covered by [API tests](../src/models/birds/birds.test.ts): instance-scoped capabilities, exact flow endpoints, disclosed population snapping, refinement/coarsening, incidence consistency, cached-only reads, and explicit size limits. Output bounds are not wall-clock guarantees. |
 | Spacetime viewer and debug controls | Implemented in [BirdsCanvas](../src/components/BirdsCanvas.tsx) and [BirdsPage](../src/pages/BirdsPage.tsx): future-up snapshots, parameters, coordinates, resolution, cache controls, FPS/query counters, dependencies, incident flows, and tracked paths. Code inspection and prior interactive use support this; no new browser acceptance run is claimed. |
-| Budgeted singleton-tube tracker | Implemented in [Sighting](../src/helpers/birdsSighting.ts), with [tests](../src/helpers/birdsSighting.test.ts) for selection/rescaling, immutability, budgets, numeric limits, asymmetric narrowing, and forward/backward motion. Stronger trace-level verification remains review item R1 below. |
+| Budgeted singleton-tube tracker | Implemented in [Sighting](../src/helpers/birdsSighting.ts), with [tests](../src/helpers/birdsSighting.test.ts) for selection/rescaling, immutability, budgets, numeric limits, asymmetric narrowing, and forward/backward motion. The [multi-step trace regression](../src/helpers/birdsSightingTrace.test.ts) closes R1 below. |
 | Poisson–Brownian characterization | Completed as an investigation, not exhaustive coverage. [Analysis](./BIRDS_ANALYSIS.md) records population and flow marginals, deep density-compensated cells, diffusion sensitivity, drift/displacement moments, trajectories, bridges, crossing/retention, and selection effects. Small and incomplete cohorts are disclosed. |
 | Finite-population quotient-space reference tracker | Completed with limitations. [Reference comparison](./BIRDS_ANALYSIS.md#anonymous-adaptive-reference-tracker) and [tests](../src/benchmarks/brownianReferenceTracker.test.ts) record recurrence, budget/numeric failures, and hidden-label checks. It reproduces the anonymous tracking strategy; it is not literally the Birds helper behind one shared adapter, and cohorts do not establish equal failure rates. |
 | End-to-end performance and complexity | Measurements exist: [complexity guardrails](../src/benchmarks/complexityMeasurements.test.ts), [engine/viewport profiles](../src/benchmarks/birdsEngineProfile.ts), and [tracker diagnostics](../src/benchmarks/birdsTracker.ts). The full breadth requested in §16.3 is not uniformly covered; see R2. |
@@ -40,7 +42,7 @@ representable coordinate, parameter, or seed.
 | Starfield/Terrain classifier follow-up | Closed by explicit [no-refactor decisions](./BIRDS_IMPLEMENTATION_NOTES.md#starfieldterrain-structural-classifier-audit), with implementation/test evidence for each model. |
 | High-level synthesis and reusable metrics | Published [summary](./BIRDS_ANALYSIS_SUMMARY.md) and [fully specified protocol](./BIRDS_EVALUATION.md). Standard-A collection and saved-data inference exist and have validation tests; the full campaign and batches B–F are not complete. Publication satisfies the synthesis/specification deliverable, not unmeasured statistical coverage. |
 
-## Open acceptance review items
+## Closed acceptance review items
 
 ### R1 — Tracker trace-level regression coverage
 
@@ -50,16 +52,20 @@ population before committing a new internal singleton and coarsens only through
 single-population parents. Public sighting cells can contain multiple birds: the
 singleton guarantee belongs to the internal tube, not the requested display resolution.
 
-Existing tests cover important examples, but do not directly exercise the full §16.1
-combination of a multi-step collision/refinement trace, singleton committed waypoints,
-no crossing of earlier committed waypoints, and aggressive coarsening that preserves
-the selected unit. A sparse forward/backward test and reference-tracker hidden-label
-checks are useful but do not substitute for that Birds-specific regression.
+**Closed by implementation and tests.** The multi-step trace regression runs the actual
+Sighting helper against a controlled finite two-bird fixture in both time directions.
+Labels are used to construct anonymous counts/flows and score the result, never exposed
+to the helper. Four steps include two co-occupancies, unsuccessful asymmetric narrowing,
+source/time refinement, successful endpoint isolation, and recovery to coarser/longer
+steps. It checks singleton continuation sources, monotone committed-time progress,
+unchanged earlier sightings, and identity after display coarsening and re-refinement.
+This tests helper control flow, not Brownian fidelity or all Birds hierarchy cases.
 
-**Recommended closure:** add a controlled, deterministic multi-step fixture that logs
-queries and checks those properties, in both time directions. Alternatively, explicitly
-accept the narrower current coverage. No evidence found here establishes a tracker bug;
-this is a verification gap, not a demand that every collision resolve.
+The regression exposed an actual rescaling bug: requesting multiple finer levels from
+a coarse singleton could repeatedly revisit its first cached child without extending
+the tube or consuming a query budget. Rescaling now extends the deepest singleton.
+The fixture bounds geometry reads so recurrence of this synchronous loop fails the test
+rather than hanging its worker. No model stochastic semantics changed.
 
 ### R2 — Breadth of complexity/performance verification
 
@@ -70,10 +76,10 @@ covering every query family, separation, output ceiling, and parameter axis name
 §16.3. Linear depth is not a bound on total recursive calls. Existing Node timings also
 do not constitute standardized browser percentile or peak-memory measurements.
 
-**Recommended closure:** explicitly accept the existing profiling/guardrails for the
-v1 prototype and retain the broader resource matrix in the reusable evaluation backlog,
-or specify the additional small guardrails required now. This audit records the gap;
-it does not treat that recommended deferral as already approved.
+**Closed by explicit user-approved deferral.** Existing profiling and guardrails are
+accepted for the v1 prototype. The broader resource matrix remains in the reusable
+[evaluation protocol](./BIRDS_EVALUATION.md), especially batch F, rather than gating
+this milestone. No additional performance guarantee or unmeasured result is inferred.
 
 ## Previously agreed decisions and limits
 
@@ -98,13 +104,14 @@ choices, not new model mathematics.
 
 Read the proposal, implementation/analysis records, production ownership/support/API and
 tracker paths, viewer controls, and the cited tests and measurement entry points.
-Ran the targeted command below: **27 test files, 188 tests passed**. It includes small
+Ran the targeted command below after closing R1: **28 test files, 190 tests passed**.
+Typecheck and lint also passed. The tests include small
 reference and synthetic statistical checks, not the large evaluation campaign.
 
 ```sh
-npm test -- src/models/birds src/helpers/birdsSighting.test.ts src/utils/distributions src/benchmarks/complexityMeasurements.test.ts src/benchmarks/brownianReferenceTracker.test.ts src/benchmarks/birdsPopulationBounds.test.ts src/benchmarks/evaluationInference.test.ts src/benchmarks/evaluationSmoke.test.ts src/benchmarks/evaluationCampaign.test.ts
+npm test -- src/models/birds src/helpers/birdsSighting.test.ts src/helpers/birdsSightingTrace.test.ts src/utils/distributions src/benchmarks/complexityMeasurements.test.ts src/benchmarks/brownianReferenceTracker.test.ts src/benchmarks/birdsPopulationBounds.test.ts src/benchmarks/evaluationInference.test.ts src/benchmarks/evaluationSmoke.test.ts src/benchmarks/evaluationCampaign.test.ts
 ```
 
 Historical empirical results above were reviewed, not recollected. Local ignored
-artifacts are not a bundled reproducibility dataset. R1 and R2 remain explicit review
-items; closing this audit document does not silently close them.
+artifacts are not a bundled reproducibility dataset. R1 and R2 are closed as documented
+above; the full evaluation suite remains unfinished and unrun.

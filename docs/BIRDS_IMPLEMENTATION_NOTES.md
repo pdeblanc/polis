@@ -21,8 +21,9 @@ the recursive query graph. The immutable tagged-bird helper, its viewport path d
 tracker diagnostics, and initial CLI complexity and performance measurements are also
 implemented. The investigation cycle and synthesis are documented in the
 [analysis summary](./BIRDS_ANALYSIS_SUMMARY.md). The
-[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) records remaining tracker-test and
-complexity-coverage questions; the full reusable evaluation campaign has not been run.
+[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) closes the tracker-test gap and records
+the approved deferral of broader complexity coverage; the full reusable evaluation
+campaign has not been run.
 
 The visualization presents each population sample as a filled temporal band centered on
 its exact sampled time, with adjacent bands touching. This is a display convention for a
@@ -250,8 +251,8 @@ The CLI complexity report includes cold-cache flow ancestry by epoch and diffusi
 It reports recursive calls, owned/entity evaluations, cache hits, sampler calls, maximum
 depth, and elapsed time. The current guardrail checks linear maximum depth. Subsequent
 API, tracker, viewport, and profiling work expanded the evidence, but not into the
-complete matrix proposed in §16.3; the remaining coverage question is tracked as R2
-in the acceptance audit.
+complete matrix proposed in §16.3. That broader matrix is explicitly deferred by R2
+in the acceptance audit, with current profiling accepted for the v1 prototype.
 
 The initial flow measurements show maximum dependency depth growing by roughly nine per
 epoch. Total work is much more sensitive to support width: for the benchmark's centered
