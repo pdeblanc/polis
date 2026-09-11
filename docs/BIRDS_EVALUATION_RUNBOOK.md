@@ -2,12 +2,10 @@
 
 ## Baseline
 
-The current Birds model baseline is commit
-`0c7659b240bbcc4ff00e1787f0e8705f91fdc30f`. No model changes accompany the
-resumable runner. This hash preserves the model and earlier smoke runner, **not**
-the new runner described below. After committing these runner changes, record that
-commit's `git rev-parse HEAD` as the runnable baseline; its hash cannot be known
-before the commit exists. Preserve that revision when evaluating later model versions.
+The runnable Birds evaluation baseline is commit
+`abf95a5c4b95ab1c8d2edbd8cacb7c4e46f944f8`. It includes the current Birds model
+and the resumable standard-A runner described below. No model changes accompanied
+the runner. Preserve this revision when evaluating later model versions.
 
 For a future run, check out the recorded runner revision in a separate worktree,
 use `npm ci`, and retain the generated manifest and artifacts. The manifest records
