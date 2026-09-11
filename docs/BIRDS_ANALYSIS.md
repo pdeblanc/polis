@@ -8,6 +8,12 @@
 > records implementation choices and limitations. Results here characterize the model;
 > they do not silently change its requirements or gate version 1 unless explicitly stated.
 
+Start with the [high-level synthesis](./BIRDS_ANALYSIS_SUMMARY.md) for conclusions and
+the [reusable scorecard](./BIRDS_EVALUATION.md) for cross-model evaluation definitions.
+This record retains the chronology, including provisional interpretations and historical
+implementation decisions. Sampler work is paused; whether to adopt the new sampler is
+explicitly deferred, not decided by the earlier recommendations to retain sequential draws.
+
 ## Method
 
 Statistical experiments use independent model seeds as trials. Where several cells are
@@ -1516,34 +1522,54 @@ lower-setup-cost encoding approach only if justified by a concrete workload.
 4. Initial benchmark completed: compare increasing population and category counts against sequential binomials,
    including representative Birds parameters. Measure work, memory, hashing, and scalar
    sampler costs separately. Investigate extreme shapes and arrival-time precision.
-5. Decision: retain sequential binomials, for the performance reasons above. Both arrival-
-   and count-based race prototypes are available for further experiments. The stronger
-   multinomial ratio requirement remains open; success with the Poisson race alone does
-   not resolve it.
+5. Investigation complete for this cycle; adoption deferred. Sequential binomials remain
+   in the running model, and both race prototypes remain available. The complete-outcome
+   likelihood-ratio criterion is distinct from the stronger sampled-ratio question, which
+   remains open. Further work on that stronger condition is not required to finish this cycle.
 
 Exact gamma increments and exponential gaps are unbounded. If prototype policy requires
 truncating them, document that approximation explicitly: arbitrary clamping need not
 preserve the gamma-bridge identities, Dirichlet law, or exact multinomial law. The
 implementation decision must account for this alongside numerical limits and performance.
-The basic likelihood-ratio coupling investigation now has a tested candidate and an
-explicit decision to retain the current sampler. Further optimization and the stronger
-sample-ratio question remain possible follow-ups. The high-level analysis synthesis
-below is still outstanding.
+The basic likelihood-ratio coupling investigation has a tested candidate. Further
+optimization and the stronger sample-ratio question remain optional research follow-ups;
+neither sampler adoption nor a future materialization policy is decided here.
 
-## Planned analysis
+## Synthesis and evaluation status
 
-Future sections will record:
+### Protocol-v1 smoke runner
 
-- any further multinomial coupling experiments, including the open sampled-ratio question;
-- a final high-level synthesis that separates reusable, model-agnostic evaluation
-  metrics from version-1-specific anomaly investigations and root-cause findings; and
-- any further empirical performance investigations that affect mathematical analysis.
+The first executable smoke run used the four prescribed `(L,D)` pairs `(4,0.5)`,
+`(4,2)`, `(1,0.5)`, and `(1,2)`, with requested mean 4, `T=L²/4`, 32 seeds per
+case, and the first four fixed strata. All 128 trials completed. Each case recorded
+10,368 successful observations (324 per trial), for 41,472 total. There were no
+unsupported/size-limit responses, query timeouts, reported errors, conservation-check
+failures, or reverse-order/cache-clear replay mismatches. Replay queries are additional
+to these observation counts. The tightened Brownian binned-moment checks converged.
 
-The reusable metrics must remain meaningful for a future model with a different
-spacetime construction. They should be stated in terms of public observables, invariants,
-reference-process comparisons, scaling behavior, statistical dependence, and resource
-costs. Hierarchy phases, F/G/H stages, classifier costs, or a known version-1 failure may
-motivate an investigation, but tests aimed specifically at those mechanisms belong in
-the model-specific findings rather than the reusable scorecard. This prevents a new
-model from appearing superior merely because it lacks the old model's particular
-pathologies while introducing different ones.
+The run generated population/flow marginal summaries, lagged population covariances,
+complete-outflow displacement moments and mean-error RMS summaries. These are small-sample
+runner-validation outputs, not a new statistical acceptance result. Bootstrap and reference
+Monte Carlo were omitted as specified for smoke. The union check compares the public
+profile sum with separately queried cells; it is not an independent aggregate stochastic
+construction.
+
+Reproduce with `npm run evaluate:birds-smoke`. The initial local artifacts are in
+`artifacts/evaluation-smoke-1789086812211/`: manifest, trial JSONL, four case summaries,
+and completion metadata. Artifacts are ignored by git; this directory name is a local
+run reference, not a bundled dataset. The [protocol](./BIRDS_EVALUATION.md#smoke-runner-implementation)
+records the initial runner's remaining limitations, including sampled rather than
+continuous RSS enforcement and no automatic resumption or standard-tier scheduling.
+
+### Publication status
+
+The [analysis summary](./BIRDS_ANALYSIS_SUMMARY.md) and
+[reusable evaluation scorecard](./BIRDS_EVALUATION.md) are published. The latter separates
+public-observable metrics from v1-specific mechanisms and explicitly identifies missing
+measurements. No new simulation runs were performed to produce those documents, and
+publication does not turn incomplete statistical coverage into a passing result.
+
+This completes the requested synthesis. A final project acceptance/documentation audit
+remains distinct from this analysis record. Larger matched trajectory cohorts, broader
+joint-law measurements, new sampler experiments and future-model design remain possible
+follow-ups, not silently added requirements for this investigation cycle.

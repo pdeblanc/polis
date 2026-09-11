@@ -37,6 +37,18 @@ npm run test:watch
 
 ## Run benchmarks
 
+Run the four-case evaluation smoke protocol (32 trials per case, including order/cache
+replays; no bootstrap or reference Monte Carlo):
+
+```sh
+npm run evaluate:birds-smoke
+```
+
+It prints progress and saves a manifest, trial JSONL, and per-case summary JSON in a new
+ignored `artifacts/evaluation-smoke-*` directory. An optional argument selects a new
+output directory; existing directories are never overwritten. Each model query has a
+supervised two-second timeout. This is not the full evaluation suite or a performance run.
+
 Print tab-separated terrain and starfield complexity measurements:
 
 ```sh

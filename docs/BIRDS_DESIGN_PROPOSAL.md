@@ -725,13 +725,17 @@ the next major Birds revision.
     tracker comparison.
 15. Analyze deterministic cell-population bounds as input to a future materialization
     design.
-16. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
-    why sequential binomials remain.
+16. Investigate likelihood-ratio-monotone multinomial coupling and document its properties,
+    performance, and adoption status. Investigation completed; adoption is explicitly
+    deferred and sequential binomials remain in the running model. See the
+    [analysis summary](./BIRDS_ANALYSIS_SUMMARY.md).
 17. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
     changes or document why not. Completed with explicit no-refactor decisions in the
     [implementation audit](./BIRDS_IMPLEMENTATION_NOTES.md#starfieldterrain-structural-classifier-audit).
 18. Produce a high-level analysis summary separating reusable, model-agnostic evaluation
-    metrics from version-1-specific investigations and root causes.
+    metrics from version-1-specific investigations and root causes. Published as the
+    [summary](./BIRDS_ANALYSIS_SUMMARY.md) and [scorecard](./BIRDS_EVALUATION.md); the
+    scorecard identifies unmeasured items and is not a claim of complete automation.
 
 ## 18. Acceptance criteria
 

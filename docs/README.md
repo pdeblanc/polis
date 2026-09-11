@@ -20,6 +20,11 @@ This directory contains the project's technical reference material and design re
 - [`BIRDS_ANALYSIS.md`](./BIRDS_ANALYSIS.md) is the active record of empirical and
   mathematical investigations of the implemented Birds model, including population
   bounds and the proposed gamma-process/Poisson-race sampler experiments.
+- [`BIRDS_ANALYSIS_SUMMARY.md`](./BIRDS_ANALYSIS_SUMMARY.md) synthesizes the v1 findings,
+  their limitations, and explicitly deferred decisions.
+- [`BIRDS_EVALUATION.md`](./BIRDS_EVALUATION.md) defines a reusable, model-independent
+  evaluation scorecard and concrete measurement protocol (parameters, observations,
+  trials, budgets, and reporting), distinguishing existing evidence from missing coverage.
 - [`BIRDS_MODEL_DESIGN.md`](./BIRDS_MODEL_DESIGN.md) is the preliminary birds design and is
   retained as historical review input.
 - [`BIRDS_DESIGN_QA.md`](./BIRDS_DESIGN_QA.md) is the completed decision log that produced
