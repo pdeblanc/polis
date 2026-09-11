@@ -2,6 +2,9 @@
 
 This directory contains the project's technical reference material and design records.
 
+For a presentation of Birds, start with [`BIRDS_OVERVIEW.md`](./BIRDS_OVERVIEW.md), then
+use the analysis summary for findings and the canonical proposal for mathematical detail.
+
 - [`PROJECT.md`](./PROJECT.md) describes the current application as an implemented
   artifact: its architecture, mathematical models, user interface, invariants, and
   verification strategy.
@@ -12,6 +15,8 @@ This directory contains the project's technical reference material and design re
   the starter design.
 - [`DESIGN_CHANGES.md`](./DESIGN_CHANGES.md) compares the starter design with the resulting
   implementation, including justified departures and issues retained for review.
+- [`BIRDS_OVERVIEW.md`](./BIRDS_OVERVIEW.md) introduces the implemented model, its recursive
+  construction, API and viewer, tracking, findings, and changes relative to the proposal.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements

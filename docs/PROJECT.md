@@ -1,20 +1,21 @@
 # Polis
 
 Polis is a browser application for exploring deterministic, random-access procedural
-fields. A model is constructed from a string seed and answers synchronous spatial
+fields and population dynamics. A model is constructed from a string seed and answers synchronous spatial or spacetime
 queries. It does not advance a shared pseudorandom stream or generate a world eagerly.
 Instead, each stochastic fact has a structured address, so the same seed and address
 always produce the same value regardless of query order, cache state, or navigation
 history.
 
-The application contains two models:
+The application contains three models:
 
-- a bounded Poisson-like starfield over an effectively unbounded plane; and
-- a random-access diamond-square terrain field on a dyadic lattice.
+- a bounded Poisson-like starfield over an effectively unbounded plane;
+- a random-access diamond-square terrain field on a dyadic lattice; and
+- Birds, an anonymous population moving through one spatial dimension and time.
 
-Both models use the same world-coordinate system and the same addressed-randomness
-infrastructure. Their public APIs hide the recursive structures used to calculate their
-answers.
+All models use world-unit coordinates and shared addressed-randomness infrastructure.
+Starfield and terrain have two spatial axes; the Birds viewer uses space and time.
+Their public APIs hide the recursive structures used to calculate their answers.
 
 ## Architecture
 
@@ -23,7 +24,8 @@ The source tree has four main layers:
 - `utils/` contains model-independent addressed randomness, distributions, and geometry;
 - `models/` contains public model APIs and their internal stochastic engines;
 - `helpers/` contains browser- and presentation-facing coordination such as viewport
-  state, URL state, performance measurement, and debug dependency extraction; and
+  state, URL state, performance measurement, debug dependency extraction, and the
+  model-consuming Birds tracker; and
 - `components/` and `pages/` contain the React and Canvas user interface.
 
 Model code is synchronous and independent of React. Each public model owns its internal
@@ -54,8 +56,16 @@ returns the vertex and its height.
 `DiamondSquareTerrain` is the internal stochastic engine. It recursively evaluates a
 dyadic vertex through its canonical parent set and owns all addressed random displacement.
 
+`Birds` is the consumer-facing population/flow model. It selects instance-scoped
+resolution capabilities, returns population profiles at disclosed sampled times, and
+answers exact flow and complete incidence queries. Plural results have 65,536-record
+ceilings; oversized requests return explicit size-limit results. Refinement/coarsening
+and incident-flow methods let consumers continue from canonical cells without exposing
+epochs or stages. `queryCachedPopulation` reads cached values without generating missing
+populations. `BirdsEngine` owns the stochastic A–H recurrence and its canonical batches.
+
 The public models expose cache usage and `clearCache()`. Cache management affects only
-performance; it is not part of either model's semantics.
+performance; it is not part of any model's semantics.
 
 ## Addressed randomness
 
@@ -77,12 +87,13 @@ carry mutable RNG state.
 ## Shared distributions
 
 The uniform sampler uses the high 53 bits of an addressed 64-bit value to produce a value
-in the half-open interval `[0, 1)`. Other samplers treat this value as a quantile.
+in the half-open interval `[0, 1)`. Inverse-CDF samplers treat this value as a quantile;
+rejection samplers can use multiple addressed uniforms.
 
 Normal samples use an inverse normal CDF with both tails clamped at six standard
 deviations. The Poisson sampler clamps its upper quantile at a tail probability of
 `2^-32`. Exact stdlib quantiles are used for Poisson means and binomial trial counts up to
-1,000.
+1,000 in the Poisson and specialized equal-probability binomial adapters.
 
 Above 1,000, Poisson and equal-probability binomial samples use rounded normal
 approximations with matching mean and variance. Each approximation is the maximum of its
@@ -90,6 +101,14 @@ rounded-normal value and the exact sample at the transition parameter. This anch
 the sampler pointwise monotone across the algorithm switch when the seed and address are
 held fixed. These are bounded, deterministic approximations rather than claims of exact
 unbounded Poisson or binomial behavior.
+
+Birds additionally uses an arbitrary-probability binomial backed by the stdlib inverse
+CDF without that large-count normal approximation. Sequential conditional binomials
+produce multinomials with an exact remainder. Addressed H2PE hypergeometric sampling,
+with a direct urn path for narrow support and a rejection-attempt cap, supports sequential
+multivariate hypergeometric allocations. Exhausting the cap throws instead of fabricating
+a sample. The `roundedNormal` utility supplies finite probability tables with clamped
+tail atoms and `Math.round` bin semantics; it does not itself sample.
 
 ## Starfield model
 
@@ -188,6 +207,45 @@ selected lattice has not queried. Height is mapped to a clamped lightness scale.
 An optional cursor-following overlay shows the selected vertex, its unique recursive
 parents, and dependency edges. Shared ancestors are deduplicated before drawing.
 
+## Birds model
+
+Birds answers random-access population and flow queries without advancing a simulation
+clock. Cells are half-open spatial intervals at exact times; flows carry integer counts
+between cells. Populations and flows have no persistent individual identities.
+
+The coarse width and duration are 16 and 256. Coarse cells have deterministic population
+`Math.round(populationDensity * 16)` and translated, reflection-symmetric coarse flows.
+Each refinement epoch halves spatial width and quarters duration. Temporal multinomials
+split flows through midpoint cells; spatial binomials split cell populations;
+hypergeometric incidence allocations and reconciliation preserve both endpoint margins.
+The midpoint innovation variance is `diffusionRate * duration / 4`. Four finite tables
+cover the two midpoint alignments and two normalized durations.
+
+A hierarchy-closed finite motion support bounds dependency enumeration for fixed
+parameters within the numeric/resource domain. Pure geometry classifiers return
+construction and ownership facts. Canonical addressed batches, not query traversal,
+determine every stochastic split. Exact conservation applies within the safe-integer
+domain; finite output does not guarantee fast queries at every scale or parameter.
+
+The immutable `Sighting` helper retains nested cells ending in a singleton. Its only
+random choice selects a starting population rank. Movement follows singleton flows,
+tries asymmetric endpoint narrowing before shorter-time refinement, and coarsens when
+possible. Public display cells may contain several birds; internal movement is backed
+by singleton evidence. Query/refinement budgets and numerical-resolution limits produce
+explicit failures, which the viewer presents as partial tracks.
+
+The spacetime Canvas draws timestamped population bands, with the future upward, plus
+incident-flow, dependency, and tracked-path overlays. Touching bands are a rendering
+convention, not an assertion about populations between sample times. Parabolic zoom,
+prefetching, and cached-only scale-transition fades support navigation.
+
+The v1 prototype and investigation milestone is complete, with documented limitations.
+Measurements found local marginal biases and excess motion from spatial mixing;
+the model is not an exact Poisson–Brownian process. The broader evaluation campaign is
+not complete. The [Birds overview](./BIRDS_OVERVIEW.md) explains the construction,
+features, findings, and departures from its proposal; the
+[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) records verification and deferrals.
+
 ## Caching and instrumentation
 
 The starfield has separate LRU caches for whole-cell and subdivision results, each with a
@@ -195,7 +253,11 @@ capacity of 20,000 entries. The terrain has one 50,000-entry LRU vertex cache. C
 are canonical geometric identities. Clearing a cache or evicting an entry can increase
 recursive work but cannot change a returned count, position, or height.
 
-Both internal engines record per-query statistics. Starfield counters include cache hits,
+Birds uses bounded approximate-LRU caches for populations, flows, and owned batches.
+Its counters include evaluated entities/batches, cache hits, sampler calls, and dependency
+depth; optional profiling separates classifier, cache, distribution, and hashing work.
+
+All internal engines record per-query statistics. Starfield counters include cache hits,
 cells evaluated, maximum recursion depth, Poisson samples, population splits, and stars
 materialized. Terrain counters include cache hits, vertices evaluated, random values, and
 maximum dependency depth.
@@ -207,14 +269,16 @@ view requires no redraws.
 
 The CLI complexity benchmark prints tab-separated raw measurements for terrain point
 families, inward and outward starfield box queries, and fixed-grid starfield viewport
-queries. Separate distribution benchmarks compare exact transforms and complete addressed
-samplers.
+queries, plus Birds entry-flow ancestry by epoch and diffusion. Birds also has tracker
+diagnostics and cold/warm engine and viewport profiles. Separate distribution benchmarks
+compare exact transforms and complete addressed samplers.
 
 ## User interface
 
-The index links to separate starfield and terrain pages. Each demo has a deterministic
-default seed—`Polis 1` for the starfield and `Polis 2` for terrain—and places the live seed
-in the browser title. Editing the seed creates a different model instance.
+The index links to starfield, terrain, and Birds pages. Their deterministic default seeds
+are `Polis 1`, `Polis 2`, and `Polis 3`, respectively; each places the live seed in the
+browser title. Editing the seed creates a different model instance. Birds also exposes
+population density and diffusion rate as editable, URL-persisted model parameters.
 
 The shared Canvas viewport supports:
 
@@ -225,8 +289,11 @@ The shared Canvas viewport supports:
 - editable cursor world coordinates; and
 - shareable URL state.
 
-Keyboard panning uses a common speed proportional to the square root of visible viewport
-area, independent of screen aspect ratio. Zoom is exponential in time. View reset and
+Starfield and terrain keyboard panning uses a common world-speed factor proportional to
+the square root of visible viewport area, independent of screen aspect ratio. Birds
+accounts for its different spatial and temporal scales to keep screen-space pan speeds
+equal in both axes. Zoom is exponential in time; Birds scales temporal span as the square
+of spatial span. View reset and
 coordinate jumps use a coupled bounded-acceleration flight. A coordinate edit remains
 frozen and read-only during that flight, and the destination is anchored at the same
 screen position that supplied the edited cursor coordinates.
@@ -258,12 +325,21 @@ The implementation maintains the following cross-cutting invariants:
    shared by every query that reaches it.
 7. **Bounded stochastic primitives.** Normal and Poisson tails are truncated, and large
    discrete samples use bounded approximations.
-8. **Sampler monotonicity.** Increasing an ordered sampler parameter while holding its
-   seed and address fixed cannot lower its sample in the supported sampler adapters.
+8. **Sampler monotonicity.** Scalar inverse-CDF adapters and the anchored approximation
+   adapters have their specified ordered-parameter couplings. This is not a blanket
+   guarantee for arbitrary multivariate parameter changes: production Birds multinomials
+   do not claim complete-outcome likelihood-ratio monotonicity. A separate experimental
+   Poisson-race sampler investigates that property.
 9. **Bounded public starfield output.** Large populations remain scalar aggregates, and a
    tile query has a fixed tile-count ceiling.
 10. **Synchronous model semantics.** Model calls complete synchronously and do not depend
     on workers, network access, React state, or a global random stream.
+11. **Birds conservation and ownership.** Spatial child counts and complete incident
+    flow totals agree with their cell populations; each random batch has one owner.
+    Structurally legal unsupported flows have count zero. Exact arithmetic claims are
+    restricted to the safe-integer domain.
+12. **Exact Birds continuation.** Capabilities belong to one model instance, population
+    snapping is disclosed, and exact flow endpoints are not independently resnapped.
 
 ## Verification
 
@@ -278,3 +354,16 @@ by hierarchy depth, and viewport work by query count and scale. These guards det
 accidental algorithmic explosions without treating Node timing as a browser performance
 guarantee. Production verification also includes TypeScript project compilation, ESLint,
 and a Vite build.
+
+Birds tests cover support closure, classifiers and owner projections, A–H conservation,
+decreasing dependency ranks, order/cache invariance, public capability/limit semantics,
+and budgeted singleton tracking. Controlled multi-step traces check collision retries,
+identity-preserving rescaling, coarsening, and immutable prior sightings in both directions.
+The Birds complexity guardrails bound tested dependency depths, not all recursive work.
+
+Separate characterization reports compare population/flow laws, displacement, bridges,
+and trajectories with Poisson–Brownian references, including anonymous tracking over
+labeled Brownian paths on a ring. These measure approximation quality rather than
+silently redefining the model. A resumable standard-A evaluation collector and separate
+saved-data bootstrap/TV analysis have tests; the full campaign, batches B–F, and broader
+resource matrix remain outstanding. See the [evaluation runbook](./BIRDS_EVALUATION_RUNBOOK.md).
