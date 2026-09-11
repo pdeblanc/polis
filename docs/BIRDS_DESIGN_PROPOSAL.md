@@ -1,6 +1,6 @@
 # Birds Model Design
 
-> **Status: Canonical — currently being implemented.**
+> **Status: Canonical v1 specification — implemented; acceptance review recorded.**
 >
 > This document is the normative design for the current Birds implementation. Earlier
 > Birds design, Q&A, and review-feedback documents are historical context. If they
@@ -8,6 +8,9 @@
 >
 > Active implementation discoveries and provisional limitations are recorded separately
 > in [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md).
+> The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) maps requirements to evidence and
+> retains two open verification-scope questions. This status does not claim full
+> evaluation-suite coverage or unconditional project acceptance.
 
 ## 1. Purpose
 
@@ -61,7 +64,7 @@ Both numeric parameters accept every finite nonnegative JavaScript number, inclu
 zero. Negative values, infinities, and `NaN` are rejected. There is no artificial
 positive minimum or performance-derived maximum.
 
-Model methods are synchronous. Each instance owns bounded LRU caches and exposes cache
+Model methods are synchronous. Each instance owns bounded approximate-LRU caches and exposes cache
 usage and `clearCache()`. Cache contents affect work only, never semantics.
 Each distinct cache type initially has a capacity defined by a named global constant;
 constructor-level tuning may be added only when a concrete consumer needs it.
@@ -477,7 +480,7 @@ Every stochastic subdivision has one owner:
 - a containing flow owns its H reconciliation.
 
 An entry query retrieves its owner's complete batch. It never resamples in caller,
-reverse, enumeration, or cache order. Model-scoped LRU caches use canonical geometry
+reverse, enumeration, or cache order. Model-scoped approximate-LRU caches use canonical geometry
 keys and affect performance only.
 
 For tests and specification, facts have conceptual rank:

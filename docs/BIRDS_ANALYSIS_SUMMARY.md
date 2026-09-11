@@ -95,5 +95,6 @@ external sampling rules and retains discovery samples for unfamiliar failures.
   Standard-A collection and saved-data bootstrap/TV calibration are implemented;
   the full campaign has not been run. A complete automated cross-model runner has not
   been built. No combined quality score or new statistical acceptance thresholds are imposed.
-- A final project acceptance/documentation audit remains separate. This publication
-  completes the synthesis task; it does not certify unexamined implementation requirements.
+- The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) records implementation evidence
+  and two open verification-scope questions. Publication completes the synthesis task;
+  it does not certify those outstanding obligations or unmeasured evaluation cases.

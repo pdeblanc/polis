@@ -12,8 +12,10 @@ This directory contains the project's technical reference material and design re
   the starter design.
 - [`DESIGN_CHANGES.md`](./DESIGN_CHANGES.md) compares the starter design with the resulting
   implementation, including justified departures and issues retained for review.
-- [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical design now
-  being implemented** for the birds model.
+- [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
+  specification** for the implemented birds model.
+- [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
+  to evidence, agreed deferrals, and remaining verification-scope questions.
 - [`BIRDS_IMPLEMENTATION_NOTES.md`](./BIRDS_IMPLEMENTATION_NOTES.md) is the active record
   of Birds implementation discoveries, provisional limitations, and concrete internal
   choices that do not override the canonical design.

@@ -1558,8 +1558,10 @@ Reproduce with `npm run evaluate:birds-smoke`. The initial local artifacts are i
 `artifacts/evaluation-smoke-1789086812211/`: manifest, trial JSONL, four case summaries,
 and completion metadata. Artifacts are ignored by git; this directory name is a local
 run reference, not a bundled dataset. The [protocol](./BIRDS_EVALUATION.md#smoke-runner-implementation)
-records the initial runner's remaining limitations, including sampled rather than
-continuous RSS enforcement and no automatic resumption or standard-tier scheduling.
+records the initial runner's limitations, including sampled rather than continuous RSS
+enforcement. A separate resumable standard-A collector and saved-data bootstrap/TV
+analysis command were subsequently implemented; see the [runbook](./BIRDS_EVALUATION_RUNBOOK.md).
+The large campaign and batches B–F remain outstanding.
 
 ### Publication status
 
@@ -1569,7 +1571,8 @@ public-observable metrics from v1-specific mechanisms and explicitly identifies 
 measurements. No new simulation runs were performed to produce those documents, and
 publication does not turn incomplete statistical coverage into a passing result.
 
-This completes the requested synthesis. A final project acceptance/documentation audit
-remains distinct from this analysis record. Larger matched trajectory cohorts, broader
+This completes the requested synthesis. The separate
+[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) now records requirement coverage and open
+verification-scope questions. Larger matched trajectory cohorts, broader
 joint-law measurements, new sampler experiments and future-model design remain possible
 follow-ups, not silently added requirements for this investigation cycle.

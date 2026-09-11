@@ -1,6 +1,6 @@
 # Birds implementation notes
 
-> **Status: Active implementation record.**
+> **Status: V1 implementation record; acceptance review documented.**
 >
 > [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) remains the canonical model
 > specification. This document records implementation discoveries, concrete internal
@@ -19,8 +19,10 @@ toggleable cursor-following flow overlay draws every nonzero inflow and outflow 
 selected cell, with count-weighted opacity and width. A separate dependency overlay shows
 the recursive query graph. The immutable tagged-bird helper, its viewport path display,
 tracker diagnostics, and initial CLI complexity and performance measurements are also
-implemented. Statistical characterization and the final expanded complexity suite remain
-in progress.
+implemented. The investigation cycle and synthesis are documented in the
+[analysis summary](./BIRDS_ANALYSIS_SUMMARY.md). The
+[acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) records remaining tracker-test and
+complexity-coverage questions; the full reusable evaluation campaign has not been run.
 
 The visualization presents each population sample as a filled temporal band centered on
 its exact sampled time, with adjacent bands touching. This is a display convention for a
@@ -141,7 +143,8 @@ a generic hierarchy framework are outside this audit; none is inferred as necess
 merely from adopting the Birds design principle.
 
 The classifier-audit follow-up is closed by the two explicit no-refactor decisions above.
-The analysis synthesis and reusable evaluation scorecard remain separate unfinished work.
+The analysis synthesis and reusable evaluation scorecard were subsequently published;
+see the [summary](./BIRDS_ANALYSIS_SUMMARY.md) and [protocol](./BIRDS_EVALUATION.md).
 
 ## Structural geometry
 
@@ -245,9 +248,10 @@ ranks.
 
 The CLI complexity report includes cold-cache flow ancestry by epoch and diffusion rate.
 It reports recursive calls, owned/entity evaluations, cache hits, sampler calls, maximum
-depth, and elapsed time. The current guardrail checks linear maximum depth; broader query
-families, parameter sweeps, and throughput characterization remain future work alongside
-the public API and statistical characterization.
+depth, and elapsed time. The current guardrail checks linear maximum depth. Subsequent
+API, tracker, viewport, and profiling work expanded the evidence, but not into the
+complete matrix proposed in §16.3; the remaining coverage question is tracked as R2
+in the acceptance audit.
 
 The initial flow measurements show maximum dependency depth growing by roughly nine per
 epoch. Total work is much more sensitive to support width: for the benchmark's centered
@@ -314,9 +318,10 @@ levels, a cell width near `1.49e-8`, and a binary64-scale duration before numeri
 enumeration failed. This is Zeno-like behavior at an identity-ambiguous meeting, not an
 ordinary slow singleton search. The version-1 model records no incoming-to-outgoing
 correspondence through a multi-bird cell, so the current helper cannot continue that bird
-past the meeting. The design assumption that endpoint refinement always recovers a
-singleton is therefore false for at least this constructed path and must be revised
-before trajectory tracking can be considered complete.
+past the meeting within the observed numerical limits. This does not prove that the
+apparent collision is mathematically unresolvable. The current tracker contract permits
+explicit budget and numeric-resolution failure instead of promising eventual isolation;
+the subsequent reference comparison below investigates that limitation.
 
 A follow-up address audit found no omitted owner geometry or cross-stage address reuse in
 the cell, temporal-flow, incidence, or flow-reconciliation samplers. Refining the first
