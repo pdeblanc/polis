@@ -615,9 +615,10 @@ display from explicitly timestamped population profiles. Flow overlays show inci
 flows for selected cells, and tagged trajectories may overlay the field.
 
 The page exposes seed, density, diffusion, coordinates, actual resolutions, cache usage,
-cache reset, queries per frame, FPS, and cursor-following hierarchy/dependency overlays.
-Debug overlays are early correctness tools and may use dedicated internal helper data;
-ordinary rendering uses the public model.
+cache reset, queries per frame, and FPS. Incident-flow and tracked-path overlays use the
+public model. The originally proposed cursor-following hierarchy/dependency overlay is
+explicitly deferred: no such Birds UI exists, and its useful inspection scope and visual
+design remain undecided. Internal dependency tracing and rank tests are implemented.
 
 ## 16. Verification
 
@@ -721,7 +722,9 @@ the next major Birds revision.
 9. Implement G1, G2, and H and full incidence conservation tests.
 10. Add order, cache, ownership, ancestry, and complexity tests.
 11. Implement resolution capabilities and bounded public queries.
-12. Add the spacetime view and early dependency overlays.
+12. Add the spacetime view and diagnostic overlays. Incident-flow and tracked-path
+    overlays are implemented; hierarchy/dependency visualization is explicitly deferred
+    as described in §15.
 13. After the public API has been exercised by the visualization, implement singleton-
     tube tracking and trajectory display.
 14. Run Poisson–Brownian characterization, including the finite-population quotient-space
@@ -746,7 +749,9 @@ The initial model milestone requires several full inward epochs to terminate at 
 data, conserve exactly within the safe-integer domain, use only canonical finite support,
 remain deterministic across order and caches, have one owner per stochastic batch, pass
 structural and acyclicity tests, expose bounded hierarchy-free APIs, and support a working
-spacetime visualization with debug overlays.
+spacetime visualization with incident-flow diagnostics. The proposed hierarchy/dependency
+overlay is excluded from v1 acceptance by the explicit deferral in §15; internal
+dependency tracing is not a substitute UI feature.
 
 The broader Birds project additionally requires a budgeted singleton-tube tracker,
 Poisson–Brownian characterization including the reference tracker comparison,

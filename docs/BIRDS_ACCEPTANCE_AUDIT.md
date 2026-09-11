@@ -3,14 +3,15 @@
 Audit of implementation revision `4dceca7f91da37a4439e6fee58c8365e505155f6` against
 [proposal §§16–18](./BIRDS_DESIGN_PROPOSAL.md#16-verification). This is an evidence
 review, not a new model specification or a statistical certification.
-The closure below also includes the subsequent tracker regression and rescaling fix.
+Verification also covers the tracker regression and rescaling fix described below.
 
 ## Conclusion
 
 The **initial model milestone is supported by the implementation and tests**: the full
-inward recurrence, bounded public API, spacetime visualization, and diagnostic overlays
-exist. The broader investigation deliverables are also present. The two review items
-are now closed: R1 by a regression and fix, and R2 by an explicitly approved deferral.
+inward recurrence, bounded public API, spacetime visualization, incident-flow and tracked-path
+overlays exist. The broader investigation deliverables are also present. The review items
+are closed: R1 by a regression and fix, R2 by an explicitly approved deferral, and R3
+by explicitly deferring dependency visualization.
 The v1 prototype and investigation milestone is complete within these documented limits;
 the broader reusable evaluation backlog remains separate.
 
@@ -32,7 +33,7 @@ representable coordinate, parameter, or seed.
 | Samplers, coarse initialization, parameter semantics | Covered by [rounded-normal](../src/utils/distributions/roundedNormal.test.ts), [binomial](../src/utils/distributions/binomial.test.ts), [multinomial](../src/utils/distributions/multinomial.test.ts), [hypergeometric](../src/utils/distributions/hypergeometric.test.ts), [midpoint-kernel](../src/models/birds/midpointKernels.test.ts), and [coarse-initialization](../src/models/birds/coarseInitialization.test.ts) tests. These check clamp/rounding behavior, feasible counts, remainders, symmetry, and invalid parameters. Extreme finite parameters can still exceed numeric or practical resource limits. |
 | Query-order and cache independence | Covered by engine order/clear/eviction tests and support-cache tests. Production uses bounded approximate-LRU caches; strict LRU was explicitly dropped during optimization. |
 | Bounded, hierarchy-free synchronous API | Covered by [API tests](../src/models/birds/birds.test.ts): instance-scoped capabilities, exact flow endpoints, disclosed population snapping, refinement/coarsening, incidence consistency, cached-only reads, and explicit size limits. Output bounds are not wall-clock guarantees. |
-| Spacetime viewer and debug controls | Implemented in [BirdsCanvas](../src/components/BirdsCanvas.tsx) and [BirdsPage](../src/pages/BirdsPage.tsx): future-up snapshots, parameters, coordinates, resolution, cache controls, FPS/query counters, dependencies, incident flows, and tracked paths. Code inspection and prior interactive use support this; no new browser acceptance run is claimed. |
+| Spacetime viewer and debug controls | Implemented in [BirdsCanvas](../src/components/BirdsCanvas.tsx) and [BirdsPage](../src/pages/BirdsPage.tsx): future-up snapshots, parameters, coordinates, resolution, cache controls, FPS/query counters, incident flows, and tracked paths. There is no dependency overlay; see R3. No new browser acceptance run is claimed. |
 | Budgeted singleton-tube tracker | Implemented in [Sighting](../src/helpers/birdsSighting.ts), with [tests](../src/helpers/birdsSighting.test.ts) for selection/rescaling, immutability, budgets, numeric limits, asymmetric narrowing, and forward/backward motion. The [multi-step trace regression](../src/helpers/birdsSightingTrace.test.ts) closes R1 below. |
 | Poisson–Brownian characterization | Completed as an investigation, not exhaustive coverage. [Analysis](./BIRDS_ANALYSIS.md) records population and flow marginals, deep density-compensated cells, diffusion sensitivity, drift/displacement moments, trajectories, bridges, crossing/retention, and selection effects. Small and incomplete cohorts are disclosed. |
 | Finite-population quotient-space reference tracker | Completed with limitations. [Reference comparison](./BIRDS_ANALYSIS.md#anonymous-adaptive-reference-tracker) and [tests](../src/benchmarks/brownianReferenceTracker.test.ts) record recurrence, budget/numeric failures, and hidden-label checks. It reproduces the anonymous tracking strategy; it is not literally the Birds helper behind one shared adapter, and cohorts do not establish equal failure rates. |
@@ -81,7 +82,18 @@ accepted for the v1 prototype. The broader resource matrix remains in the reusab
 [evaluation protocol](./BIRDS_EVALUATION.md), especially batch F, rather than gating
 this milestone. No additional performance guarantee or unmeasured result is inferred.
 
-## Previously agreed decisions and limits
+### R3 — Dependency visualization
+
+The Birds viewer provides incident-flow and tracked-path overlays, but no dependency
+overlay. The internal dependency observer supports tests, not a graphical inspector.
+
+**Closed by explicit deferral.** The hierarchy is substantially more complex than the
+Starfield/Terrain graphs. Its useful visual inspection scope is not yet defined, so
+dependency visualization is deferred rather than required for the current milestone.
+The proposal's visualization/acceptance criteria reflect this scope. Possible
+query inspectors or work summaries remain design ideas, not new implementation tasks.
+
+## Other agreed decisions and limits
 
 - Keep the designed v1 math; do not tune it merely to improve these measurements.
 - Keep sequential-binomial multinomials in production. Race-sampler adoption, stronger
@@ -113,5 +125,5 @@ npm test -- src/models/birds src/helpers/birdsSighting.test.ts src/helpers/birds
 ```
 
 Historical empirical results above were reviewed, not recollected. Local ignored
-artifacts are not a bundled reproducibility dataset. R1 and R2 are closed as documented
+artifacts are not a bundled reproducibility dataset. R1–R3 are closed as documented
 above; the full evaluation suite remains unfinished and unrun.

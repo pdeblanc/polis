@@ -235,7 +235,8 @@ by singleton evidence. Query/refinement budgets and numerical-resolution limits 
 explicit failures, which the viewer presents as partial tracks.
 
 The spacetime Canvas draws timestamped population bands, with the future upward, plus
-incident-flow, dependency, and tracked-path overlays. Touching bands are a rendering
+incident-flow and tracked-path overlays. Birds has internal dependency tracing for tests,
+but no visual dependency overlay; that presentation is deferred. Touching bands are a rendering
 convention, not an assertion about populations between sample times. Parabolic zoom,
 prefetching, and cached-only scale-transition fades support navigation.
 

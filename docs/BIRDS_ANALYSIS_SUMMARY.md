@@ -98,3 +98,5 @@ external sampling rules and retains discovery samples for unfamiliar failures.
 - The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) closes the v1 prototype and
   investigation milestone: the tracker regression is implemented and the broader
   performance matrix explicitly deferred. This does not certify unmeasured evaluation cases.
+  The proposed dependency overlay is not implemented and is explicitly deferred
+  pending a useful visualization design.

@@ -16,8 +16,10 @@ population profiles, singular flows, complete nonzero inflow/outflow lists, expl
 result ceilings, cache controls, and query statistics. An initial spacetime visualization
 renders discrete population profiles with space horizontal and future time upward. A
 toggleable cursor-following flow overlay draws every nonzero inflow and outflow of the
-selected cell, with count-weighted opacity and width. A separate dependency overlay shows
-the recursive query graph. The immutable tagged-bird helper, its viewport path display,
+selected cell, with count-weighted opacity and width. There is no Birds dependency
+overlay. The engine's
+dependency observer is used for diagnostic traces and rank tests, not a viewer graph.
+The immutable tagged-bird helper, its viewport path display,
 tracker diagnostics, and initial CLI complexity and performance measurements are also
 implemented. The investigation cycle and synthesis are documented in the
 [analysis summary](./BIRDS_ANALYSIS_SUMMARY.md). The
@@ -45,6 +47,14 @@ time units and keeps the rendered spatial/time grid spacing comparable. Other Po
 retain isotropic zoom.
 
 ## Public API boundary
+
+Dependency visualization is explicitly deferred until its inspection purpose and visual
+design are established. The Birds graph combines cells, flows, two-stage facts, and
+owned batches with substantial shared ancestry; drawing all recursive edges over the
+spacetime grid is not automatically useful. A possible future inspector could focus on
+one selected query and one dependency step, or summarize work by stage/cache status.
+These are design options, not committed features. Structural dependencies must be
+distinguished from an execution trace, which changes when cached results stop recursion.
 
 Resolution objects expose exact world-unit widths, durations, and temporal lattice data,
 while their epoch metadata remains in model-owned weak maps. A capability cannot be

@@ -26,8 +26,7 @@ the new view at scale transitions; prefetching spreads some transition work acro
 
 The diagnostic overlays expose different aspects of the model:
 
-- incident arrows show the nonzero inflows and outflows of the hovered cell;
-- dependency edges show the recursive facts needed to answer a query; and
+- incident arrows show the nonzero inflows and outflows of the hovered cell; and
 - clicking a populated cell selects a bird for a budgeted tracked-path overlay.
 
 The controls report exact sampling resolution, hovered interval/time/population, cache
@@ -145,7 +144,8 @@ or perturb a global random stream.
 `BirdsEngine` owns the stochastic recursion, batch caches, and diagnostics. Geometry
 classifiers derive construction cases and dependencies from raw world coordinates.
 The engine consumes those facts rather than calculating parents by manipulating stage
-or epoch labels. Its optional dependency observer supports rank checks and visualization.
+or epoch labels. Its optional dependency observer supports diagnostic traces and rank
+checks in tests. There is no Birds dependency-graph overlay in the current viewer.
 
 The public `Birds` wrapper exposes synchronous world-coordinate operations:
 
@@ -225,9 +225,8 @@ are in the [analysis summary](./BIRDS_ANALYSIS_SUMMARY.md).
 
 ## Changes and clarifications relative to the design proposal
 
-The [canonical proposal](./BIRDS_DESIGN_PROPOSAL.md) has itself been updated to reflect
-some decisions. This comparison describes substantive implementation choices and explicit
-scope decisions, not every historical edit. The core mathematics—fixed coarse data,
+Relative to the [design proposal](./BIRDS_DESIGN_PROPOSAL.md), the substantive
+implementation choices and scope decisions are listed below. The core mathematics—fixed coarse data,
 four midpoint kernels, support closure, and A–H conservation—was retained. Statistical
 anomalies did not trigger an undocumented replacement model.
 
@@ -252,6 +251,9 @@ anomalies did not trigger an undocumented replacement model.
   and monotonicity investigations were completed without requiring a materialization
   policy or sampler adoption. Starfield/Terrain classifier follow-ups closed with explicit
   no-refactor decisions. None of these decisions claims measurements that were not taken.
+- **Dependency visualization:** the proposed hierarchy/dependency overlay was not
+  implemented. It is deferred until a useful inspection question and presentation are
+  defined; the internal dependency observer is not a user-facing visualization.
 
 The [acceptance audit](./BIRDS_ACCEPTANCE_AUDIT.md) maps these conclusions to implementation
 and test evidence, including the approved deferrals.
