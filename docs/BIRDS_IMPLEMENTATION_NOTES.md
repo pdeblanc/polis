@@ -56,6 +56,93 @@ spatial and temporal lattices. Plural incidence queries enumerate support intern
 retain the support helper's canonical spatial order, omit zero flows, and either return
 the complete result or an explicit size-limit result.
 
+## Starfield/Terrain structural-classifier audit
+
+**Outcome:** audited both existing models for the follow-up in proposal §17, item 17.
+Retain their current implementations; no model refactor is required for this Birds
+milestone. This is an explicit decision not to transplant Birds' full classifier and
+owner-projection interfaces, not a claim that those interfaces already exist unchanged.
+
+The applicable principle is that queries consume geometric dependency facts instead of
+deriving parents or ownership through arithmetic on epoch/stage identifiers. Validation,
+construction case, and subdivision capability are separate concerns. A common framework,
+new diagnostic labels, and identical return types are not goals of the audit.
+
+### Starfield
+
+- [`dependencyAncestor`](../src/models/starfield/hierarchy.ts) is already a pure
+  structural classifier for valid hierarchy cells. Origin-adjacent unit cells have no
+  ancestor; larger origin-anchored cells have a smaller dependency; other cells inherit
+  from a larger dependency. It returns concrete geometry and the dependency direction,
+  not a generation number for the query to manipulate. The debug overlay uses this same
+  helper rather than reconstructing a separate dependency rule.
+- [`HierarchicalStarfield`](../src/models/starfield/hierarchicalStarfield.ts) uses those
+  cases to preserve the reversed cell/subdivision dependency in expansions. Every cell
+  supports subdivision: expansion construction does not imply an absence of that
+  capability. The classifier need not reproduce Birds' multiple owner projections when
+  this capability has no separate stage-dependent eligibility conditions.
+- There is a limited difference from Birds' "return every derived fact" interface:
+  `childIndexOf` and `childAt` remain pure local helpers in the stochastic engine. They
+  derive a quadrant index and child box directly from coordinates. They do not repeat
+  the root/expansion construction rule or manipulate generation identifiers. We explicitly
+  retain them here rather than allocating a richer classifier result on every query.
+  No performance improvement from either organization is claimed. Moving them into
+  `hierarchy.ts` would be reasonable if another consumer needs the same child geometry,
+  but is not outstanding Birds work.
+- Classification of *sampled positions* into quadrants belongs with population results;
+  it is not a missing pure structural classifier. Similarly, materialization thresholds
+  and Poisson/binomial sampling remain stochastic-model responsibilities.
+- `dependencyAncestor` assumes valid aligned power-of-two boxes; it is not a validator
+  of arbitrary objects. `undefined` means a root, not an invalid box. The consumer-facing
+  [`Starfield.queryTiles`](../src/models/starfield/starfield.ts) validates its rectangle,
+  resolution and output limits, and constructs internal boxes. We do not change the
+  internal helper into a checked public capability API solely to match Birds.
+
+**Decision:** keep the structural dependency helper and the small coordinate-based child
+helpers as they stand. Their separation already prevents the label-arithmetic problem
+that motivated this follow-up; the remaining organizational differences do not justify
+a model-wide classifier rewrite.
+
+### Terrain
+
+- [`parentGeometry`](../src/models/terrain/diamondSquareTerrain.ts) already classifies
+  integer coarse vertices versus square/diamond construction from raw coordinates.
+  It computes dyadic introduction spacing, alignment, all four parent vertices, and
+  parent distance together. The recursive query receives that result and does no level
+  arithmetic. Its `depth + 1` is instrumentation, not geometry or addressing.
+- The square/diamond distinction stays inside this helper because both cases have the
+  same query recurrence once parents and distance are known. Adding explicit stage
+  labels would expose a distinction the query does not need. Choosing displacement
+  variance and the calibrated parent weight from distance remains mathematical-model
+  logic, not missing hierarchy classification.
+- `parentVertices` and `parentDistance` project the same helper. The dependency overlay
+  uses `parentVertices`, so it shares the model's parent rule. The public
+  [`Terrain.sampleNearest`](../src/models/terrain/terrain.ts) selects a vertex at a
+  requested dyadic sampling spacing; this does not change that vertex's ancestry.
+- `canonicalVertex` validates finite coordinates and normalizes negative zero; spacing
+  recovery checks safe lattice indices when required. As with Starfield, `undefined`
+  from the parent helper denotes a coarse root. Retain this internal contract rather
+  than introducing Birds-style invalid-node return values and tagged construction cases.
+
+**Decision:** retain `parentGeometry` and its existing projections. Extracting it into a
+separate module or renaming it `classifyVertex` would be organizational only; no missing
+structural information in the recursive query was identified.
+
+### Verification and limits
+
+Reviewed both public wrappers, internal recurrences, geometry helpers, dependency-overlay
+consumers, and existing tests. Ran the Starfield and Terrain suites, the terrain dependency
+helper suite, and `complexityMeasurements.test.ts`. Coverage includes origin quadrants,
+expansion preservation, subdivision ownership, sampled-position boundaries, query-order/
+cache invariance, square/diamond parents and distances, and selected increasing-depth
+complexity families. These tests are not an exhaustive proof over all floating-point
+coordinates. Numeric-boundary hardening, mathematical changes, new ancestry proofs, and
+a generic hierarchy framework are outside this audit; none is inferred as necessary
+merely from adopting the Birds design principle.
+
+The classifier-audit follow-up is closed by the two explicit no-refactor decisions above.
+The analysis synthesis and reusable evaluation scorecard remain separate unfinished work.
+
 ## Structural geometry
 
 Hierarchy entities store raw world geometry. Pure construction classifiers recover the

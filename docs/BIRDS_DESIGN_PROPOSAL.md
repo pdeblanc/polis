@@ -728,7 +728,8 @@ the next major Birds revision.
 16. Investigate likelihood-ratio-monotone multinomial coupling and adopt it or document
     why sequential binomials remain.
 17. Audit Starfield and Terrain for structural classifiers; each must adopt applicable
-    changes or document why not.
+    changes or document why not. Completed with explicit no-refactor decisions in the
+    [implementation audit](./BIRDS_IMPLEMENTATION_NOTES.md#starfieldterrain-structural-classifier-audit).
 18. Produce a high-level analysis summary separating reusable, model-agnostic evaluation
     metrics from version-1-specific investigations and root causes.
 
