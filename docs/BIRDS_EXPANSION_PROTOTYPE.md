@@ -1,127 +1,156 @@
-# Birds outward-expansion prototype
+# Birds single-origin expansion prototype
 
-This standalone experiment implements the nested-root expansion construction. It is not
-part of the production Birds model, its refinement hierarchy, or the GUI. It imposes no
-spacetime completeness criterion. Its purpose is to expose concrete intermediate facts
-for review before deciding how refinement will consume them.
+This standalone experiment expands the time horizon of one fixed population originating
+in one cell at time zero. It is not part of the production Birds model or GUI. Its purpose
+is to expose concrete intermediate facts for review before specifying contraction or
+combining multiple origin channels into a global model.
 
 Implementation: [`birdsExpansion.ts`](../src/experiments/birdsExpansion.ts).
 Tests: [`birdsExpansion.test.ts`](../src/experiments/birdsExpansion.test.ts).
 
-## One iteration
+## Origin and initialization
 
-At scale `(L,T)`, the two roots are `[-L,0)` and `[0,L)` at time zero. Each has a
-population and complete endpoint contributions to width-`L` cells at `+T` and `-T`.
-Initially `L=16`, `T=256`.
+The caller specifies an aligned dyadic cell `[a,a+L₀)` at time zero: `L₀` is a positive
+power of two and `a` is an integer multiple of `L₀`. Examples include `[0,16)`, `[16,32)`,
+`[32,64)`, and negative or fractional-scale cells. The default is `[0,16)`.
 
-Expansion performs these operations, in order:
+Sample its population once from a Poisson law with mean `populationDensity * L₀`.
+Use two separate multinomial allocations of this same total to obtain endpoint
+contributions to width-`L₀` cells at `±T₀`, where `T₀=L₀²`. Forward variance is `D*T₀`,
+with `D` the diffusion rate. Cell centers stand in for continuous source locations.
 
-1. Introduce `[-2L,-L)` and `[L,2L)` at time zero. Sample each population and its
-   forward/backward allocations to `±T`.
-2. Retain the old roots and their existing `±T` endpoint contributions unchanged.
-   There are now four width-`L` source cohorts, in increasing spatial order.
-3. For each cohort separately, extend its contributions from `±T` to `±2T`, `±3T`,
-   and `±4T`. Each populated contributing cell owns one multinomial allocation at each
-   step. Sum arrivals to obtain the next contribution frame.
-4. Pair the time-zero sources and pair adjacent endpoint cells. Sum the final frames
-   to obtain two width-`2L` roots and their width-`2L` endpoint contributions at `±4T`.
+The origin and its total population remain fixed through every expansion. No new birds
+or origin cells are introduced. Reached-cell counts are this channel's contributions,
+not total populations in a global simulation.
 
-These aggregates, not new samples, become the next iteration's root data. In particular,
-an inherited first-step distribution is not replaced by the forward kernel at its new
-scale. Its intermediate construction remains retained.
+The default width and the ratio `T/L²` are named constants. The ratio is currently one.
 
-For backward propagation, a step from `-T` to `-2T` records where that root's birds came
-from. The physical chronological flow runs from `-2T` to `-T`; the step record follows
-the outward computation, not chronological arrow direction.
+## One expansion epoch
 
-## Sampling and support
+The input state has endpoint contributions at `±T` in width-`L` cells. On the forward
+branch, generate the following at width `L`, in this order:
 
-Each newly introduced time-zero cell has population sampled from a Poisson law with
-mean `populationDensity * cellWidth`, using stdlib's inverse CDF and an addressed uniform.
-There is no explicit population-tail truncation or large-mean normal approximation.
-Finite random-bit precision and safe-integer storage remain numerical limitations;
-unrepresentable counts are errors rather than clipped values.
+1. **Extend directly from `T` to `4T`.** Each populated contributing cell allocates its
+   count multinomially with forward variance `3DT`. Do not sample three successive
+   forward hops; those would accumulate a wider architectural support envelope.
+2. **Insert `3T`.** For each positive direct flow from center `x` at `T` to center `y`
+   at `4T`, allocate its count among intermediate cells using a rounded-normal kernel
+   with mean `(x+2y)/3` and variance `2DT/3`.
+3. **Insert `2T`.** For each allocation through center `z` at `3T`, allocate its count
+   among cells at `2T`, with mean `(x+z)/2` and variance `DT/2`. Keep its `4T` destination
+   attached to this allocation; do not pool flows with different final destinations.
+4. **Aggregate endpoint cells at `4T`.** Sum adjacent width-`L` cells into globally
+   aligned width-`2L` cells. These aggregates are the next epoch's forward input.
 
-Forward and backward initial allocations share that population total but have distinct
-random addresses. Every later contribution is allocated multinomially; propagation never
-creates additional birds. The implementation reuses the shared sequential-binomial
-multinomial utility.
+Apply the same construction to the backward branch: `-T → -4T`, then insert `-3T`,
+then `-2T`. Backward records follow the outward computation; physical chronological
+flow is in the opposite direction. Each epoch is one eager batch containing both branches.
 
-The forward kernel is precomputed once as `roundedNormal(0, sqrt(D*T/L²))`. Because
-`T/L²=1` throughout expansion, one table suffices at every scale. The backward table
-reflects its offsets and probabilities, including any asymmetric clamp atoms. Kernel
-categories and returned contributions use increasing spatial order.
+After epoch `e`, endpoint width is `L₀ 2^e` and time horizon is `T₀ 4^e`. Initial
+allocation is epoch zero. With the default origin, epoch zero reaches `±256`; epoch one
+generates `±1024`, `±768`, `±512` and ends with width-32 endpoint contributions.
 
-This uses forward variance `D*T`. It is twice the midpoint variance for a parent bridge
-of total duration `2T`, or four times the midpoint variance for a parent bridge of total
-duration `T`. The source is approximated by its cell center. Integrating over a uniform
-source cell and other kernel fine-tuning are intentionally deferred.
+## Kernels and approximation
 
-Motion support uses the existing six-deviation normal clamp. This is an architectural
-finite-search constraint, not a bounded target population law. Multinomial conservation
-and finite motion support are separate from any deterministic population ceiling.
-At zero diffusion the motion kernel is a point mass at zero.
+The conditional means and variances above are the continuous Brownian-bridge formulas.
+Their use with cell-center endpoints, rounding, and clamped kernels is an approximation,
+not exact conditioning of the discrete forward transition law. Integrating over endpoint
+intervals and other statistical fine-tuning are deferred.
+
+In cell-index units, the precomputed kernels are:
+
+| Operation | Mean offset | Variance |
+| --- | --- | --- |
+| Initial forward allocation | 0 | `D` |
+| Direct extension | 0 | `3D` |
+| Insert `3T` | 0, 1/3, or 2/3, plus integer translation | `2D/3` |
+| Insert `2T` | 0 or 1/2, plus integer translation | `D/2` |
+
+These values use `T/L²=1`; the implementation includes the named ratio in the variances.
+Interpolating equal-width cell centers is equivalent to interpolating their integer cell
+indices. Floor/remainder arithmetic selects phases correctly for negative displacements.
+The same bridge tables serve both time directions. Backward forward-propagation tables
+are explicit spatial reflections, including any asymmetric clamp atoms.
+
+Kernels use `roundedNormal`: clamp the normal at six standard deviations and apply
+`Math.round`, with tail mass placed at the rounded clamp points. At zero diffusion,
+forward propagation stays in the same cell; endpoint coarsening only changes the cell
+containing that contribution.
+
+Motion truncation is an architectural finite-search constraint, not a property of the
+target Poisson–Brownian law. Intermediate bridges can overshoot the direct endpoint
+envelope, so a future support bound must include their excursions and rounding. This
+prototype does not yet derive a support envelope for contraction or global-channel pruning.
+
+Poisson initialization uses stdlib's inverse CDF and an addressed uniform, without an
+explicit population-tail clamp or large-mean normal approximation. Finite random-bit
+precision and safe-integer storage remain numerical limitations; unrepresentable counts
+are errors rather than clipped values. All allocations use the shared sequential-binomial
+multinomial sampler.
 
 ## Inspectable records and ownership
 
 ```ts
-const experiment = new BirdsExpansion('example', 2, 0.5);
+const experiment = new BirdsExpansion('example', 2, 0.5, { min: 32, max: 64 });
 const initial = experiment.getEpoch(0);
 const expanded = experiment.getEpoch(1);
 ```
 
-An epoch exposes:
+Every epoch exposes `origin`, `population`, `cellWidth`, `timeStep`, `forward`, and
+`backward`. The last two are the endpoint contribution frames used by the next epoch.
 
-- `roots`: the two output roots and their endpoint contributions;
-- `introduced`: the two newly sampled roots, time-zero frames, and first-step batches;
-- `extensions`: four cohorts with three forward and three backward propagation steps;
-- `aggregations`: the pairs of extended cohorts and their resulting coarse roots.
+- An `initial` epoch also exposes `atZero`, `forwardStep`, and `backwardStep`.
+- An `expanded` epoch exposes `forwardExtension` and `backwardExtension`, each containing:
+  - `direct`: the sampled `T → 4T` step, including complete per-source allocations;
+  - `bridges`: one retained late bridge per positive direct flow, with its early
+    bridges nested beneath it; these encode joint counts across all four times;
+  - `steps`: the three adjacent-time flow marginals, derived by summing those joint
+    counts without additional randomness;
+  - `coarsened`: the aggregated `4T` endpoint frame.
 
-Epoch zero has only initialization records, with no extensions or aggregations.
-Every propagation step exposes its originating time-zero cell, input frame, complete
-per-cell allocations, and output frame. Allocation batches retain zero categories;
-frames are sparse and omit zero contributions. An omitted entry means zero contribution
-from that cohort, not zero total population at the spacetime location.
+Sampled allocations retain zero categories. Frames and derived adjacent-step allocations
+are sparse and spatially ordered. An omitted frame entry means zero contribution from
+this channel, not zero global population. The finer endpoint frames remain retained after
+coarsening, and subsequent epochs reuse the previous coarse frames by reference.
 
-The source cohort remains distinct while propagating, even when several cohorts reach
-the same cell. They are combined only by explicit root aggregation. The next iteration
-propagates the resulting aggregate cohort, while its finer provenance remains accessible
-through the retained earlier records. This does not yet specify conditional refinement
-of later steps back into those finer cohorts.
-
-Population addresses identify the newly introduced interval. Transport addresses identify
-the cohort's interval, the two times, and the contributing cell; category suffixes identify
-destination intervals. They do not depend on cache state, request order, or the position
-of an entry in a sparse array.
+Population addresses identify the origin interval. All transport/bridge addresses also
+include the origin. Transport addresses identify the two times and source cell. Bridge
+addresses identify the endpoint cells and all three times; early bridges additionally
+identify the enclosing direct flow's `4T` destination. Category suffixes identify the
+allocated cell. Distinct origin channels and conditional batches therefore have distinct
+addresses without relying on sparse-array indices or request order.
 
 `getEpoch(n)` builds the missing prefix and retains every completed epoch in an unbounded
-instance-owned cache. Earlier records are reused by reference and all returned structures
-are frozen. There is no eviction or clearing API. Replay in a new instance with identical
-parameters reproduces the same records. This is not a claim that retained memory is
-small for every density, diffusion rate, or requested expansion depth.
+instance-owned cache. Returned structures are frozen, including a copy of the caller's
+origin cell. There is no eviction or clearing API. A new instance with the same inputs
+reproduces the records. Retention is not a claim of small memory use for every parameter
+choice or depth.
 
 ## Run and verify
 
 ```sh
 npm run experiment:birds-expansion
-npm run experiment:birds-expansion -- 3 2 0.5 'example seed'
-npm run experiment:birds-expansion -- 1 2 0.5 'example seed' --json
+npm run experiment:birds-expansion -- 3 2 0.5 'example seed' --origin 32 64
+npm run experiment:birds-expansion -- 1 2 0.5 'example seed' --origin -32 -16 --json
 npm test -- src/experiments/birdsExpansion.test.ts
 ```
 
 Positional arguments are expansion count after initialization, density, diffusion rate,
-and seed. Defaults are `3`, `2`, `0.5`, and `Polis expansion prototype`. Normal output is
-one summary per epoch, including root populations, occupied endpoint counts, retained
-step/allocation counts, and elapsed time. `--json` prints full epoch records instead;
-shared records are repeated in JSON, so serialization size is not retained-memory usage.
+and seed. Defaults are `3`, `2`, `0.5`, and `Polis expansion prototype`. `--origin min max`
+selects the origin interval; omission selects `[0,16)`. Normal output is one summary per
+epoch: the fixed population, occupied endpoint-cell counts, retained step/allocation/bridge
+batch counts, and elapsed time. Step/allocation counts include derived marginal records.
+`--json` prints full epoch records; shared objects are repeated in JSON, so serialization
+size is not retained-memory usage.
 
-Tests check initialization, both directions of every allocation, contribution aggregation,
-negative-coordinate coarsening, population conservation over multiple expansions,
-preservation of inherited facts, unique transport addresses, deterministic replay,
-immutable retention, empty populations, and zero diffusion. They test the new
-construction, not the statistical correctness of library distribution implementations.
+Tests cover configurable origins and initial scales, Poisson initialization, conservation
+of every allocation, four-time joint-to-marginal consistency, endpoint coarsening,
+kernel variances/phases, generation order, negative coordinates and backward time,
+unique addresses across origins and conditional contexts, deterministic replay,
+immutable retention, empty populations, and zero diffusion. They test the construction,
+not the statistical correctness of library samplers.
 
-Open architectural questions include what complete population/flow queries these retained
-contributions determine, how refinement retrieves and conditions on them, and the behavior
-of the overall sampled law across expansion scales. No inward query implementation,
-trajectory matching, GUI integration, or coverage theorem is implied by this prototype.
+Open work includes contraction consistent with retained batches, a motion-support bound
+that permits finite origin-channel searches, and a global model that sums those channels.
+There is no inward query implementation, trajectory matching, GUI integration, or coverage
+theorem in this prototype.

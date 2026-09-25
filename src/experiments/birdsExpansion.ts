@@ -1,109 +1,137 @@
 import poissonQuantile from '@stdlib/stats-base-dists-poisson-quantile';
 import { createAddressedRandom, type AddressedRandom, type Seed } from '../utils/rng/addressedRandom';
+import type { Address } from '../utils/rng/address';
 import { uniformUnit } from '../utils/distributions/uniform';
 import { multinomial } from '../utils/distributions/multinomial';
 import { roundedNormal, type ProbabilityMassTable } from '../utils/distributions/roundedNormal';
 import { NORMAL_MAX_DEVIATIONS } from '../utils/distributions/normal';
 
-export const EXPANSION_INITIAL_CELL_WIDTH = 16;
-export const EXPANSION_INITIAL_TIME_STEP = 256;
+export const EXPANSION_DEFAULT_CELL_WIDTH = 16;
+export const EXPANSION_TIME_PER_WIDTH_SQUARED = 1;
 
 export interface ExpansionCell { readonly min: number; readonly max: number }
 export interface PopulationContribution { readonly cell: ExpansionCell; readonly count: number }
 
-/** Contributions from ONE root at t=0, never total populations at the reached cells. */
+/** Contributions from ONE fixed origin at t=0, never global cell populations. */
 export interface ContributionFrame {
   readonly time: number;
   readonly cellWidth: number;
-  /** Sparse and spatially ordered; omitted cells contribute zero for this cohort. */
+  /** Sparse and spatially ordered; omitted cells contribute zero for this channel. */
   readonly contributions: readonly PopulationContribution[];
 }
 
 export interface ContributionAllocation {
   readonly fromCell: ExpansionCell;
-  /** Full kernel allocation, including zero counts, in increasing destination order. */
   readonly destinations: readonly PopulationContribution[];
 }
 
-/** In the backward branch, propagation runs opposite to chronological flow direction. */
+/** Backward steps follow the outward computation, opposite to chronological flow. */
 export interface ContributionStep {
-  readonly origin: ExpansionCell;
   readonly from: ContributionFrame;
   readonly to: ContributionFrame;
   readonly allocations: readonly ContributionAllocation[];
 }
 
-export interface ExpansionRoot {
-  readonly cell: ExpansionCell;
+/** Conditional allocation of one endpoint pair through an intermediate time. */
+export interface BridgeBatch {
+  readonly fromTime: number;
+  readonly toTime: number;
+  readonly time: number;
+  readonly fromCell: ExpansionCell;
+  readonly toCell: ExpansionCell;
+  readonly count: number;
+  /** Full kernel allocation, including zeros, in increasing spatial order. */
+  readonly intermediates: readonly PopulationContribution[];
+}
+
+export interface TrisectedFlow {
+  /** T → 4T, split at 3T. */
+  readonly late: BridgeBatch;
+  /** T → 3T, split at 2T; one batch per positive late allocation.
+   * Nested beneath `late` to retain the original 4T destination as well. */
+  readonly early: readonly BridgeBatch[];
+}
+
+export interface ChannelExtension {
+  /** Sampled directly over duration 3T, at the inherited width L. */
+  readonly direct: ContributionStep;
+  /** Retained joint counts for (T, 2T, 3T, 4T), not just adjacent marginals. */
+  readonly bridges: readonly TrisectedFlow[];
+  /** Derived adjacent steps, ordered outwards: T → 2T → 3T → 4T. */
+  readonly steps: readonly [ContributionStep, ContributionStep, ContributionStep];
+  /** Aggregation of direct.to into width-2L cells, used by the next epoch. */
+  readonly coarsened: ContributionFrame;
+}
+
+interface EpochState {
+  readonly index: number;
+  readonly origin: ExpansionCell;
   readonly population: number;
-  /** Outgoing/incoming endpoint counts, still labeled by this t=0 root. */
+  readonly cellWidth: number;
+  readonly timeStep: number;
   readonly forward: ContributionFrame;
   readonly backward: ContributionFrame;
 }
+export type ExpansionEpoch = EpochState & (
+  | { readonly kind: 'initial'; readonly atZero: ContributionFrame;
+      readonly forwardStep: ContributionStep; readonly backwardStep: ContributionStep }
+  | { readonly kind: 'expanded'; readonly forwardExtension: ChannelExtension;
+      readonly backwardExtension: ChannelExtension }
+);
 
-export interface RootInitialization {
-  readonly root: ExpansionRoot;
-  readonly atZero: ContributionFrame;
-  readonly forwardStep: ContributionStep;
-  readonly backwardStep: ContributionStep;
-}
-
-export interface ExtendedCohort {
-  /** Its existing ±T frames are the inputs to the first extension steps. */
-  readonly root: ExpansionRoot;
-  /** Three steps: ±T → ±2T → ±3T → ±4T. */
-  readonly forwardSteps: readonly ContributionStep[];
-  readonly backwardSteps: readonly ContributionStep[];
-}
-
-export interface RootAggregation {
-  readonly children: readonly [ExtendedCohort, ExtendedCohort];
-  readonly root: ExpansionRoot;
-}
-
-export interface ExpansionEpoch {
-  readonly index: number;
-  readonly cellWidth: number;
-  readonly timeStep: number;
-  readonly roots: readonly [ExpansionRoot, ExpansionRoot];
-  /** Initial two roots at epoch 0; the two new outer siblings thereafter. */
-  readonly introduced: readonly [RootInitialization, RootInitialization];
-  /** Empty at epoch 0; four t=0 cohorts thereafter, in spatial order. */
-  readonly extensions: readonly ExtendedCohort[];
-  readonly aggregations: readonly RootAggregation[];
-}
-
-/** Standalone outward-only experiment. All returned records are immutable and retained.
- * No refinement, completeness guarantee, production Birds dependency, or cache eviction.
- */
+/** Standalone single-origin, outward-only experiment. All records are retained.
+ * No contraction, global-channel summation, or spacetime completeness guarantee. */
 export class BirdsExpansion {
+  readonly origin: ExpansionCell;
   readonly populationDensity: number;
   readonly diffusionRate: number;
-  readonly kernels: Readonly<{ forward: ProbabilityMassTable; backward: ProbabilityMassTable }>;
+  readonly kernels: Readonly<{
+    initial: ProbabilityMassTable;
+    initialBackward: ProbabilityMassTable;
+    extension: ProbabilityMassTable;
+    extensionBackward: ProbabilityMassTable;
+    /** Means 0, 1/3, 2/3, respectively. */
+    lateBridge: readonly ProbabilityMassTable[];
+    /** Means 0, 1/2, respectively. */
+    earlyBridge: readonly ProbabilityMassTable[];
+  }>;
   readonly #random: AddressedRandom;
   readonly #epochs: ExpansionEpoch[] = [];
 
-  constructor(seed: Seed, populationDensity: number, diffusionRate: number) {
+  constructor(seed: Seed, populationDensity: number, diffusionRate: number,
+    origin: ExpansionCell = { min: 0, max: EXPANSION_DEFAULT_CELL_WIDTH }) {
     for (const value of [populationDensity, diffusionRate]) {
       if (!Number.isFinite(value) || value < 0) throw new RangeError('Parameters must be finite and nonnegative');
     }
+    const width = origin.max - origin.min;
+    if (!(width > 0) || !Number.isInteger(Math.log2(width)) || !Number.isSafeInteger(origin.min / width)) {
+      throw new RangeError('Origin must be an aligned dyadic cell');
+    }
+    this.origin = cell(origin.min, width);
     this.populationDensity = populationDensity;
     this.diffusionRate = diffusionRate;
     this.#random = createAddressedRandom(seed);
-    // Forward variance is D*T, not the D*T/4 of a bridge with total duration T.
-    // Source-center approximation; uniform-source integration is deliberately deferred.
-    const sigma = Math.sqrt(diffusionRate * (EXPANSION_INITIAL_TIME_STEP / EXPANSION_INITIAL_CELL_WIDTH ** 2));
-    if (!Number.isSafeInteger(Math.ceil(NORMAL_MAX_DEVIATIONS * sigma))) throw new RangeError('Kernel exceeds numeric offset precision');
-    const forward = Object.freeze(roundedNormal(0, sigma).map((entry) => Object.freeze(entry)));
-    // Explicit reflection also reflects any asymmetric Math.round clamp atoms.
-    const backward = Object.freeze(forward.map(({ value, probability }) =>
-      Object.freeze({ value: value === 0 ? 0 : -value, probability })).reverse());
-    this.kernels = Object.freeze({ forward, backward });
+    const variance = diffusionRate * EXPANSION_TIME_PER_WIDTH_SQUARED;
+    // Source/endpoints are represented by cell centers. This is a discretized
+    // Brownian-inspired construction, not exact conditioning of a rounded process.
+    const table = (mean: number, variance: number) => {
+      const sigma = Math.sqrt(variance);
+      if (!Number.isSafeInteger(Math.ceil(mean + NORMAL_MAX_DEVIATIONS * sigma))) {
+        throw new RangeError('Kernel exceeds numeric offset precision');
+      }
+      return Object.freeze(roundedNormal(mean, sigma).map((entry) => Object.freeze(entry)));
+    };
+    const initial = table(0, variance), extension = table(0, 3 * variance);
+    this.kernels = Object.freeze({ initial, initialBackward: reflect(initial),
+      extension, extensionBackward: reflect(extension),
+      lateBridge: Object.freeze([0, 1 / 3, 2 / 3].map((mean) => table(mean, 2 * variance / 3))),
+      earlyBridge: Object.freeze([0, 0.5].map((mean) => table(mean, variance / 2))),
+    });
   }
 
   get retainedEpochCount(): number { return this.#epochs.length; }
 
-  /** Builds any missing prefix once; retained epochs never depend on request order. */
+  /** Eagerly builds each missing epoch once, retaining an unbounded immutable prefix. */
   getEpoch(index: number): ExpansionEpoch {
     if (!Number.isSafeInteger(index) || index < 0) throw new RangeError('Epoch must be a nonnegative safe integer');
     while (this.#epochs.length <= index) {
@@ -114,95 +142,121 @@ export class BirdsExpansion {
   }
 
   #initialize(): ExpansionEpoch {
-    const width = EXPANSION_INITIAL_CELL_WIDTH, duration = EXPANSION_INITIAL_TIME_STEP;
-    const left = this.#introduce(cell(-width, width), duration);
-    const right = this.#introduce(cell(0, width), duration);
-    return Object.freeze({ index: 0, cellWidth: width, timeStep: duration,
-      roots: pair(left.root, right.root), introduced: pair(left, right),
-      extensions: Object.freeze([]), aggregations: Object.freeze([]) });
+    const width = this.origin.max - this.origin.min;
+    const duration = width ** 2 * EXPANSION_TIME_PER_WIDTH_SQUARED;
+    if (!(duration > 0) || !Number.isFinite(duration)) throw new RangeError('Expansion exceeds numeric geometry');
+    const mean = this.populationDensity * width;
+    if (!Number.isFinite(mean)) throw new RangeError('Poisson mean exceeds numeric range');
+    // No population-tail clamp or large-mean normal approximation. Finite RNG
+    // precision and safe-integer storage still apply; failures are not clipped.
+    const population = safeCount(mean === 0 ? 0 : poissonQuantile(
+      uniformUnit(this.#random, ['birds-expansion.population', this.origin.min, this.origin.max]), mean));
+    const atZero = frame(0, width, population ? [contribution(this.origin, population)] : []);
+    const forwardStep = this.#advance(atZero, duration, this.kernels.initial);
+    const backwardStep = this.#advance(atZero, -duration, this.kernels.initialBackward);
+    return Object.freeze({ kind: 'initial', index: 0, origin: this.origin, population,
+      cellWidth: width, timeStep: duration, atZero, forwardStep, backwardStep,
+      forward: forwardStep.to, backward: backwardStep.to });
   }
 
   #expand(previous: ExpansionEpoch): ExpansionEpoch {
-    const width = previous.cellWidth, duration = previous.timeStep;
-    if (!Number.isFinite(2 * width) || !Number.isFinite(4 * duration)) throw new RangeError('Expansion exceeds numeric geometry');
-    const left = this.#introduce(cell(-2 * width, width), duration);
-    const right = this.#introduce(cell(width, width), duration);
-    const extensions = Object.freeze([left.root, ...previous.roots, right.root]
-      .map((root) => this.#extend(root, duration)));
-    const aggregations = Object.freeze([
-      aggregate(pair(extensions[0], extensions[1]), 2 * width),
-      aggregate(pair(extensions[2], extensions[3]), 2 * width),
-    ]);
-    return Object.freeze({ index: previous.index + 1, cellWidth: 2 * width, timeStep: 4 * duration,
-      roots: pair(aggregations[0].root, aggregations[1].root),
-      introduced: pair(left, right), extensions, aggregations });
+    const width = 2 * previous.cellWidth, duration = 4 * previous.timeStep;
+    if (!Number.isFinite(width) || !Number.isFinite(duration)) throw new RangeError('Expansion exceeds numeric geometry');
+    const forwardExtension = this.#extend(previous.forward, this.kernels.extension);
+    const backwardExtension = this.#extend(previous.backward, this.kernels.extensionBackward);
+    return Object.freeze({ kind: 'expanded', index: previous.index + 1,
+      origin: this.origin, population: previous.population, cellWidth: width, timeStep: duration,
+      forwardExtension, backwardExtension,
+      forward: forwardExtension.coarsened, backward: backwardExtension.coarsened });
   }
 
-  #introduce(origin: ExpansionCell, duration: number): RootInitialization {
-    const width = origin.max - origin.min;
-    const mean = this.populationDensity * width;
-    if (!Number.isFinite(mean)) throw new RangeError('Poisson mean exceeds numeric range');
-    // No model-tail clamp or large-mean normal approximation. Finite RNG precision
-    // and safe-integer storage still apply; failures are explicit, not clipped counts.
-    const population = safeCount(mean === 0 ? 0 : poissonQuantile(
-      uniformUnit(this.#random, ['birds-expansion.population', origin.min, origin.max]), mean));
-    const atZero = frame(0, width, population ? [contribution(origin, population)] : []);
-    const forwardStep = this.#advance(origin, atZero, duration);
-    const backwardStep = this.#advance(origin, atZero, -duration);
-    const root = Object.freeze({ cell: origin, population, forward: forwardStep.to, backward: backwardStep.to });
-    return Object.freeze({ root, atZero, forwardStep, backwardStep });
-  }
-
-  #extend(root: ExpansionRoot, duration: number): ExtendedCohort {
-    const extend = (initial: ContributionFrame, direction: 1 | -1) => {
-      const steps: ContributionStep[] = [];
-      let current = initial;
-      for (let multiplier = 2; multiplier <= 4; multiplier++) {
-        const step = this.#advance(root.cell, current, direction * multiplier * duration);
-        steps.push(step); current = step.to;
+  #extend(initial: ContributionFrame, kernel: ProbabilityMassTable): ChannelExtension {
+    const t = initial.time, width = initial.cellWidth;
+    // Generate all 4T endpoints, then all 3T allocations, then all 2T allocations.
+    const direct = this.#advance(initial, 4 * t, kernel);
+    const lateBatches = direct.allocations.flatMap(({ fromCell, destinations }) =>
+      destinations.filter(({ count }) => count > 0).map(({ cell: toCell, count }) =>
+        this.#bridge(t, 4 * t, 3 * t, fromCell, toCell, count, width, 2, 3, [])));
+    const bridges = Object.freeze(lateBatches.map((late) => Object.freeze({ late,
+      early: Object.freeze(late.intermediates.filter(({ count }) => count > 0).map(({ cell: toCell, count }) =>
+        this.#bridge(t, 3 * t, 2 * t, late.fromCell, toCell, count, width, 1, 2,
+          [late.toCell.min, late.toCell.max]))),
+    })));
+    // Sum the retained joint table; no further sampling for adjacent-time flows.
+    const edges = [new Map<number, Map<number, number>>(), new Map<number, Map<number, number>>(), new Map<number, Map<number, number>>()];
+    for (const { late, early } of bridges) for (const batch of early) {
+      for (const { cell: middle, count } of batch.intermediates) {
+        if (!count) continue;
+        addEdge(edges[0], late.fromCell.min, middle.min, count);
+        addEdge(edges[1], middle.min, batch.toCell.min, count);
+        addEdge(edges[2], batch.toCell.min, late.toCell.min, count);
       }
-      return Object.freeze(steps);
-    };
-    return Object.freeze({ root, forwardSteps: extend(root.forward, 1), backwardSteps: extend(root.backward, -1) });
+    }
+    const first = stepFromEdges(initial, 2 * t, edges[0]);
+    const second = stepFromEdges(first.to, 3 * t, edges[1]);
+    const third = Object.freeze({ ...stepFromEdges(second.to, 4 * t, edges[2]), to: direct.to });
+    return Object.freeze({ direct, bridges, steps: Object.freeze([first, second, third] as const),
+      coarsened: coarsen(direct.to) });
   }
 
-  #advance(origin: ExpansionCell, from: ContributionFrame, time: number): ContributionStep {
-    const kernel = time > from.time ? this.kernels.forward : this.kernels.backward;
-    const width = from.cellWidth;
+  #advance(from: ContributionFrame, time: number, kernel: ProbabilityMassTable): ContributionStep {
     const totals = new Map<number, number>();
     const allocations = from.contributions.map(({ cell: fromCell, count }) => {
-      const destinations = kernel.map(({ value }) => cell(fromCell.min + value * width, width));
-      const counts = multinomial(this.#random,
-        ['birds-expansion.transport', origin.min, origin.max, from.time, time, fromCell.min, fromCell.max],
-        count, kernel.map(({ probability }, i) => ({ probability, address: [destinations[i].min, destinations[i].max] })));
-      const assigned = counts.map((count, i) => {
-        const destination = destinations[i];
-        if (count) totals.set(destination.min, (totals.get(destination.min) ?? 0) + count);
-        return contribution(destination, count);
-      });
-      return Object.freeze({ fromCell, destinations: Object.freeze(assigned) });
+      const destinations = this.#allocate(
+        ['transport', from.time, time, fromCell.min, fromCell.max], count, kernel, fromCell.min, from.cellWidth);
+      for (const { cell, count } of destinations) if (count) add(totals, cell.min, count);
+      return Object.freeze({ fromCell, destinations });
     });
-    return Object.freeze({ origin, from, to: frameFromTotals(time, width, totals), allocations: Object.freeze(allocations) });
+    return Object.freeze({ from, to: frameFromTotals(time, from.cellWidth, totals), allocations: Object.freeze(allocations) });
+  }
+
+  #bridge(fromTime: number, toTime: number, time: number, fromCell: ExpansionCell, toCell: ExpansionCell,
+    count: number, width: number, numerator: number, denominator: 2 | 3, context: Address): BridgeBatch {
+    // Center interpolation becomes integer-index interpolation on an equal-width grid.
+    // Floor and a nonnegative remainder also handle negative endpoint displacements.
+    const offsetNumerator = numerator * ((toCell.min - fromCell.min) / width);
+    const base = Math.floor(offsetNumerator / denominator);
+    const phase = offsetNumerator - base * denominator;
+    const kernel = (denominator === 3 ? this.kernels.lateBridge : this.kernels.earlyBridge)[phase];
+    const intermediates = this.#allocate(
+      ['bridge', fromTime, toTime, time, fromCell.min, fromCell.max, toCell.min, toCell.max, ...context],
+      count, kernel, fromCell.min + base * width, width);
+    return Object.freeze({ fromTime, toTime, time, fromCell, toCell, count, intermediates });
+  }
+
+  #allocate(address: Address, count: number, kernel: ProbabilityMassTable, base: number, width: number): readonly PopulationContribution[] {
+    const cells = kernel.map(({ value }) => cell(base + value * width, width));
+    const counts = multinomial(this.#random,
+      ['birds-expansion', this.origin.min, this.origin.max, ...address], count,
+      kernel.map(({ probability }, i) => ({ probability, address: [cells[i].min, cells[i].max] })));
+    return Object.freeze(cells.map((cell, i) => contribution(cell, counts[i])));
   }
 }
 
-function aggregate(children: readonly [ExtendedCohort, ExtendedCohort], width: number): RootAggregation {
-  const merge = (direction: 'forwardSteps' | 'backwardSteps') => {
-    const inputs = children.map((child) => child[direction].at(-1)!.to);
-    const totals = new Map<number, number>();
-    for (const input of inputs) for (const { cell, count } of input.contributions) {
-      // Floor, not truncation: the negative side uses the same aligned grid.
-      const min = Math.floor(cell.min / width) * width;
-      totals.set(min, safeCount((totals.get(min) ?? 0) + count));
-    }
-    return frameFromTotals(inputs[0].time, width, totals);
-  };
-  const root = Object.freeze({ cell: cell(children[0].root.cell.min, width),
-    population: safeCount(children[0].root.population + children[1].root.population),
-    forward: merge('forwardSteps'), backward: merge('backwardSteps') });
-  return Object.freeze({ children, root });
+function coarsen(input: ContributionFrame): ContributionFrame {
+  const width = 2 * input.cellWidth, totals = new Map<number, number>();
+  for (const { cell, count } of input.contributions) add(totals, Math.floor(cell.min / width) * width, count);
+  return frameFromTotals(input.time, width, totals);
 }
-
+function addEdge(edges: Map<number, Map<number, number>>, from: number, to: number, count: number) {
+  let destinations = edges.get(from);
+  if (!destinations) { destinations = new Map(); edges.set(from, destinations); }
+  add(destinations, to, count);
+}
+function stepFromEdges(from: ContributionFrame, time: number, edges: Map<number, Map<number, number>>): ContributionStep {
+  const totals = new Map<number, number>();
+  const allocations = from.contributions.map(({ cell: fromCell }) => {
+    const destinations = frameFromTotals(time, from.cellWidth, edges.get(fromCell.min)!).contributions;
+    for (const { cell, count } of destinations) add(totals, cell.min, count);
+    return Object.freeze({ fromCell, destinations });
+  });
+  return Object.freeze({ from, to: frameFromTotals(time, from.cellWidth, totals), allocations: Object.freeze(allocations) });
+}
+function reflect(table: ProbabilityMassTable): ProbabilityMassTable {
+  // Reflect clamp atoms too, including Math.round's possible endpoint asymmetry.
+  return Object.freeze(table.map(({ value, probability }) => Object.freeze({ value: value === 0 ? 0 : -value, probability })).reverse());
+}
+function add(totals: Map<number, number>, min: number, count: number) { totals.set(min, safeCount((totals.get(min) ?? 0) + count)); }
 function cell(min: number, width: number): ExpansionCell {
   const max = min + width;
   if (!Number.isFinite(min) || !Number.isFinite(max) || max - min !== width) throw new RangeError('Cell exceeds numeric geometry');
@@ -215,7 +269,6 @@ function frame(time: number, cellWidth: number, contributions: PopulationContrib
 function frameFromTotals(time: number, width: number, totals: Map<number, number>): ContributionFrame {
   return frame(time, width, [...totals].sort(([a], [b]) => a - b).map(([min, count]) => contribution(cell(min, width), count)));
 }
-function pair<T>(a: T, b: T): readonly [T, T] { return Object.freeze([a, b]); }
 function safeCount(count: number): number {
   if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Population exceeds safe-integer counts');
   return count;

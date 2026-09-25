@@ -18,7 +18,7 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_OVERVIEW.md`](./BIRDS_OVERVIEW.md) introduces the implemented model, its recursive
   construction, API and viewer, tracking, findings, and changes relative to the proposal.
 - [`BIRDS_EXPANSION_PROTOTYPE.md`](./BIRDS_EXPANSION_PROTOTYPE.md) describes the standalone
-  outward-expansion experiment for a possible next revision, its retained contribution
+  single-origin outward-expansion experiment for a possible next revision, its retained contribution
   records, and CLI. It does not replace the production v1 specification.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.

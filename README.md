@@ -37,10 +37,11 @@ npm run test:watch
 
 ## Run benchmarks
 
-Inspect the standalone Birds expansion prototype (no GUI or production-model integration):
+Inspect the standalone single-origin Birds expansion prototype (no GUI or production-model integration):
 
 ```sh
 npm run experiment:birds-expansion
+npm run experiment:birds-expansion -- --origin 32 64
 ```
 
 See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
