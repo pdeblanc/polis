@@ -17,9 +17,13 @@ use the analysis summary for findings and the canonical proposal for mathematica
   implementation, including justified departures and issues retained for review.
 - [`BIRDS_OVERVIEW.md`](./BIRDS_OVERVIEW.md) introduces the implemented model, its recursive
   construction, API and viewer, tracking, findings, and changes relative to the proposal.
+- [`BIRDS_2_EXPANSION_PROPOSAL.md`](./BIRDS_2_EXPANSION_PROPOSAL.md) records the Birds 2
+  expansion-phase proposal: single-origin expansion, classifier-based contraction,
+  support-guided channel composition, and later local aggregation. Only the expansion
+  prototype is implemented; this is not a replacement for the production v1 specification.
 - [`BIRDS_EXPANSION_PROTOTYPE.md`](./BIRDS_EXPANSION_PROTOTYPE.md) describes the standalone
-  single-origin outward-expansion experiment for a possible next revision, its retained contribution
-  records, and CLI. It does not replace the production v1 specification.
+  single-origin outward-expansion experiment supporting the Birds 2 proposal, its retained
+  contribution records, and CLI. It does not replace the production v1 specification.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
@@ -44,6 +48,7 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_MODEL_PROPOSAL_FEEDBACK.md`](./BIRDS_MODEL_PROPOSAL_FEEDBACK.md) records the review
   feedback incorporated after the revised proposal was drafted.
 
-For an introduction to the existing code, start with `PROJECT.md`. For birds implementation
-work, use `BIRDS_DESIGN_PROPOSAL.md` as the normative specification. The other birds
-documents are implementation context or review history and do not override it.
+For an introduction to the existing code, start with `PROJECT.md`. For production Birds v1
+work, use `BIRDS_DESIGN_PROPOSAL.md` as the normative specification. For the separate
+Birds 2 expansion work, start with `BIRDS_2_EXPANSION_PROPOSAL.md` and its prototype notes.
+The Birds 2 proposal does not change the v1 specification.

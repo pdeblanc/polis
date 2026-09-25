@@ -5,6 +5,10 @@ in one cell at time zero. It is not part of the production Birds model or GUI. I
 is to expose concrete intermediate facts for review before specifying contraction or
 combining multiple origin channels into a global model.
 
+The [Birds 2 expansion-phase proposal](./BIRDS_2_EXPANSION_PROPOSAL.md) records the
+architectural conclusions, expansion support bounds, and the planned sequence from
+single-channel contraction to global composition and local aggregation.
+
 Implementation: [`birdsExpansion.ts`](../src/experiments/birdsExpansion.ts).
 Tests: [`birdsExpansion.test.ts`](../src/experiments/birdsExpansion.test.ts).
 
