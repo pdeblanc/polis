@@ -37,6 +37,14 @@ npm run test:watch
 
 ## Run benchmarks
 
+Inspect the standalone Birds expansion prototype (no GUI or production-model integration):
+
+```sh
+npm run experiment:birds-expansion
+```
+
+See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
+
 For resumable Birds standard-A evaluation collection, use `npm run evaluate:birds`.
 See the [evaluation runbook](docs/BIRDS_EVALUATION_RUNBOOK.md) for dry runs, limits,
 resumption, and the preserved model baseline. This does not yet implement all batches.
