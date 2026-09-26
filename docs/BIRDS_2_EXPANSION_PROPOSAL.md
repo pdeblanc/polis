@@ -14,6 +14,11 @@ This document records the Birds 2 direction; it does not replace the
 [production Birds v1 specification](./BIRDS_DESIGN_PROPOSAL.md) or claim a complete
 design for Birds 2.
 
+The [Birds 2 project plan](./BIRDS_2_PROJECT.md) calls the single-origin hierarchy
+**Birds 2a**, and the global summed model **Birds 2b**. A separate **Birds 2c** wrapper
+around 2b will introduce materialization and its own fine-scale paths without changing
+the underlying models' semantics.
+
 The development order is:
 
 1. Expand one origin channel, retaining the generated facts.
@@ -52,9 +57,11 @@ N ~ Poisson(rho L₀)
 ```
 
 `rho` is population density in world units; `D` is the diffusion rate, with forward
-innovation variance `D * duration`. Examples of origins are `[0,16)`, `[16,32)`, and
-`[32,64)`, with analogous negative intervals. The prototype permits a caller-specified
-origin and defaults to `[0,16)`.
+innovation variance `D * duration`. Birds 2 uses base length 1 and duration 1;
+examples of origins are `[0,1)`, `[1,2)`, and `[2,4)`, with analogous negative intervals.
+Expansion makes it unnecessary to inherit Birds 1's length-16, duration-256 base.
+The prototype permits a caller-specified origin; its current default remains `[0,16)`
+until the implementation is updated, and `--origin 0 1` exercises the planned base.
 
 Set `T₀=L₀²`. The width default and the time/width-squared ratio are named constants,
 not query-local magic numbers. Allocate the same `N` independently forward and backward
@@ -119,8 +126,8 @@ expansion allocations are authoritative, including any margins they provide to o
 new contraction operations. Classifiers should supply the necessary dependency geometry;
 query implementations should not perform arithmetic on epoch or stage labels.
 
-There is a concrete reason to expect compatibility. For the default origin, expansion
-to `1024` retains width-16 facts at `0,256,512,768,1024`. Aggregating them to width 32
+There is a concrete reason to expect compatibility. For origin `[0,1)`, expansion
+to time `4` retains width-1 facts at `0,1,2,3,4`. Aggregating them to width 2
 provides the coarser views of an already-completed contraction epoch:
 
 - A–D temporal allocations can be projected from the retained joint records.
@@ -221,8 +228,12 @@ batch is owned are subsequent design questions. Moving a sum across a stochastic
 operation is not automatically valid for every sampler or conditional allocation.
 Independent multinomials with identical probabilities can be pooled in distribution,
 but that alone neither establishes equivalence of the full hierarchy nor preserves
-seeded outputs. Document the chosen equivalence and verify conservation, ownership,
-support, and statistical behavior when making such changes.
+seeded outputs. Birds 2 requires approximation of the same Poisson–Brownian target,
+not exact preservation of the reference construction's joint law. Small differences,
+such as narrower support from applying a cutoff after summation rather than before it,
+are acceptable if documented and evaluated. Verify conservation, ownership, support,
+and statistical behavior, and adopt or defer each optimization based on cost-benefit
+analysis.
 
 ## Next work
 

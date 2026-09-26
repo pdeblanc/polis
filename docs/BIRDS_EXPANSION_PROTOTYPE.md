@@ -18,6 +18,9 @@ The caller specifies an aligned dyadic cell `[a,a+L₀)` at time zero: `L₀` is
 power of two and `a` is an integer multiple of `L₀`. Examples include `[0,16)`, `[16,32)`,
 `[32,64)`, and negative or fractional-scale cells. The default is `[0,16)`.
 
+The [Birds 2 project plan](./BIRDS_2_PROJECT.md) specifies base length 1 and duration 1.
+Updating the prototype's default is pending; `--origin 0 1` already selects that scale.
+
 Sample its population once from a Poisson law with mean `populationDensity * L₀`.
 Use two separate multinomial allocations of this same total to obtain endpoint
 contributions to width-`L₀` cells at `±T₀`, where `T₀=L₀²`. Forward variance is `D*T₀`,

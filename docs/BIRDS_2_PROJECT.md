@@ -39,13 +39,31 @@ Birds 2 may reuse shared utilities from Birds 1 where their semantics remain app
 
 Where Birds 2 introduces materially different stochastic semantics, it should use its own model implementation and tests.
 
+### Single-origin model, summed model, and materialization wrapper
+
+Treat the construction as three models:
+
+- **Birds 2a** is the single-origin expansion/refinement model. Its population and flow queries describe contributions from one time-zero origin channel.
+- **Birds 2b** is the summed model, composing origin channels into the global population, including optimizations to the hierarchy placement of summation. Its population and flow query interfaces may follow Birds 1, and it supports fine-resolution queries without knowing whether it is being wrapped.
+- **Birds 2c** wraps 2b with a materialization frontier and an explicit path model. It queries 2b at the frontier or coarser scales and defines its own finer-scale answers from materialized birds.
+
+Birds 2c is not required to reproduce 2b's unused fine-scale answers, including finer facts retained by expansion within its channels. It must respect the populations and flows it takes from 2b at the frontier and remain internally consistent under its own semantics.
+
+The wrapper's query cutoff is not necessarily a cutoff on 2b's internal dependencies: answering a frontier query may require finer retained expansion facts inside its channels. Materialization does not require changing the underlying 2a or 2b models or making them aware of the wrapper.
+
+### Cost-benefit decisions
+
+Optimization and calibration work should include explicit cost-benefit analysis. A proposed change may be implemented, deferred, or declined with a documented rationale and supporting evidence. Completion does not require every investigated optimization to succeed or every observed discrepancy to be eliminated; structural correctness remains mandatory.
+
 ---
 
 ## 3. Phase 1 — Expansion and contraction integration
 
 Begin with the current single-origin expansion construction.
 
-Complete the single-channel model by integrating the retained expansion facts with the inward refinement machinery.
+Use **length 1 and duration 1** as the Birds 2 base initialization, rather than inheriting Birds 1's length 16 and duration 256. Expansion supplies coarser scales as needed. The scale relation remains `T=L²`, so a channel introduced at a larger origin width uses the corresponding squared initial duration. Keep these conventions in named constants. This choice does not by itself select the complete time-zero origin partition.
+
+Complete the single-channel Birds 2a model by integrating the retained expansion facts with the inward refinement machinery.
 
 The combined hierarchy must define, for every supported query, whether the requested fact is:
 
@@ -71,7 +89,7 @@ This phase should also complete the single-channel dependency/support analysis n
 
 ## 4. Phase 2 — Global channel composition
 
-Extend the single-channel construction to the full spatial population.
+Extend the single-channel construction to the full spatial population in Birds 2b.
 
 Choose a canonical disjoint partition of the time-zero spatial line into origin channels. Each channel receives an independent random namespace and its own time-zero population.
 
@@ -87,7 +105,7 @@ Once the explicit global sum works, optimize the hierarchy by moving summations 
 
 Instead of independently refining every contributing channel all the way to the requested output and adding only at the end, compatible contributions may be combined at higher hierarchy levels so that later refinement work operates on aggregated populations and flows.
 
-These transformations must preserve the intended stochastic semantics. In particular, moving a summation across a stochastic operation is valid only when the resulting joint and conditional distributions have the intended behavior and no conditioning information required by later refinement is lost.
+These transformations must continue to approximate the same Poisson–Brownian target, but need not preserve the explicit channel sum's exact probability law. Small differences are acceptable: for example, applying a bounded-distribution cutoff after summation rather than before it may produce narrower support. Document and evaluate changes to support, joint distributions, and conditional behavior, while retaining conditioning information needed for consistency and conservation.
 
 The optimized construction may produce different outcomes for a given seed than the explicit channel-sum reference construction. Birds 2 does not require structural changes to preserve the previous construction's seeded outcomes.
 
@@ -97,7 +115,7 @@ The explicit channel-sum implementation remains useful as a conceptual and stati
 
 - Global queries compose a finite set of disjoint origin channels.
 - The explicit channel-sum implementation is correct and reproducible.
-- Useful summations have been moved to more efficient hierarchy locations where justified.
+- Useful summation placements have been evaluated and adopted where justified, with deferrals or declined changes documented through cost-benefit analysis.
 - The optimized construction has explicitly specified stochastic semantics and preserves the required conservation, ownership, consistency, and finite-dependency invariants.
 
 ---
@@ -109,6 +127,8 @@ After the expansion/refinement hierarchy and summation placement are stable, cal
 Calibration should proceed through the model's dependency construction from earlier facts toward later derived facts.
 
 For representative canonical cells and flows, compare sampled count distributions across many seeds with their corresponding Poisson target distributions.
+
+Poisson marginals organize this dependency-ordered calibration work; they are not the only metrics for final model quality. Broader evaluation includes joint population behavior, displacement moments, temporal dependence, and trajectories, using the model-independent [evaluation scorecard](./BIRDS_EVALUATION.md). Define the measurement scope and practical acceptance criteria before the calibration campaign, and reassess relevant metrics after materialization or sampler changes.
 
 Where a stage introduces systematic discrepancy, investigate changes to its stochastic kernel or coupling before attributing downstream errors to later stages.
 
@@ -127,8 +147,8 @@ Calibration changes must preserve the structural invariants of the model, especi
 
 ### Phase 3 completion criteria
 
-- Major sources of count-distribution bias in the aggregate hierarchy have been identified.
-- Appropriate corrections have been implemented and characterized.
+- Important count-distribution biases within the agreed measurement scope have been investigated, with findings and unresolved causes documented.
+- Corrections have been implemented and characterized where worthwhile; deferred or declined corrections have an explicit cost-benefit rationale.
 - The resulting aggregate model has a documented relationship to its Poisson–Brownian reference.
 - Remaining discrepancies are explicit rather than accidental.
 
@@ -136,9 +156,11 @@ Calibration changes must preserve the structural invariants of the model, especi
 
 ## 6. Phase 4 — Materialization frontier
 
-Introduce a finite refinement frontier at which anonymous aggregate populations become explicit individual birds.
+Introduce a finite refinement frontier in the Birds 2c wrapper at which anonymous aggregate populations become explicit individual birds. Birds 2a and 2b remain independently queryable and do not implement this frontier.
 
 Choose the frontier from the model parameters and a target expected population per materialization cell, rather than from the realized population of each individual cell.
+
+An expected-population target is not a hard bound on realized population or materialization cost.
 
 Materialization begins at the start of a normal refinement epoch, where cell populations and flow counts already exist at some scale `(L, T)`.
 
@@ -146,23 +168,25 @@ The initial materialization construction has four stages:
 
 ### A. Materialize positions
 
-Each cell samples one spatial position for every bird in its population.
+Each cell samples one independent uniform spatial position within its interval for every bird in its population.
 
 ### B. Allocate positions to inflows
 
-Each cell partitions its materialized birds among its known incoming flows, respecting all inflow counts exactly.
+Each cell uniformly samples an assignment of its materialized birds to its known incoming flows, respecting all inflow counts exactly.
 
 ### C. Allocate positions to outflows
 
-Independently for the initial implementation, each cell partitions the same materialized birds among its outgoing flows, respecting all outflow counts exactly.
+Independently of the inflow assignment, each cell uniformly samples an assignment of the same materialized birds to its outgoing flows, respecting all outflow counts exactly.
 
 ### D. Match flow endpoints
 
-Each flow constructs a bijection between the materialized source birds assigned to that flow and its materialized destination birds.
+Each flow samples a uniformly random bijection between the materialized source birds assigned to that flow and its materialized destination birds.
 
 After Stage D, each resulting endpoint pair defines an explicit path segment.
 
-No further anonymous population subdivision is needed below the materialization frontier.
+These uniform choices define the initial implementation. After correctness is established, non-uniform position, allocation, or matching distributions may be investigated as model improvements.
+
+Birds 2c performs no further anonymous population subdivision below the materialization frontier and does not request 2b's fine-scale answers as constraints on its paths.
 
 ---
 
@@ -181,6 +205,8 @@ This operation can repeat recursively to arbitrary supported precision.
 The path model should have canonical addressed midpoint randomness and should not depend on the order in which path segments are refined.
 
 Materialized birds therefore have persistent explicit trajectories below the frontier, while birds above it remain anonymous aggregate population units.
+
+All finer-scale population and flow answers exposed by 2c must be derived from these paths, not independently sampled from 2b. Derive path-support bounds that permit finite enumeration of candidate segments for such queries: a bridge can enter a queried region even when both endpoints lie outside it. Verify frontier agreement, fine-query/path consistency, finite candidate enumeration, and query-order/cache independence.
 
 This should substantially simplify identity tracking relative to Birds 1.
 
@@ -274,11 +300,11 @@ Likewise, structural revisions within Birds 2 need not preserve the exact seeded
 The intended Birds 2 sequence is:
 
 1. **Expansion**
-   - complete the single-channel expansion model;
+   - complete the single-channel Birds 2a expansion model;
    - integrate inward refinement.
 
 2. **Global composition**
-   - sum a finite set of origin channels;
+   - build Birds 2b by summing a finite set of origin channels;
    - optimize where summation occurs in the hierarchy.
 
 3. **Calibration**
@@ -286,7 +312,7 @@ The intended Birds 2 sequence is:
    - correct important expansion/refinement biases.
 
 4. **Materialization**
-   - introduce the fixed materialization frontier;
+   - wrap the summed Birds 2b model with Birds 2c's fixed materialization frontier;
    - construct explicit endpoint identities and flow mappings;
    - hand off to individual path refinement.
 
@@ -310,10 +336,10 @@ Birds 2 is complete when:
 - global queries compose the spatial population through a finite origin-channel hierarchy;
 - expansion and inward refinement form one consistent random-access model;
 - major aggregate statistical biases have been measured and calibrated where practical;
-- anonymous refinement terminates at a deterministic materialization frontier;
+- Birds 2c hands off from aggregate queries to explicit paths at a deterministic materialization frontier, without requiring Birds 2a or 2b to stop supporting finer queries;
 - explicit birds below that frontier have recursively refinable paths;
 - the multinomial-sampler choice has been revisited using Birds 2 workloads;
-- end-to-end profiling has been performed and major practical bottlenecks addressed;
+- end-to-end profiling has been performed and major practical bottlenecks addressed where worthwhile, with remaining limitations and cost-benefit decisions documented;
 - the model has an explorable browser demo; and
 - Birds 1 remains available alongside Birds 2 unless a separate later decision removes it.
 
