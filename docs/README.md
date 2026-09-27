@@ -20,7 +20,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_2_EXPANSION_PROPOSAL.md`](./BIRDS_2_EXPANSION_PROPOSAL.md) records the Birds 2
   expansion-phase proposal: single-origin expansion, classifier-based contraction,
   support-guided channel composition, and later local aggregation. Only the expansion
-  prototype is implemented; this is not a replacement for the production v1 specification.
+  and initial classifier/projection machinery are implemented; full contraction remains
+  pending. This is not a replacement for the production v1 specification.
 - [`BIRDS_EXPANSION_PROTOTYPE.md`](./BIRDS_EXPANSION_PROTOTYPE.md) describes the standalone
   single-origin outward-expansion experiment supporting the Birds 2 proposal, its retained
   contribution records, and CLI. It does not replace the production v1 specification.

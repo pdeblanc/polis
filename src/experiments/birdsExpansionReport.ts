@@ -1,5 +1,5 @@
 /// <reference types="node" />
-import { BirdsExpansion, type ExpansionCell } from './birdsExpansion';
+import { Birds2aExpansion, type ExpansionCell } from '../models/birds2a/expansion';
 
 // Positional arguments: expansion count, density, diffusion, seed.
 const args = process.argv.slice(2);
@@ -17,7 +17,7 @@ const expansions = Number(positional[0] ?? 3);
 if (!Number.isSafeInteger(expansions) || expansions < 0) throw new RangeError('Expansion count must be a nonnegative safe integer');
 const density = Number(positional[1] ?? 2), diffusion = Number(positional[2] ?? 0.5);
 const seed = positional[3] ?? 'Polis expansion prototype';
-const model = new BirdsExpansion(seed, density, diffusion, origin);
+const model = new Birds2aExpansion(seed, density, diffusion, origin);
 let retainedSteps = 0, retainedAllocations = 0, retainedBridgeBatches = 0;
 for (let index = 0; index <= expansions; index++) {
   const start = performance.now();
@@ -25,10 +25,10 @@ for (let index = 0; index <= expansions; index++) {
   const elapsedMs = performance.now() - start;
   const extensions = epoch.kind === 'expanded' ? [epoch.forwardExtension, epoch.backwardExtension] : [];
   const steps = epoch.kind === 'initial' ? [epoch.forwardStep, epoch.backwardStep]
-    : extensions.flatMap((e) => [e.direct, ...e.steps]);
+    : extensions.flatMap((e) => [e.direct, e.toThree, ...e.steps]);
   retainedSteps += steps.length;
   retainedAllocations += steps.reduce((s, step) => s + step.allocations.length, 0);
-  retainedBridgeBatches += extensions.reduce((s, e) => s + e.bridges.reduce((n, b) => n + 1 + b.early.length, 0), 0);
+  retainedBridgeBatches += extensions.reduce((s, e) => s + e.lateBridges.length + e.earlyBridges.length, 0);
   console.log(JSON.stringify(fullJson ? epoch : {
     index, seed, density, diffusion, origin: epoch.origin, population: epoch.population,
     cellWidth: epoch.cellWidth, timeStep: epoch.timeStep,

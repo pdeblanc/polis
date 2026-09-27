@@ -1,25 +1,24 @@
 # Birds single-origin expansion prototype
 
-This standalone experiment expands the time horizon of one fixed population originating
-in one cell at time zero. It is not part of the production Birds model or GUI. Its purpose
-is to expose concrete intermediate facts for review before specifying contraction or
-combining multiple origin channels into a global model.
+This construction expands the time horizon of one fixed population originating
+in one cell at time zero. It lives in the Birds 2a model directory and has a standalone
+inspection CLI. It is not part of the production Birds 1 model or GUI. Its retained
+records provide the authoritative facts for Birds 2a contraction.
 
 The [Birds 2 expansion-phase proposal](./BIRDS_2_EXPANSION_PROPOSAL.md) records the
 architectural conclusions, expansion support bounds, and the planned sequence from
 single-channel contraction to global composition and local aggregation.
 
-Implementation: [`birdsExpansion.ts`](../src/experiments/birdsExpansion.ts).
-Tests: [`birdsExpansion.test.ts`](../src/experiments/birdsExpansion.test.ts).
+Implementation: [`expansion.ts`](../src/models/birds2a/expansion.ts).
+Tests: [`expansion.test.ts`](../src/models/birds2a/expansion.test.ts).
 
 ## Origin and initialization
 
 The caller specifies an aligned dyadic cell `[a,a+L₀)` at time zero: `L₀` is a positive
-power of two and `a` is an integer multiple of `L₀`. Examples include `[0,16)`, `[16,32)`,
-`[32,64)`, and negative or fractional-scale cells. The default is `[0,16)`.
+power of two and `a` is an integer multiple of `L₀`. Examples include `[0,1)`, `[1,2)`,
+`[2,4)`, and negative or fractional-scale cells. The default is `[0,1)`.
 
 The [Birds 2 project plan](./BIRDS_2_PROJECT.md) specifies base length 1 and duration 1.
-Updating the prototype's default is pending; `--origin 0 1` already selects that scale.
 
 Sample its population once from a Poisson law with mean `populationDensity * L₀`.
 Use two separate multinomial allocations of this same total to obtain endpoint
@@ -43,9 +42,10 @@ branch, generate the following at width `L`, in this order:
 2. **Insert `3T`.** For each positive direct flow from center `x` at `T` to center `y`
    at `4T`, allocate its count among intermediate cells using a rounded-normal kernel
    with mean `(x+2y)/3` and variance `2DT/3`.
-3. **Insert `2T`.** For each allocation through center `z` at `3T`, allocate its count
-   among cells at `2T`, with mean `(x+z)/2` and variance `DT/2`. Keep its `4T` destination
-   attached to this allocation; do not pool flows with different final destinations.
+3. **Aggregate, then insert `2T`.** Sum `T → 3T` legs with the same endpoint cells
+   across all `4T` destinations. Allocate each summed count among cells at `2T`,
+   with mean `(x+z)/2` and variance `DT/2`. The early batch owns just its `T` and
+   `3T` endpoints. This follows Birds 1's aggregate-before-subdivide rule.
 4. **Aggregate endpoint cells at `4T`.** Sum adjacent width-`L` cells into globally
    aligned width-`2L` cells. These aggregates are the next epoch's forward input.
 
@@ -54,8 +54,8 @@ then `-2T`. Backward records follow the outward computation; physical chronologi
 flow is in the opposite direction. Each epoch is one eager batch containing both branches.
 
 After epoch `e`, endpoint width is `L₀ 2^e` and time horizon is `T₀ 4^e`. Initial
-allocation is epoch zero. With the default origin, epoch zero reaches `±256`; epoch one
-generates `±1024`, `±768`, `±512` and ends with width-32 endpoint contributions.
+allocation is epoch zero. With the default origin, epoch zero reaches `±1`; epoch one
+generates `±4`, `±3`, `±2` and ends with width-2 endpoint contributions.
 
 ## Kernels and approximation
 
@@ -98,7 +98,7 @@ multinomial sampler.
 ## Inspectable records and ownership
 
 ```ts
-const experiment = new BirdsExpansion('example', 2, 0.5, { min: 32, max: 64 });
+const experiment = new Birds2aExpansion('example', 2, 0.5, { min: 2, max: 4 });
 const initial = experiment.getEpoch(0);
 const expanded = experiment.getEpoch(1);
 ```
@@ -109,10 +109,11 @@ Every epoch exposes `origin`, `population`, `cellWidth`, `timeStep`, `forward`, 
 - An `initial` epoch also exposes `atZero`, `forwardStep`, and `backwardStep`.
 - An `expanded` epoch exposes `forwardExtension` and `backwardExtension`, each containing:
   - `direct`: the sampled `T → 4T` step, including complete per-source allocations;
-  - `bridges`: one retained late bridge per positive direct flow, with its early
-    bridges nested beneath it; these encode joint counts across all four times;
-  - `steps`: the three adjacent-time flow marginals, derived by summing those joint
-    counts without additional randomness;
+  - `lateBridges`: one three-time allocation through `3T` per positive direct flow;
+  - `toThree`: the `T → 3T` flows aggregated across `4T` destinations;
+  - `earlyBridges`: one three-time allocation through `2T` per positive `toThree` flow;
+  - `steps`: the three adjacent-time flows, derived by summing these batches
+    without additional randomness;
   - `coarsened`: the aggregated `4T` endpoint frame.
 
 Sampled allocations retain zero categories. Frames and derived adjacent-step allocations
@@ -122,8 +123,8 @@ coarsening, and subsequent epochs reuse the previous coarse frames by reference.
 
 Population addresses identify the origin interval. All transport/bridge addresses also
 include the origin. Transport addresses identify the two times and source cell. Bridge
-addresses identify the endpoint cells and all three times; early bridges additionally
-identify the enclosing direct flow's `4T` destination. Category suffixes identify the
+addresses identify the endpoint cells and all three times. Early bridges do not retain
+or address their former `4T` destinations. Category suffixes identify the
 allocated cell. Distinct origin channels and conditional batches therefore have distinct
 addresses without relying on sparse-array indices or request order.
 
@@ -139,23 +140,60 @@ choice or depth.
 npm run experiment:birds-expansion
 npm run experiment:birds-expansion -- 3 2 0.5 'example seed' --origin 32 64
 npm run experiment:birds-expansion -- 1 2 0.5 'example seed' --origin -32 -16 --json
-npm test -- src/experiments/birdsExpansion.test.ts
+npm test -- src/models/birds2a
 ```
 
 Positional arguments are expansion count after initialization, density, diffusion rate,
 and seed. Defaults are `3`, `2`, `0.5`, and `Polis expansion prototype`. `--origin min max`
-selects the origin interval; omission selects `[0,16)`. Normal output is one summary per
+selects the origin interval; omission selects `[0,1)`. Normal output is one summary per
 epoch: the fixed population, occupied endpoint-cell counts, retained step/allocation/bridge
 batch counts, and elapsed time. Step/allocation counts include derived marginal records.
 `--json` prints full epoch records; shared objects are repeated in JSON, so serialization
 size is not retained-memory usage.
 
 Tests cover configurable origins and initial scales, Poisson initialization, conservation
-of every allocation, four-time joint-to-marginal consistency, endpoint coarsening,
+of every allocation, three-time batch-to-leg consistency, endpoint coarsening,
 kernel variances/phases, generation order, negative coordinates and backward time,
 unique addresses across origins and conditional contexts, deterministic replay,
-immutable retention, empty populations, and zero diffusion. They test the construction,
+immutable retention, empty populations, and zero diffusion. A regression checks that
+multiple `4T` destinations contribute to one early batch and that its single sampling
+call uses their summed count with no `4T` address suffix. Tests cover the construction,
 not the statistical correctness of library samplers.
+
+## Classifiers and expansion readers
+
+[`classifiers.ts`](../src/models/birds2a/classifiers.ts) classifies legal cells and
+ordinary flows as expansion projections, contraction dependencies, or explicitly
+unresolved expansion-coupling cases. It uses
+geometry and the channel origin, not seed, population, or cache contents. The spatial
+grid has no fixed coarse ceiling; it supports both sides of the unit initialization.
+Ordinary flows retain the epoch, half-duration, quarter-duration, and mixed-width
+geometries of the inward hierarchy. The direct duration-3T extension is a retained
+expansion record, not an ordinary flow query.
+
+[`expansionFacts.ts`](../src/models/birds2a/expansionFacts.ts) reads classifier-provided
+population and flow projections, building the owning expansion epoch when necessary.
+Endpoint queries use the finest retained frame, including the fine frame underneath
+a coarsened endpoint. Flow projections read retained adjacent-time steps; negative-time
+records are exposed as chronological flows. Sparse missing entries in an available
+projection contribute zero for this channel.
+
+The records contain separate `(T,3T,4T)` and `(T,2T,3T)` tables, not a four-time
+joint table. Consequently `2T → 4T` counts cannot be projected. Their classifiers
+return `unresolved-expansion-coupling`; defining these counts consistently with the
+retained margins is part of contraction integration. This case must not silently
+return zero, fabricate a joint table, or independently resample an already-fixed margin.
+
+Cell-subdivision batches are classified separately: either retrieve retained child
+populations or, when no finer expansion fact exists, identify a binomial owner. The
+recursive samplers are not implemented yet. Temporal and incidence batch ownership,
+the contraction query engine, motion-support enumeration, and finite-ancestry proof
+remain to be completed. These readers are internal building blocks, not a partial
+consumer-facing Birds 2a query API.
+
+Tests additionally check classifier domains and returned dependencies, frame and step
+projections, mixed-width margins, empty contributions, cold versus already-built epoch
+access, and preservation of projected answers after further expansion.
 
 Open work includes contraction consistent with retained batches, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.

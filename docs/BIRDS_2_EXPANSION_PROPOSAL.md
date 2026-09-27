@@ -60,8 +60,7 @@ N ~ Poisson(rho L₀)
 innovation variance `D * duration`. Birds 2 uses base length 1 and duration 1;
 examples of origins are `[0,1)`, `[1,2)`, and `[2,4)`, with analogous negative intervals.
 Expansion makes it unnecessary to inherit Birds 1's length-16, duration-256 base.
-The prototype permits a caller-specified origin; its current default remains `[0,16)`
-until the implementation is updated, and `--origin 0 1` exercises the planned base.
+The expansion implementation permits a caller-specified origin and defaults to `[0,1)`.
 
 Set `T₀=L₀²`. The width default and the time/width-squared ratio are named constants,
 not query-local magic numbers. Allocate the same `N` independently forward and backward
@@ -81,9 +80,9 @@ cells at `±T`. On the forward branch:
    forward steps of duration `T`.
 2. For each positive direct flow from cell center `x` at `T` to center `y` at `4T`,
    insert its contribution at `3T` with mean `(x+2y)/3` and variance `2DT/3`.
-3. For each resulting allocation through center `z` at `3T`, insert its contribution
-   at `2T` with mean `(x+z)/2` and variance `DT/2`. Keep the original `4T` destination
-   attached to this conditional batch.
+3. Sum the resulting `T → 3T` legs over their `4T` destinations. For each aggregated
+   flow from center `x` to center `z`, insert its contribution at `2T` with mean
+   `(x+z)/2` and variance `DT/2`. One batch belongs to each `T → 3T` endpoint pair.
 4. Aggregate the width-`L` endpoint cells at `4T` into aligned width-`2L` cells. These
    endpoint contributions are the next epoch's input.
 
@@ -91,9 +90,11 @@ Perform the mirrored construction backward in time. Generation order on each bra
 `4T`, `3T`, `2T`, followed by endpoint coarsening; the whole epoch is computed eagerly.
 Backward records follow the outward computation, opposite to chronological flow.
 
-Retain the direct flows, joint allocations across all four times, derived adjacent-time
-flows, intermediate populations, and the fine and coarse endpoint frames. The joint
-allocations contain information that adjacent-time marginals alone cannot recover.
+Retain the direct flows, each three-time subdivision batch, the aggregated `T → 3T`
+flows, adjacent-time flows, intermediate populations, and fine/coarse endpoint frames.
+As in Birds 1, aggregate temporal legs before subdividing again. Do not retain additional
+provenance linking the `2T` allocations to individual `4T` destinations. The two
+three-time tables do not define a four-time joint table.
 
 The conditional means and variances are Brownian-bridge formulas applied to cell-center
 endpoints. With rounding and truncation this is not exact conditioning of the discrete
@@ -110,7 +111,8 @@ is deferred. In cell-index units, the kernels can be precomputed:
 The prototype uses the existing six-standard-deviation normal clamp and `Math.round`
 semantics. All allocations conserve their input counts exactly within safe-integer
 arithmetic. Random addresses distinguish origins, operations, endpoint geometry, and
-conditional contexts, including the final destination of each early bridge batch.
+the three times of each bridge. Early bridge addresses contain only their `T` and
+`3T` endpoint cells, not a former `4T` destination.
 
 ## Integrating single-channel contraction
 
@@ -126,14 +128,22 @@ expansion allocations are authoritative, including any margins they provide to o
 new contraction operations. Classifiers should supply the necessary dependency geometry;
 query implementations should not perform arithmetic on epoch or stage labels.
 
-There is a concrete reason to expect compatibility. For origin `[0,1)`, expansion
-to time `4` retains width-1 facts at `0,1,2,3,4`. Aggregating them to width 2
-provides the coarser views of an already-completed contraction epoch:
+For origin `[0,1)`, expansion to time `4` retains width-1 populations and adjacent
+flows at `0,1,2,3,4`. These supply many, but not all, facts required by contraction:
 
-- A–D temporal allocations can be projected from the retained joint records.
+- Temporal allocations can be projected only where the necessary association is
+  present in one retained three-time batch.
 - E–F populations and child populations can be obtained by summation.
 - G–H incidence margins and fine-flow reconciliations can be recovered from the retained
   fine flows, rather than sampled again.
+
+In particular, `2T → 4T` flow counts are not determined by these records. Pooling
+before the early split removes that association, and two flows sharing a cell at
+`3T` do not specify which birds continue between their other endpoints. Classifiers
+explicitly mark this as an unresolved expansion-coupling case, not a zero contribution
+or a valid expansion projection. Its consistent construction, including any required
+constrained temporal batches, is a question for contraction integration. Do not
+introduce extra provenance into expansion merely to make that projection available.
 
 Where expansion has not supplied the finer detail, retain the usual contraction
 operations: temporal multinomials, spatial binomials, and hypergeometric allocations
@@ -235,9 +245,13 @@ are acceptable if documented and evaluated. Verify conservation, ownership, supp
 and statistical behavior, and adopt or defer each optimization based on cost-benefit
 analysis.
 
-## Next work
+## Implementation status and next work
 
-Pause expansion implementation here. The prototype and its tests establish a concrete
-single-origin expansion construction. The next implementation project is the classifier
-and query integration for contraction within one channel, followed by its support
-analysis. Global channel composition and local pooling remain explicitly later steps.
+The single-origin expansion is implemented in `src/models/birds2a/expansion.ts`, with
+base length 1 and duration 1. Cell/flow entry classifiers and expansion-projection
+readers are implemented, including classification of whole cell-subdivision batches.
+They do not yet constitute a complete contraction query engine. The next work is the
+remaining temporal/incidence/reconciliation owner classifications, support enumeration,
+and recursive queries, followed by complete dependency/support analysis. Global channel
+composition and local pooling remain explicitly later steps. The
+[implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) describe the current modules and CLI.

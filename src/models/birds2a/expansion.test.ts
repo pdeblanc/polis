@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import poissonQuantile from '@stdlib/stats-base-dists-poisson-quantile';
-import { createAddressedRandom } from '../utils/rng/addressedRandom';
-import { uniformUnit } from '../utils/distributions/uniform';
-import { withMultinomialObserver } from '../utils/distributions/multinomial';
-import { roundedNormal } from '../utils/distributions/roundedNormal';
-import { BirdsExpansion, type BridgeBatch, type ChannelExtension, type ContributionFrame, type ContributionStep } from './birdsExpansion';
+import { createAddressedRandom } from '../../utils/rng/addressedRandom';
+import { uniformUnit } from '../../utils/distributions/uniform';
+import { withMultinomialObserver } from '../../utils/distributions/multinomial';
+import { roundedNormal } from '../../utils/distributions/roundedNormal';
+import { Birds2aExpansion as BirdsExpansion, type BridgeBatch, type ChannelExtension, type ContributionFrame, type ContributionStep } from './expansion';
 
 const total = (frame: ContributionFrame) => frame.contributions.reduce((s, c) => s + c.count, 0);
 function checkStep(step: ContributionStep, population: number) {
@@ -35,7 +35,7 @@ function checkBridge(batch: BridgeBatch) {
 }
 
 function checkExtension(extension: ChannelExtension, input: ContributionFrame, population: number) {
-  const { direct, bridges, steps, coarsened } = extension;
+  const { direct, lateBridges, toThree, earlyBridges, steps, coarsened } = extension;
   expect(direct.from).toBe(input);
   expect(direct.to.time).toBe(4 * input.time);
   checkStep(direct, population);
@@ -49,34 +49,33 @@ function checkExtension(extension: ChannelExtension, input: ContributionFrame, p
   });
   const positiveFlows = direct.allocations.flatMap(({ fromCell, destinations }) =>
     destinations.filter(({ count }) => count > 0).map(({ cell, count }) => [fromCell.min, cell.min, count]));
-  expect(bridges.map(({ late }) => [late.fromCell.min, late.toCell.min, late.count])).toEqual(positiveFlows);
+  expect(lateBridges.map((batch) => [batch.fromCell.min, batch.toCell.min, batch.count])).toEqual(positiveFlows);
+  checkStep(toThree, population);
+  expect(toThree.from).toBe(input);
+  expect(toThree.to).toBe(steps[1].to);
+  expect(earlyBridges.map((batch) => [batch.fromCell.min, batch.toCell.min, batch.count])).toEqual(
+    toThree.allocations.flatMap(({ fromCell, destinations }) =>
+      destinations.map(({ cell, count }) => [fromCell.min, cell.min, count])));
 
-  // Independently marginalize each retained four-time joint count onto its three
-  // edges, verifying more than just conservation of whole-frame totals.
-  const expectedEdges = [new Map<string, number>(), new Map<string, number>(), new Map<string, number>()];
-  for (const { late, early } of bridges) {
-    checkBridge(late);
-    expect([late.fromTime, late.time, late.toTime]).toEqual([1, 3, 4].map((n) => n * input.time));
-    expect(early.map((batch) => [batch.toCell.min, batch.count])).toEqual(
-      late.intermediates.filter(({ count }) => count > 0).map(({ cell, count }) => [cell.min, count]));
-    for (const batch of early) {
+  const edgeMap = (step: ContributionStep) => new Map(step.allocations.flatMap(({ fromCell, destinations }) =>
+    destinations.filter(({ count }) => count > 0).map(({ cell, count }) => [JSON.stringify([fromCell.min, cell.min]), count] as const)));
+  const checkLegs = (batches: readonly BridgeBatch[], first: ContributionStep, second: ContributionStep, times: number[]) => {
+    const left = new Map<string, number>(), right = new Map<string, number>();
+    for (const batch of batches) {
       checkBridge(batch);
-      expect(batch.fromCell).toBe(late.fromCell);
-      expect([batch.fromTime, batch.time, batch.toTime]).toEqual([1, 2, 3].map((n) => n * input.time));
+      expect([batch.fromTime, batch.time, batch.toTime]).toEqual(times.map((n) => n * input.time));
       for (const { cell, count } of batch.intermediates) if (count) {
-        const points = [late.fromCell.min, cell.min, batch.toCell.min, late.toCell.min];
-        expectedEdges.forEach((edges, i) => {
-          const key = JSON.stringify(points.slice(i, i + 2));
-          edges.set(key, (edges.get(key) ?? 0) + count);
-        });
+        const a = JSON.stringify([batch.fromCell.min, cell.min]);
+        const b = JSON.stringify([cell.min, batch.toCell.min]);
+        left.set(a, (left.get(a) ?? 0) + count);
+        right.set(b, (right.get(b) ?? 0) + count);
       }
     }
-  }
-  steps.forEach((step, i) => {
-    const actual = new Map(step.allocations.flatMap(({ fromCell, destinations }) =>
-      destinations.map(({ cell, count }) => [JSON.stringify([fromCell.min, cell.min]), count] as const)));
-    expect(actual).toEqual(expectedEdges[i]);
-  });
+    expect(edgeMap(first)).toEqual(left);
+    expect(edgeMap(second)).toEqual(right);
+  };
+  checkLegs(lateBridges, toThree, steps[2], [1, 3, 4]);
+  checkLegs(earlyBridges, steps[0], steps[1], [1, 2, 3]);
   const expected = new Map<number, number>();
   for (const { cell, count } of direct.to.contributions) {
     const min = Math.floor(cell.min / coarsened.cellWidth) * coarsened.cellWidth;
@@ -90,6 +89,12 @@ function checkExtension(extension: ChannelExtension, input: ContributionFrame, p
 }
 
 describe('single-origin Birds expansion', () => {
+  it('starts at unit width and unit duration by default', () => {
+    const epoch = new BirdsExpansion('unit-origin', 2, 0.5).getEpoch(0);
+    expect(epoch.origin).toEqual({ min: 0, max: 1 });
+    expect(epoch.cellWidth).toBe(1);
+    expect(epoch.timeStep).toBe(1);
+  });
   for (const origin of [{ min: 0, max: 16 }, { min: 16, max: 32 }, { min: 32, max: 64 },
     { min: -64, max: -32 }, { min: -0.5, max: 0 }]) {
     it(`initializes the specified origin [${origin.min}, ${origin.max})`, () => {
@@ -171,14 +176,14 @@ describe('single-origin Birds expansion', () => {
   });
 
   it('generates endpoints before bridge splits, without sampling adjacent forward hops', () => {
-    const model = new BirdsExpansion('order', 2, 0.5);
+    const model = new BirdsExpansion('order', 32, 0.5);
     model.getEpoch(0);
     const stages: number[] = [];
     withMultinomialObserver((_n, _categories, address) => {
       const [kind, from, to, middle] = address.slice(3, 7);
-      expect(Math.abs(from as number)).toBe(256);
-      const stage = kind === 'transport' ? 0 : Math.abs(middle as number) === 768 ? 1 : 2;
-      expect(Math.abs(to as number)).toBe(stage === 2 ? 768 : 1024);
+      expect(Math.abs(from as number)).toBe(1);
+      const stage = kind === 'transport' ? 0 : Math.abs(middle as number) === 3 ? 1 : 2;
+      expect(Math.abs(to as number)).toBe(stage === 2 ? 3 : 4);
       stages.push(stage + ((from as number) < 0 ? 3 : 0));
     }, () => model.getEpoch(1));
     expect(new Set(stages)).toEqual(new Set([0, 1, 2, 3, 4, 5]));
@@ -211,6 +216,34 @@ describe('single-origin Birds expansion', () => {
       for (const item of Object.values(value)) checkFrozen(item, seen);
     }
     checkFrozen(model.getEpoch(3));
+  });
+
+  it('samples each summed T → 3T flow once, without a 4T destination in its address', () => {
+    const model = new BirdsExpansion('pooled-early', 256, 1);
+    model.getEpoch(0);
+    const draws: { count: number; address: readonly unknown[] }[] = [];
+    const epoch = withMultinomialObserver((count, _categories, address) => {
+      if (address[3] === 'bridge' && Math.abs(address[5] as number) === 3) draws.push({ count, address });
+    }, () => model.getEpoch(1));
+    if (epoch.kind !== 'expanded') throw new Error('Expected expansion');
+    let pooled = 0;
+    for (const extension of [epoch.forwardExtension, epoch.backwardExtension]) {
+      const donors = new Map<string, number>();
+      for (const batch of extension.lateBridges) for (const entry of batch.intermediates) if (entry.count) {
+        const key = JSON.stringify([batch.fromCell.min, entry.cell.min]);
+        donors.set(key, (donors.get(key) ?? 0) + 1);
+      }
+      pooled += [...donors.values()].filter((count) => count > 1).length;
+      for (const batch of extension.earlyBridges) {
+        const address = ['birds-expansion', 0, 1, 'bridge', batch.fromTime, batch.toTime, batch.time,
+          batch.fromCell.min, batch.fromCell.max, batch.toCell.min, batch.toCell.max];
+        const matching = draws.filter((draw) => JSON.stringify(draw.address) === JSON.stringify(address));
+        expect(matching).toHaveLength(1);
+        expect(matching[0].count).toBe(batch.count);
+      }
+    }
+    expect(pooled).toBeGreaterThan(0);
+    expect(draws).toHaveLength(epoch.forwardExtension.earlyBridges.length + epoch.backwardExtension.earlyBridges.length);
   });
 
   it('keeps zero-diffusion birds inside the coarse cell containing the origin', () => {

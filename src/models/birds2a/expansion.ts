@@ -1,12 +1,12 @@
 import poissonQuantile from '@stdlib/stats-base-dists-poisson-quantile';
-import { createAddressedRandom, type AddressedRandom, type Seed } from '../utils/rng/addressedRandom';
-import type { Address } from '../utils/rng/address';
-import { uniformUnit } from '../utils/distributions/uniform';
-import { multinomial } from '../utils/distributions/multinomial';
-import { roundedNormal, type ProbabilityMassTable } from '../utils/distributions/roundedNormal';
-import { NORMAL_MAX_DEVIATIONS } from '../utils/distributions/normal';
+import { createAddressedRandom, type AddressedRandom, type Seed } from '../../utils/rng/addressedRandom';
+import type { Address } from '../../utils/rng/address';
+import { uniformUnit } from '../../utils/distributions/uniform';
+import { multinomial } from '../../utils/distributions/multinomial';
+import { roundedNormal, type ProbabilityMassTable } from '../../utils/distributions/roundedNormal';
+import { NORMAL_MAX_DEVIATIONS } from '../../utils/distributions/normal';
 
-export const EXPANSION_DEFAULT_CELL_WIDTH = 16;
+export const EXPANSION_DEFAULT_CELL_WIDTH = 1;
 export const EXPANSION_TIME_PER_WIDTH_SQUARED = 1;
 
 export interface ExpansionCell { readonly min: number; readonly max: number }
@@ -44,19 +44,15 @@ export interface BridgeBatch {
   readonly intermediates: readonly PopulationContribution[];
 }
 
-export interface TrisectedFlow {
-  /** T → 4T, split at 3T. */
-  readonly late: BridgeBatch;
-  /** T → 3T, split at 2T; one batch per positive late allocation.
-   * Nested beneath `late` to retain the original 4T destination as well. */
-  readonly early: readonly BridgeBatch[];
-}
-
 export interface ChannelExtension {
   /** Sampled directly over duration 3T, at the inherited width L. */
   readonly direct: ContributionStep;
-  /** Retained joint counts for (T, 2T, 3T, 4T), not just adjacent marginals. */
-  readonly bridges: readonly TrisectedFlow[];
+  /** One three-time allocation per T → 4T flow, split through 3T. */
+  readonly lateBridges: readonly BridgeBatch[];
+  /** T → 3T flows summed across their former 4T destinations. */
+  readonly toThree: ContributionStep;
+  /** One three-time allocation per aggregated T → 3T flow, split through 2T. */
+  readonly earlyBridges: readonly BridgeBatch[];
   /** Derived adjacent steps, ordered outwards: T → 2T → 3T → 4T. */
   readonly steps: readonly [ContributionStep, ContributionStep, ContributionStep];
   /** Aggregation of direct.to into width-2L cells, used by the next epoch. */
@@ -79,9 +75,9 @@ export type ExpansionEpoch = EpochState & (
       readonly backwardExtension: ChannelExtension }
 );
 
-/** Standalone single-origin, outward-only experiment. All records are retained.
+/** Single-origin outward expansion. All records are retained.
  * No contraction, global-channel summation, or spacetime completeness guarantee. */
-export class BirdsExpansion {
+export class Birds2aExpansion {
   readonly origin: ExpansionCell;
   readonly populationDensity: number;
   readonly diffusionRate: number;
@@ -174,29 +170,34 @@ export class BirdsExpansion {
     const t = initial.time, width = initial.cellWidth;
     // Generate all 4T endpoints, then all 3T allocations, then all 2T allocations.
     const direct = this.#advance(initial, 4 * t, kernel);
-    const lateBatches = direct.allocations.flatMap(({ fromCell, destinations }) =>
+    const lateBridges = Object.freeze(direct.allocations.flatMap(({ fromCell, destinations }) =>
       destinations.filter(({ count }) => count > 0).map(({ cell: toCell, count }) =>
-        this.#bridge(t, 4 * t, 3 * t, fromCell, toCell, count, width, 2, 3, [])));
-    const bridges = Object.freeze(lateBatches.map((late) => Object.freeze({ late,
-      early: Object.freeze(late.intermediates.filter(({ count }) => count > 0).map(({ cell: toCell, count }) =>
-        this.#bridge(t, 3 * t, 2 * t, late.fromCell, toCell, count, width, 1, 2,
-          [late.toCell.min, late.toCell.max]))),
-    })));
-    // Sum the retained joint table; no further sampling for adjacent-time flows.
-    const edges = [new Map<number, Map<number, number>>(), new Map<number, Map<number, number>>(), new Map<number, Map<number, number>>()];
-    for (const { late, early } of bridges) for (const batch of early) {
-      for (const { cell: middle, count } of batch.intermediates) {
-        if (!count) continue;
-        addEdge(edges[0], late.fromCell.min, middle.min, count);
-        addEdge(edges[1], middle.min, batch.toCell.min, count);
-        addEdge(edges[2], batch.toCell.min, late.toCell.min, count);
-      }
+        this.#bridge(t, 4 * t, 3 * t, fromCell, toCell, count, width, 2, 3))));
+    const firstLeg = new Map<number, Map<number, number>>();
+    const lastLeg = new Map<number, Map<number, number>>();
+    for (const batch of lateBridges) for (const { cell, count } of batch.intermediates) {
+      if (!count) continue;
+      addEdge(firstLeg, batch.fromCell.min, cell.min, count);
+      addEdge(lastLeg, cell.min, batch.toCell.min, count);
     }
-    const first = stepFromEdges(initial, 2 * t, edges[0]);
-    const second = stepFromEdges(first.to, 3 * t, edges[1]);
-    const third = Object.freeze({ ...stepFromEdges(second.to, 4 * t, edges[2]), to: direct.to });
-    return Object.freeze({ direct, bridges, steps: Object.freeze([first, second, third] as const),
-      coarsened: coarsen(direct.to) });
+    const toThree = stepFromEdges(initial, 3 * t, firstLeg);
+    // As in Birds 1, aggregate legs before subdividing again. The second batch
+    // owns only its T and 3T endpoints, not its former 4T destination.
+    const earlyBridges = Object.freeze(toThree.allocations.flatMap(({ fromCell, destinations }) =>
+      destinations.map(({ cell: toCell, count }) =>
+        this.#bridge(t, 3 * t, 2 * t, fromCell, toCell, count, width, 1, 2))));
+    const firstHalf = new Map<number, Map<number, number>>();
+    const secondHalf = new Map<number, Map<number, number>>();
+    for (const batch of earlyBridges) for (const { cell, count } of batch.intermediates) {
+      if (!count) continue;
+      addEdge(firstHalf, batch.fromCell.min, cell.min, count);
+      addEdge(secondHalf, cell.min, batch.toCell.min, count);
+    }
+    const first = stepFromEdges(initial, 2 * t, firstHalf);
+    const second = Object.freeze({ ...stepFromEdges(first.to, 3 * t, secondHalf), to: toThree.to });
+    const third = Object.freeze({ ...stepFromEdges(toThree.to, 4 * t, lastLeg), to: direct.to });
+    return Object.freeze({ direct, lateBridges, toThree, earlyBridges,
+      steps: Object.freeze([first, second, third] as const), coarsened: coarsen(direct.to) });
   }
 
   #advance(from: ContributionFrame, time: number, kernel: ProbabilityMassTable): ContributionStep {
@@ -211,7 +212,7 @@ export class BirdsExpansion {
   }
 
   #bridge(fromTime: number, toTime: number, time: number, fromCell: ExpansionCell, toCell: ExpansionCell,
-    count: number, width: number, numerator: number, denominator: 2 | 3, context: Address): BridgeBatch {
+    count: number, width: number, numerator: number, denominator: 2 | 3): BridgeBatch {
     // Center interpolation becomes integer-index interpolation on an equal-width grid.
     // Floor and a nonnegative remainder also handle negative endpoint displacements.
     const offsetNumerator = numerator * ((toCell.min - fromCell.min) / width);
@@ -219,7 +220,7 @@ export class BirdsExpansion {
     const phase = offsetNumerator - base * denominator;
     const kernel = (denominator === 3 ? this.kernels.lateBridge : this.kernels.earlyBridge)[phase];
     const intermediates = this.#allocate(
-      ['bridge', fromTime, toTime, time, fromCell.min, fromCell.max, toCell.min, toCell.max, ...context],
+      ['bridge', fromTime, toTime, time, fromCell.min, fromCell.max, toCell.min, toCell.max],
       count, kernel, fromCell.min + base * width, width);
     return Object.freeze({ fromTime, toTime, time, fromCell, toCell, count, intermediates });
   }
@@ -262,7 +263,10 @@ function cell(min: number, width: number): ExpansionCell {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max - min !== width) throw new RangeError('Cell exceeds numeric geometry');
   return Object.freeze({ min: min === 0 ? 0 : min, max: max === 0 ? 0 : max });
 }
-function contribution(cell: ExpansionCell, count: number): PopulationContribution { return Object.freeze({ cell, count }); }
+function contribution(cell: ExpansionCell, count: number): PopulationContribution {
+  // Some inverse-CDF results are -0; counts have only one representation of zero.
+  return Object.freeze({ cell, count: count === 0 ? 0 : count });
+}
 function frame(time: number, cellWidth: number, contributions: PopulationContribution[]): ContributionFrame {
   return Object.freeze({ time, cellWidth, contributions: Object.freeze(contributions) });
 }
@@ -271,5 +275,5 @@ function frameFromTotals(time: number, width: number, totals: Map<number, number
 }
 function safeCount(count: number): number {
   if (!Number.isSafeInteger(count) || count < 0) throw new RangeError('Population exceeds safe-integer counts');
-  return count;
+  return count === 0 ? 0 : count;
 }
