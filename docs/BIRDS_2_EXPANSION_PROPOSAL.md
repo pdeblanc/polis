@@ -79,21 +79,21 @@ cells at `±T`. On the forward branch:
    variance `3DT`. This avoids the unnecessarily wide support of three successive
    forward steps of duration `T`.
 2. For each positive direct flow from cell center `x` at `T` to center `y` at `4T`,
-   insert its contribution at `3T` with mean `(x+2y)/3` and variance `2DT/3`.
-3. Sum the resulting `T → 3T` legs over their `4T` destinations. For each aggregated
-   flow from center `x` to center `z`, insert its contribution at `2T` with mean
-   `(x+z)/2` and variance `DT/2`. One batch belongs to each `T → 3T` endpoint pair.
+   insert its contribution at `2T` with mean `(2x+y)/3` and variance `2DT/3`.
+3. Sum the resulting `2T → 4T` legs over their `T` sources. For each aggregated
+   flow from center `z` to center `y`, insert its contribution at `3T` with mean
+   `(z+y)/2` and variance `DT/2`. One batch belongs to each `2T → 4T` endpoint pair.
 4. Aggregate the width-`L` endpoint cells at `4T` into aligned width-`2L` cells. These
    endpoint contributions are the next epoch's input.
 
 Perform the mirrored construction backward in time. Generation order on each branch is
-`4T`, `3T`, `2T`, followed by endpoint coarsening; the whole epoch is computed eagerly.
+`4T`, `2T`, `3T`, followed by endpoint coarsening; the whole epoch is computed eagerly.
 Backward records follow the outward computation, opposite to chronological flow.
 
-Retain the direct flows, each three-time subdivision batch, the aggregated `T → 3T`
+Retain the direct flows, each three-time subdivision batch, the aggregated `2T → 4T`
 flows, adjacent-time flows, intermediate populations, and fine/coarse endpoint frames.
 As in Birds 1, aggregate temporal legs before subdividing again. Do not retain additional
-provenance linking the `2T` allocations to individual `4T` destinations. The two
+provenance linking the `3T` allocations to individual `T` sources. The two
 three-time tables do not define a four-time joint table.
 
 The conditional means and variances are Brownian-bridge formulas applied to cell-center
@@ -105,14 +105,14 @@ is deferred. In cell-index units, the kernels can be precomputed:
 | --- | --- | --- |
 | Initial forward allocation | 0 | `D` |
 | Direct extension | 0 | `3D` |
-| Insert `3T` | 0, 1/3, 2/3 | `2D/3` |
-| Insert `2T` | 0, 1/2 | `D/2` |
+| Insert `2T` | 0, 1/3, 2/3 | `2D/3` |
+| Insert `3T` | 0, 1/2 | `D/2` |
 
 The prototype uses the existing six-standard-deviation normal clamp and `Math.round`
 semantics. All allocations conserve their input counts exactly within safe-integer
 arithmetic. Random addresses distinguish origins, operations, endpoint geometry, and
-the three times of each bridge. Early bridge addresses contain only their `T` and
-`3T` endpoint cells, not a former `4T` destination.
+the three times of each bridge. Second bridge addresses contain only their `2T` and
+`4T` endpoint cells, not a former `T` source.
 
 ## Integrating single-channel contraction
 
@@ -129,7 +129,7 @@ new contraction operations. Classifiers should supply the necessary dependency g
 query implementations should not perform arithmetic on epoch or stage labels.
 
 For origin `[0,1)`, expansion to time `4` retains width-1 populations and adjacent
-flows at `0,1,2,3,4`. These supply many, but not all, facts required by contraction:
+flows at `0,1,2,3,4`. These supply the overlapping coarser contraction facts:
 
 - Temporal allocations can be projected only where the necessary association is
   present in one retained three-time batch.
@@ -137,13 +137,13 @@ flows at `0,1,2,3,4`. These supply many, but not all, facts required by contract
 - G–H incidence margins and fine-flow reconciliations can be recovered from the retained
   fine flows, rather than sampled again.
 
-In particular, `2T → 4T` flow counts are not determined by these records. Pooling
-before the early split removes that association, and two flows sharing a cell at
-`3T` do not specify which birds continue between their other endpoints. Classifiers
-explicitly mark this as an unresolved expansion-coupling case, not a zero contribution
-or a valid expansion projection. Its consistent construction, including any required
-constrained temporal batches, is a question for contraction integration. Do not
-introduce extra provenance into expansion merely to make that projection available.
+The generation order supplies the coarser `0 → 4T` temporal structure without a
+four-time table. Summing the `(T,2T,4T)` table over `T` gives the `2T → 4T`
+counts. Because there is just one origin cell at time zero, these also determine
+the coarse `(0,2T,4T)` allocation for A–B. The `T → 2T` leg determines the
+left-half `(0,T,2T)` allocation, while the second bridge table directly supplies
+the right-half `(2T,3T,4T)` allocation for C–D. This resolves the temporal association
+needed here without retaining former sources through another subdivision.
 
 Where expansion has not supplied the finer detail, retain the usual contraction
 operations: temporal multinomials, spatial binomials, and hypergeometric allocations
@@ -187,8 +187,8 @@ C = K sqrt(DT/2) + L/2
 
 | Recorded time | Center-radius bound about `c₀` |
 | --- | --- |
-| `2T` | `R + A/3 + B/2 + C` |
-| `3T` | `R + 2A/3 + B` |
+| `2T` | `R + A/3 + B` |
+| `3T` | `R + 2A/3 + B/2 + C` |
 | `4T`, after coarsening | `R + A + L/2` |
 
 Add the relevant cell's half-width to cover the whole interval, not only its center.
@@ -196,10 +196,10 @@ The same bounds hold backward in time. Intermediate cells can extend beyond the 
 endpoint envelope, but their radii also grow as `sqrt(abs(t))` at recorded times.
 
 For example, with `D=0.5` the actual kernel tables give initial offset bound `4`, direct
-extension bound `7`, late-bridge residual bound `11/3`, and early-bridge residual bound
+extension bound `7`, first-bridge residual bound `11/3`, and second-bridge residual bound
 `7/2`, all in current cell-width units. Including rounding and coarsening, a conservative
 whole-cell envelope for all retained nonzero-time frames is
-`[c₀ - 11.08 sqrt(abs(t)), c₀ + 11.08 sqrt(abs(t))]`. This is worst-case support, not a
+`[c₀ - 10.40 sqrt(abs(t)), c₀ + 10.40 sqrt(abs(t))]`. This is worst-case support, not a
 typical displacement estimate or an empirically fitted boundary.
 
 Expansion does not determine the support at unrecorded times, particularly

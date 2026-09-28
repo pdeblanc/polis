@@ -54,6 +54,17 @@ describe('Birds 2a expansion fact projections', () => {
           for (const step of extension.steps) {
             checkFrame(model, step.to); checkStep(model, step);
           }
+          // At twice the spatial width, 2T → 4T is a legal half-duration flow.
+          const width = 2 * extension.fromTwo.from.cellWidth;
+          const expected = new Map<string, { flow: Birds2aFlow; count: number }>();
+          for (const batch of extension.fromTwo.allocations) for (const { cell, count } of batch.destinations) {
+            const inner = { ...coarse(batch.fromCell, width), time: extension.fromTwo.from.time };
+            const outer = { ...coarse(cell, width), time: extension.fromTwo.to.time };
+            const flow = inner.time < outer.time ? { source: inner, destination: outer } : { source: outer, destination: inner };
+            const key = JSON.stringify(flow);
+            expected.set(key, { flow, count: (expected.get(key)?.count ?? 0) + count });
+          }
+          for (const { flow, count } of expected.values()) expect(flowCount(model, flow)).toBe(count);
         }
       }
     });

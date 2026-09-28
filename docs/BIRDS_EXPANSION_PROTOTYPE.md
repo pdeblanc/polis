@@ -39,23 +39,24 @@ branch, generate the following at width `L`, in this order:
 1. **Extend directly from `T` to `4T`.** Each populated contributing cell allocates its
    count multinomially with forward variance `3DT`. Do not sample three successive
    forward hops; those would accumulate a wider architectural support envelope.
-2. **Insert `3T`.** For each positive direct flow from center `x` at `T` to center `y`
+2. **Insert `2T`.** For each positive direct flow from center `x` at `T` to center `y`
    at `4T`, allocate its count among intermediate cells using a rounded-normal kernel
-   with mean `(x+2y)/3` and variance `2DT/3`.
-3. **Aggregate, then insert `2T`.** Sum `T → 3T` legs with the same endpoint cells
-   across all `4T` destinations. Allocate each summed count among cells at `2T`,
-   with mean `(x+z)/2` and variance `DT/2`. The early batch owns just its `T` and
-   `3T` endpoints. This follows Birds 1's aggregate-before-subdivide rule.
+   with mean `(2x+y)/3` and variance `2DT/3`.
+3. **Aggregate, then insert `3T`.** Sum `2T → 4T` legs with the same endpoint cells
+   across all `T` sources. Allocate each summed count among cells at `3T`,
+   with mean `(z+y)/2` and variance `DT/2`, where `z` is the `2T` center.
+   The second batch owns just its `2T` and `4T` endpoints. This follows Birds 1's
+   aggregate-before-subdivide rule.
 4. **Aggregate endpoint cells at `4T`.** Sum adjacent width-`L` cells into globally
    aligned width-`2L` cells. These aggregates are the next epoch's forward input.
 
-Apply the same construction to the backward branch: `-T → -4T`, then insert `-3T`,
-then `-2T`. Backward records follow the outward computation; physical chronological
+Apply the same construction to the backward branch: `-T → -4T`, then insert `-2T`,
+then `-3T`. Backward records follow the outward computation; physical chronological
 flow is in the opposite direction. Each epoch is one eager batch containing both branches.
 
 After epoch `e`, endpoint width is `L₀ 2^e` and time horizon is `T₀ 4^e`. Initial
 allocation is epoch zero. With the default origin, epoch zero reaches `±1`; epoch one
-generates `±4`, `±3`, `±2` and ends with width-2 endpoint contributions.
+generates `±4`, `±2`, `±3` and ends with width-2 endpoint contributions.
 
 ## Kernels and approximation
 
@@ -70,8 +71,8 @@ In cell-index units, the precomputed kernels are:
 | --- | --- | --- |
 | Initial forward allocation | 0 | `D` |
 | Direct extension | 0 | `3D` |
-| Insert `3T` | 0, 1/3, or 2/3, plus integer translation | `2D/3` |
-| Insert `2T` | 0 or 1/2, plus integer translation | `D/2` |
+| Insert `2T` | 0, 1/3, or 2/3, plus integer translation | `2D/3` |
+| Insert `3T` | 0 or 1/2, plus integer translation | `D/2` |
 
 These values use `T/L²=1`; the implementation includes the named ratio in the variances.
 Interpolating equal-width cell centers is equivalent to interpolating their integer cell
@@ -109,9 +110,9 @@ Every epoch exposes `origin`, `population`, `cellWidth`, `timeStep`, `forward`, 
 - An `initial` epoch also exposes `atZero`, `forwardStep`, and `backwardStep`.
 - An `expanded` epoch exposes `forwardExtension` and `backwardExtension`, each containing:
   - `direct`: the sampled `T → 4T` step, including complete per-source allocations;
-  - `lateBridges`: one three-time allocation through `3T` per positive direct flow;
-  - `toThree`: the `T → 3T` flows aggregated across `4T` destinations;
-  - `earlyBridges`: one three-time allocation through `2T` per positive `toThree` flow;
+  - `firstBridges`: one three-time allocation through `2T` per positive direct flow;
+  - `fromTwo`: the `2T → 4T` flows aggregated across `T` sources;
+  - `secondBridges`: one three-time allocation through `3T` per positive `fromTwo` flow;
   - `steps`: the three adjacent-time flows, derived by summing these batches
     without additional randomness;
   - `coarsened`: the aggregated `4T` endpoint frame.
@@ -123,8 +124,8 @@ coarsening, and subsequent epochs reuse the previous coarse frames by reference.
 
 Population addresses identify the origin interval. All transport/bridge addresses also
 include the origin. Transport addresses identify the two times and source cell. Bridge
-addresses identify the endpoint cells and all three times. Early bridges do not retain
-or address their former `4T` destinations. Category suffixes identify the
+addresses identify the endpoint cells and all three times. Second bridges do not retain
+or address their former `T` sources. Category suffixes identify the
 allocated cell. Distinct origin channels and conditional batches therefore have distinct
 addresses without relying on sparse-array indices or request order.
 
@@ -156,15 +157,14 @@ of every allocation, three-time batch-to-leg consistency, endpoint coarsening,
 kernel variances/phases, generation order, negative coordinates and backward time,
 unique addresses across origins and conditional contexts, deterministic replay,
 immutable retention, empty populations, and zero diffusion. A regression checks that
-multiple `4T` destinations contribute to one early batch and that its single sampling
-call uses their summed count with no `4T` address suffix. Tests cover the construction,
+multiple `T` sources contribute to one second batch and that its single sampling
+call uses their summed count with no former-source address suffix. Tests cover the construction,
 not the statistical correctness of library samplers.
 
 ## Classifiers and expansion readers
 
 [`classifiers.ts`](../src/models/birds2a/classifiers.ts) classifies legal cells and
-ordinary flows as expansion projections, contraction dependencies, or explicitly
-unresolved expansion-coupling cases. It uses
+ordinary flows as expansion projections or contraction dependencies. It uses
 geometry and the channel origin, not seed, population, or cache contents. The spatial
 grid has no fixed coarse ceiling; it supports both sides of the unit initialization.
 Ordinary flows retain the epoch, half-duration, quarter-duration, and mixed-width
@@ -174,15 +174,13 @@ expansion record, not an ordinary flow query.
 [`expansionFacts.ts`](../src/models/birds2a/expansionFacts.ts) reads classifier-provided
 population and flow projections, building the owning expansion epoch when necessary.
 Endpoint queries use the finest retained frame, including the fine frame underneath
-a coarsened endpoint. Flow projections read retained adjacent-time steps; negative-time
+a coarsened endpoint. Flow projections read retained adjacent-time steps and aggregated `2T → 4T` flows; negative-time
 records are exposed as chronological flows. Sparse missing entries in an available
 projection contribute zero for this channel.
 
-The records contain separate `(T,3T,4T)` and `(T,2T,3T)` tables, not a four-time
-joint table. Consequently `2T → 4T` counts cannot be projected. Their classifiers
-return `unresolved-expansion-coupling`; defining these counts consistently with the
-retained margins is part of contraction integration. This case must not silently
-return zero, fabricate a joint table, or independently resample an already-fixed margin.
+The records contain separate `(T,2T,4T)` and `(2T,3T,4T)` tables, not a four-time
+joint table. The `2T → 4T` flows are explicit and can be projected onto legal
+coarser half-duration flow queries in either time direction, without resampling.
 
 Cell-subdivision batches are classified separately: either retrieve retained child
 populations or, when no finer expansion fact exists, identify a binomial owner. The

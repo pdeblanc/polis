@@ -16,16 +16,9 @@ export type ExpansionFlowProjection =
       readonly endpointCell: Birds2aCell; readonly frame: ExpansionFrameProjection }
   | { readonly kind: 'extension-step'; readonly epoch: number; readonly branch: ExpansionBranch;
       readonly innerCell: Birds2aCell; readonly outerCell: Birds2aCell;
-      readonly stepIndex: 0 | 1 | 2 };
-
-/** Legal geometry, but not determined by the retained three-time batches.
- * Integration must specify this coupling; it is neither an expansion projection
- * nor an unconstrained ordinary midpoint resample. */
-export interface UnresolvedExpansionCoupling {
-  readonly kind: 'unresolved-expansion-coupling';
-  readonly epoch: number;
-  readonly branch: ExpansionBranch;
-}
+      readonly stepIndex: 0 | 1 | 2 }
+  | { readonly kind: 'extension-half'; readonly epoch: number; readonly branch: ExpansionBranch;
+      readonly innerCell: Birds2aCell; readonly outerCell: Birds2aCell };
 
 export type Birds2aCellConstruction =
   | { readonly kind: 'expansion'; readonly projection: ExpansionFrameProjection }
@@ -41,7 +34,6 @@ export type Birds2aCellSubdivision = {
 );
 
 export type Birds2aFlowConstruction =
-  | UnresolvedExpansionCoupling
   | { readonly kind: 'expansion'; readonly projection: ExpansionFlowProjection }
   | { readonly kind: 'spatial-reconciliation'; readonly stage: 'H'; readonly subdivisionOwner: Birds2aFlow;
       readonly sourceChildIndex: 0 | 1; readonly destinationChildIndex: 0 | 1 }
@@ -114,7 +106,6 @@ export function classifyBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell): B
         (destination.cellWidth === 2 * source.cellWidth && duration === source.duration))) return undefined;
 
   const projection = expansionFlow(flow, origin.max - origin.min);
-  if (projection?.kind === 'unresolved-expansion-coupling') return projection;
   if (projection) return { kind: 'expansion', projection };
   if (!equalWidth) {
     return source.cellWidth < destination.cellWidth
@@ -147,7 +138,7 @@ function expansionFrameAt(time: number, originWidth: number): ExpansionFrameProj
     branch, slot: location.slot as 2 | 3 };
 }
 
-function expansionFlow(flow: Birds2aFlow, originWidth: number): ExpansionFlowProjection | UnresolvedExpansionCoupling | undefined {
+function expansionFlow(flow: Birds2aFlow, originWidth: number): ExpansionFlowProjection | undefined {
   // Orient towards increasing |t|; public flows always remain chronological.
   const backwards = flow.destination.time <= 0;
   const inner = backwards ? flow.destination : flow.source;
@@ -165,11 +156,10 @@ function expansionFlow(flow: Birds2aFlow, originWidth: number): ExpansionFlowPro
   const outerSlot = Math.abs(outer.time) / location.duration;
   if (!Number.isInteger(outerSlot) || outerSlot <= location.slot || outerSlot > 4) return undefined;
   const branch = backwards ? 'backward' : 'forward';
-  // The 2T → 4T association is not recorded: early splits were pooled across
-  // 4T destinations. Do not manufacture it by treating two batches as a joint.
-  if (outerSlot !== location.slot + 1) {
-    return { kind: 'unresolved-expansion-coupling', epoch: location.epoch + 1, branch };
+  if (location.slot === 2 && outerSlot === 4) {
+    return { kind: 'extension-half', epoch: location.epoch + 1, branch, innerCell: inner, outerCell: outer };
   }
+  if (outerSlot !== location.slot + 1) return undefined;
   return { kind: 'extension-step', epoch: location.epoch + 1, branch,
     innerCell: inner, outerCell: outer, stepIndex: (location.slot - 1) as 0 | 1 | 2 };
 }

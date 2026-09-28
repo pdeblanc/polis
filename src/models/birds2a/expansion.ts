@@ -47,12 +47,12 @@ export interface BridgeBatch {
 export interface ChannelExtension {
   /** Sampled directly over duration 3T, at the inherited width L. */
   readonly direct: ContributionStep;
-  /** One three-time allocation per T → 4T flow, split through 3T. */
-  readonly lateBridges: readonly BridgeBatch[];
-  /** T → 3T flows summed across their former 4T destinations. */
-  readonly toThree: ContributionStep;
-  /** One three-time allocation per aggregated T → 3T flow, split through 2T. */
-  readonly earlyBridges: readonly BridgeBatch[];
+  /** One three-time allocation per T → 4T flow, split through 2T. */
+  readonly firstBridges: readonly BridgeBatch[];
+  /** 2T → 4T flows summed across their former T sources. */
+  readonly fromTwo: ContributionStep;
+  /** One three-time allocation per aggregated 2T → 4T flow, split through 3T. */
+  readonly secondBridges: readonly BridgeBatch[];
   /** Derived adjacent steps, ordered outwards: T → 2T → 3T → 4T. */
   readonly steps: readonly [ContributionStep, ContributionStep, ContributionStep];
   /** Aggregation of direct.to into width-2L cells, used by the next epoch. */
@@ -87,9 +87,9 @@ export class Birds2aExpansion {
     extension: ProbabilityMassTable;
     extensionBackward: ProbabilityMassTable;
     /** Means 0, 1/3, 2/3, respectively. */
-    lateBridge: readonly ProbabilityMassTable[];
+    firstBridge: readonly ProbabilityMassTable[];
     /** Means 0, 1/2, respectively. */
-    earlyBridge: readonly ProbabilityMassTable[];
+    secondBridge: readonly ProbabilityMassTable[];
   }>;
   readonly #random: AddressedRandom;
   readonly #epochs: ExpansionEpoch[] = [];
@@ -120,8 +120,8 @@ export class Birds2aExpansion {
     const initial = table(0, variance), extension = table(0, 3 * variance);
     this.kernels = Object.freeze({ initial, initialBackward: reflect(initial),
       extension, extensionBackward: reflect(extension),
-      lateBridge: Object.freeze([0, 1 / 3, 2 / 3].map((mean) => table(mean, 2 * variance / 3))),
-      earlyBridge: Object.freeze([0, 0.5].map((mean) => table(mean, variance / 2))),
+      firstBridge: Object.freeze([0, 1 / 3, 2 / 3].map((mean) => table(mean, 2 * variance / 3))),
+      secondBridge: Object.freeze([0, 0.5].map((mean) => table(mean, variance / 2))),
     });
   }
 
@@ -168,35 +168,35 @@ export class Birds2aExpansion {
 
   #extend(initial: ContributionFrame, kernel: ProbabilityMassTable): ChannelExtension {
     const t = initial.time, width = initial.cellWidth;
-    // Generate all 4T endpoints, then all 3T allocations, then all 2T allocations.
+    // Generate all 4T endpoints, then all 2T allocations, then all 3T allocations.
     const direct = this.#advance(initial, 4 * t, kernel);
-    const lateBridges = Object.freeze(direct.allocations.flatMap(({ fromCell, destinations }) =>
+    const firstBridges = Object.freeze(direct.allocations.flatMap(({ fromCell, destinations }) =>
       destinations.filter(({ count }) => count > 0).map(({ cell: toCell, count }) =>
-        this.#bridge(t, 4 * t, 3 * t, fromCell, toCell, count, width, 2, 3))));
+        this.#bridge(t, 4 * t, 2 * t, fromCell, toCell, count, width, 1, 3))));
     const firstLeg = new Map<number, Map<number, number>>();
     const lastLeg = new Map<number, Map<number, number>>();
-    for (const batch of lateBridges) for (const { cell, count } of batch.intermediates) {
+    for (const batch of firstBridges) for (const { cell, count } of batch.intermediates) {
       if (!count) continue;
       addEdge(firstLeg, batch.fromCell.min, cell.min, count);
       addEdge(lastLeg, cell.min, batch.toCell.min, count);
     }
-    const toThree = stepFromEdges(initial, 3 * t, firstLeg);
+    const first = stepFromEdges(initial, 2 * t, firstLeg);
+    const fromTwo = Object.freeze({ ...stepFromEdges(first.to, 4 * t, lastLeg), to: direct.to });
     // As in Birds 1, aggregate legs before subdividing again. The second batch
-    // owns only its T and 3T endpoints, not its former 4T destination.
-    const earlyBridges = Object.freeze(toThree.allocations.flatMap(({ fromCell, destinations }) =>
+    // owns only its 2T and 4T endpoints, not its former T source.
+    const secondBridges = Object.freeze(fromTwo.allocations.flatMap(({ fromCell, destinations }) =>
       destinations.map(({ cell: toCell, count }) =>
-        this.#bridge(t, 3 * t, 2 * t, fromCell, toCell, count, width, 1, 2))));
+        this.#bridge(2 * t, 4 * t, 3 * t, fromCell, toCell, count, width, 1, 2))));
     const firstHalf = new Map<number, Map<number, number>>();
     const secondHalf = new Map<number, Map<number, number>>();
-    for (const batch of earlyBridges) for (const { cell, count } of batch.intermediates) {
+    for (const batch of secondBridges) for (const { cell, count } of batch.intermediates) {
       if (!count) continue;
       addEdge(firstHalf, batch.fromCell.min, cell.min, count);
       addEdge(secondHalf, cell.min, batch.toCell.min, count);
     }
-    const first = stepFromEdges(initial, 2 * t, firstHalf);
-    const second = Object.freeze({ ...stepFromEdges(first.to, 3 * t, secondHalf), to: toThree.to });
-    const third = Object.freeze({ ...stepFromEdges(toThree.to, 4 * t, lastLeg), to: direct.to });
-    return Object.freeze({ direct, lateBridges, toThree, earlyBridges,
+    const second = stepFromEdges(fromTwo.from, 3 * t, firstHalf);
+    const third = Object.freeze({ ...stepFromEdges(second.to, 4 * t, secondHalf), to: fromTwo.to });
+    return Object.freeze({ direct, firstBridges, fromTwo, secondBridges,
       steps: Object.freeze([first, second, third] as const), coarsened: coarsen(direct.to) });
   }
 
@@ -218,7 +218,7 @@ export class Birds2aExpansion {
     const offsetNumerator = numerator * ((toCell.min - fromCell.min) / width);
     const base = Math.floor(offsetNumerator / denominator);
     const phase = offsetNumerator - base * denominator;
-    const kernel = (denominator === 3 ? this.kernels.lateBridge : this.kernels.earlyBridge)[phase];
+    const kernel = (denominator === 3 ? this.kernels.firstBridge : this.kernels.secondBridge)[phase];
     const intermediates = this.#allocate(
       ['bridge', fromTime, toTime, time, fromCell.min, fromCell.max, toCell.min, toCell.max],
       count, kernel, fromCell.min + base * width, width);

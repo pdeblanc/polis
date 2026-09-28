@@ -18,8 +18,9 @@ export function readExpansionFlow(expansion: Birds2aExpansion, projection: Expan
   const epoch = expansion.getEpoch(projection.epoch);
   if (epoch.kind !== 'expanded') throw new Error('Expected an expansion epoch for a step projection');
   const extension = projection.branch === 'forward' ? epoch.forwardExtension : epoch.backwardExtension;
+  const step = projection.kind === 'extension-half' ? extension.fromTwo : extension.steps[projection.stepIndex];
   let total = 0;
-  for (const batch of extension.steps[projection.stepIndex].allocations) {
+  for (const batch of step.allocations) {
     if (!contains(projection.innerCell, batch.fromCell)) continue;
     for (const { cell, count } of batch.destinations) {
       if (contains(projection.outerCell, cell)) total += count;

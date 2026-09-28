@@ -42,15 +42,15 @@ describe('Birds 2a entry classifiers', () => {
     });
   });
 
-  it('classifies inherited origin flows, retained legs, and unresolved cross-batch couplings', () => {
+  it('classifies inherited origin flows, retained legs, and aggregated second-half flows', () => {
     expect(classifyBirds2aFlow({ source: cell(2, 0), destination: cell(2, 4) }, origin)).toMatchObject({
       kind: 'expansion', projection: { kind: 'origin-endpoint', frame: { epoch: 1, slot: 4 } },
     });
     expect(classifyBirds2aFlow({ source: cell(2, 2), destination: cell(2, 4) }, origin)).toMatchObject({
-      kind: 'unresolved-expansion-coupling', epoch: 1, branch: 'forward',
+      kind: 'expansion', projection: { kind: 'extension-half', epoch: 1, branch: 'forward' },
     });
     expect(classifyBirds2aFlow({ source: cell(2, -4), destination: cell(2, -2) }, origin)).toMatchObject({
-      kind: 'unresolved-expansion-coupling', epoch: 1, branch: 'backward',
+      kind: 'expansion', projection: { kind: 'extension-half', epoch: 1, branch: 'backward' },
     });
     expect(classifyBirds2aFlow({ source: cell(1, 1), destination: cell(2, 2) }, origin)?.kind).toBe('expansion');
     expect(classifyBirds2aFlow({ source: cell(2, 4), destination: cell(2, 8) }, origin)).toMatchObject({

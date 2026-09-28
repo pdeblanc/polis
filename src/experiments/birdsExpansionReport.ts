@@ -25,10 +25,10 @@ for (let index = 0; index <= expansions; index++) {
   const elapsedMs = performance.now() - start;
   const extensions = epoch.kind === 'expanded' ? [epoch.forwardExtension, epoch.backwardExtension] : [];
   const steps = epoch.kind === 'initial' ? [epoch.forwardStep, epoch.backwardStep]
-    : extensions.flatMap((e) => [e.direct, e.toThree, ...e.steps]);
+    : extensions.flatMap((e) => [e.direct, e.fromTwo, ...e.steps]);
   retainedSteps += steps.length;
   retainedAllocations += steps.reduce((s, step) => s + step.allocations.length, 0);
-  retainedBridgeBatches += extensions.reduce((s, e) => s + e.lateBridges.length + e.earlyBridges.length, 0);
+  retainedBridgeBatches += extensions.reduce((s, e) => s + e.firstBridges.length + e.secondBridges.length, 0);
   console.log(JSON.stringify(fullJson ? epoch : {
     index, seed, density, diffusion, origin: epoch.origin, population: epoch.population,
     cellWidth: epoch.cellWidth, timeStep: epoch.timeStep,

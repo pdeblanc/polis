@@ -73,7 +73,7 @@ The combined hierarchy must define, for every supported query, whether the reque
 
 Expansion-generated facts are authoritative. Inward refinement must not independently resample a stochastic decision already determined by expansion.
 
-Single-origin expansion retains no additional provenance beyond Birds 1's temporal construction: sum legs with matching endpoints before subdividing again. In particular, aggregate `T → 3T` flows over their `4T` destinations before splitting at `2T`. Any contraction dependency requiring an association not determined by the retained three-time batches must receive an explicit consistent construction, not an invented projection.
+Single-origin expansion retains no additional provenance beyond Birds 1's temporal construction: sum legs with matching endpoints before subdividing again. In particular, generate in order `0 → T → 4T → 2T → 3T`, aggregating `2T → 4T` flows over their `T` sources before splitting at `3T`. Any contraction dependency requiring an association not determined by the retained three-time batches must receive an explicit consistent construction, not an invented projection.
 
 The single-channel model should support random-access queries at finer spatial and temporal resolutions than those explicitly generated during outward expansion.
 
