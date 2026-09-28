@@ -393,8 +393,9 @@ zooms quadratically with space. The existing Sighting helper uses the common API
 it does not need access to expansion records. Cells represent populations at
 sample times, not occupancy throughout time intervals.
 
-Birds 2a adds an aligned dyadic origin minimum/width editor, committed together by
-“Apply origin.” Query parameters include `seed`, `density`, `diffusion`,
+Birds 2a adds an origin interval selector with left/right arrows through
+…, `[-4,-2)`, `[-2,-1)`, `[-1,0)`, `[0,1)`, `[1,2)`, `[2,4)`, …,
+starting at `[0,1)`. Query parameters include `seed`, `density`, `diffusion`,
 `origin`, `originWidth`, and the usual `x`, `y`, and `area`. Changing model
 parameters creates a new channel and discards the displayed track.
 

@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback } from 'react';
 import { useUrlNumberParameter } from '../helpers/urlState';
 import { Birds2a } from '../models/birds2a/birds2a';
 import { BirdsCanvas } from './BirdsCanvas';
@@ -15,7 +15,7 @@ export function Birds2aCanvas() {
       new Birds2a(seed, density, diffusion, { min: originMin, max: originMin + originWidth }),
     [originMin, originWidth],
   );
-  const control = <OriginControl key={originMin + ':' + originWidth} min={originMin} width={originWidth} apply={(min, width) => {
+  const control = <OriginControl min={originMin} width={originWidth} apply={(min, width) => {
     setOriginMin(min); setOriginWidth(width);
   }} />;
   if (!validOrigin) return <>{control}<span role="alert">Origin must be an aligned dyadic interval.</span></>;
@@ -26,19 +26,14 @@ export function Birds2aCanvas() {
 }
 
 function OriginControl({ min, width, apply }: { min: number; width: number; apply: (min: number, width: number) => void }) {
-  const [draftMin, setMin] = useState(String(min)), [draftWidth, setWidth] = useState(String(width));
-  const [error, setError] = useState<string>();
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const nextMin = Number(draftMin), nextWidth = Number(draftWidth);
-    if (!draftMin.trim() || !draftWidth.trim() || !Number.isFinite(nextMin) || !dyadicWidth(nextWidth) ||
-      !Number.isSafeInteger(nextMin / nextWidth)) { setError('Origin must be an aligned dyadic interval.'); return; }
-    setError(undefined); apply(nextMin, nextWidth);
-  };
-  return <form className="model-parameter-control birds2a-origin-control" onSubmit={submit}>
-    <label>Origin <input aria-label="Origin minimum" value={draftMin} onChange={(e) => setMin(e.target.value)} /></label>
-    <label>Width <input aria-label="Origin width" value={draftWidth} onChange={(e) => setWidth(e.target.value)} /></label>
-    <button type="submit">Apply origin</button>
-    {error && <span role="alert">{error}</span>}
-  </form>;
+  const max = min + width;
+  // Unit intervals meet at zero; successive intervals double outward.
+  const leftWidth = Math.max(1, min > 0 ? min / 2 : -min);
+  const rightWidth = Math.max(1, max < 0 ? -max / 2 : max);
+  return <div className="birds2a-origin-control" role="group" aria-label="Origin interval">
+    <span>Origin</span>
+    <button type="button" aria-label="Previous origin interval" onClick={() => apply(min - leftWidth, leftWidth)}>←</button>
+    <span aria-live="polite">[{min}, {max})</span>
+    <button type="button" aria-label="Next origin interval" onClick={() => apply(max, rightWidth)}>→</button>
+  </div>;
 }

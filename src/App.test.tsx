@@ -17,14 +17,26 @@ describe('App routing', () => {
     fireEvent.click(flows);
     expect(flows).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Origin minimum'), { target: { value: '-2' } });
-    fireEvent.change(screen.getByLabelText('Origin width'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply origin' }));
-    expect(new URLSearchParams(window.location.search).get('origin')).toBe('-2');
+    const origin = screen.getByRole('group', { name: 'Origin interval' });
+    expect(origin).toHaveTextContent('[0, 1)');
+    for (const interval of ['[1, 2)', '[2, 4)', '[4, 8)']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next origin interval' }));
+      expect(origin).toHaveTextContent(interval);
+    }
+    expect(new URLSearchParams(window.location.search).get('origin')).toBe('4');
+    expect(new URLSearchParams(window.location.search).get('originWidth')).toBe('4');
+    for (const interval of ['[2, 4)', '[1, 2)', '[0, 1)', '[-1, 0)', '[-2, -1)', '[-4, -2)']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Previous origin interval' }));
+      expect(origin).toHaveTextContent(interval);
+    }
+    expect(new URLSearchParams(window.location.search).get('origin')).toBe('-4');
     expect(new URLSearchParams(window.location.search).get('originWidth')).toBe('2');
-    fireEvent.change(screen.getByLabelText('Origin width'), { target: { value: '3' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Apply origin' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('aligned dyadic');
+    for (const interval of ['[-2, -1)', '[-1, 0)', '[0, 1)']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Next origin interval' }));
+      expect(origin).toHaveTextContent(interval);
+    }
+    expect(new URLSearchParams(window.location.search).has('origin')).toBe(false);
+    expect(new URLSearchParams(window.location.search).has('originWidth')).toBe(false);
     expect(screen.getByRole('button', { name: 'Reset cache' })).toBeInTheDocument();
     window.history.replaceState({}, '', '/');
   });
