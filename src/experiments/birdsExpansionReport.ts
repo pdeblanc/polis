@@ -26,6 +26,7 @@ for (let index = 0; index <= expansions; index++) {
   const extensions = epoch.kind === 'expanded' ? [epoch.forwardExtension, epoch.backwardExtension] : [];
   const steps = epoch.kind === 'initial' ? [epoch.forwardStep, epoch.backwardStep]
     : extensions.flatMap((e) => [e.direct, e.fromTwo, ...e.steps]);
+  steps.push(...epoch.ordinaryFlows);
   retainedSteps += steps.length;
   retainedAllocations += steps.reduce((s, step) => s + step.allocations.length, 0);
   retainedBridgeBatches += extensions.reduce((s, e) => s + e.firstBridges.length + e.secondBridges.length, 0);

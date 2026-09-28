@@ -107,6 +107,23 @@ const expanded = experiment.getEpoch(1);
 Every epoch exposes `origin`, `population`, `cellWidth`, `timeStep`, `forward`, and
 `backward`. The last two are the endpoint contribution frames used by the next epoch.
 
+Every epoch also exposes `ordinaryFlows`: eagerly aggregated, sparse flow tables for
+all supported ordinary-query geometries introduced by that epoch. Each table uses
+`ContributionStep`, whose endpoint frames specify their respective widths. Backward
+tables are oriented outwards, like the other expansion records.
+
+For an expansion from horizon `T` and width `L`, each branch adds:
+
+- `0 → 2T` and `2T → 4T` at width `2L`;
+- the three adjacent steps between `T` and `4T`, at widths `(L,L)`, `(2L,2L)`,
+  `(L,2L)`, and `(2L,L)`;
+- `0 → 4T` at widths `(2L,2L)`, `(4L,4L)`, `(2L,4L)`, and `(4L,2L)`.
+
+The `0 → T` tables already belong to the preceding epoch. Initialization stores all
+four width combinations for `0 → ±T₀`, using `L₀` and `2L₀`. All these tables are
+deterministic aggregates of retained endpoint pairs; single-origin membership supplies
+the time-zero endpoint. No additional provenance or random sampling is needed.
+
 - An `initial` epoch also exposes `atZero`, `forwardStep`, and `backwardStep`.
 - An `expanded` epoch exposes `forwardExtension` and `backwardExtension`, each containing:
   - `direct`: the sampled `T → 4T` step, including complete per-source allocations;
@@ -174,13 +191,16 @@ expansion record, not an ordinary flow query.
 [`expansionFacts.ts`](../src/models/birds2a/expansionFacts.ts) reads classifier-provided
 population and flow projections, building the owning expansion epoch when necessary.
 Endpoint queries use the finest retained frame, including the fine frame underneath
-a coarsened endpoint. Flow projections read retained adjacent-time steps and aggregated `2T → 4T` flows; negative-time
-records are exposed as chronological flows. Sparse missing entries in an available
+a coarsened endpoint. Flow projections look up exact entries in `ordinaryFlows`, without
+reconstructing margins during a query; negative-time records are exposed as chronological
+flows. Sparse missing entries in an available
 projection contribute zero for this channel.
 
 The records contain separate `(T,2T,4T)` and `(2T,3T,4T)` tables, not a four-time
 joint table. The `2T → 4T` flows are explicit and can be projected onto legal
 coarser half-duration flow queries in either time direction, without resampling.
+There is no two-stage query interface or explicit `(0,T,2T)` allocation table. Additional
+three-time facts are deferred until a contraction dependency demonstrably needs them.
 
 Cell-subdivision batches are classified separately: either retrieve retained child
 populations or, when no finer expansion fact exists, identify a binomial owner. The
@@ -192,6 +212,9 @@ consumer-facing Birds 2a query API.
 Tests additionally check classifier domains and returned dependencies, frame and step
 projections, mixed-width margins, empty contributions, cold versus already-built epoch
 access, and preservation of projected answers after further expansion.
+Ordinary-flow tests check all supported width combinations, row/column conservation,
+agreement with raw endpoint-pair aggregates, frozen output, and complete table coverage
+of expansion-classified geometries, including empty channels.
 
 Open work includes contraction consistent with retained batches, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.

@@ -96,6 +96,13 @@ As in Birds 1, aggregate temporal legs before subdividing again. Do not retain a
 provenance linking the `3T` allocations to individual `T` sources. The two
 three-time tables do not define a four-time joint table.
 
+Expansion also eagerly stores every ordinary flow geometry it supplies: coarse
+`0 → 2T`, `2T → 4T`, and `0 → 4T` flows, adjacent flows, and their legal mixed-width
+margins, on both branches. These are deterministic aggregates, not new draws. Ordinary
+flow readers retrieve these entries directly. Two-stage query interfaces are deferred
+until a concrete contraction dependency needs them; retaining construction bridge
+batches does not require exposing them as queries.
+
 The conditional means and variances are Brownian-bridge formulas applied to cell-center
 endpoints. With rounding and truncation this is not exact conditioning of the discrete
 forward kernel. Statistical fine-tuning, including integration over endpoint intervals,

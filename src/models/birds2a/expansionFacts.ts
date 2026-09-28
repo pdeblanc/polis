@@ -11,22 +11,16 @@ export function readExpansionCell(
 }
 
 export function readExpansionFlow(expansion: Birds2aExpansion, projection: ExpansionFlowProjection): number {
-  if (projection.kind === 'origin-endpoint') {
-    if (!contains(projection.originCell, expansion.origin)) return 0;
-    return readExpansionCell(expansion, projection.endpointCell, projection.frame);
-  }
-  const epoch = expansion.getEpoch(projection.epoch);
-  if (epoch.kind !== 'expanded') throw new Error('Expected an expansion epoch for a step projection');
-  const extension = projection.branch === 'forward' ? epoch.forwardExtension : epoch.backwardExtension;
-  const step = projection.kind === 'extension-half' ? extension.fromTwo : extension.steps[projection.stepIndex];
-  let total = 0;
-  for (const batch of step.allocations) {
-    if (!contains(projection.innerCell, batch.fromCell)) continue;
-    for (const { cell, count } of batch.destinations) {
-      if (contains(projection.outerCell, cell)) total += count;
-    }
-  }
-  return total;
+  const origin = projection.kind === 'origin-endpoint';
+  const epoch = expansion.getEpoch(origin ? projection.frame.epoch : projection.epoch);
+  const inner = origin ? projection.originCell : projection.innerCell;
+  const outer = origin ? projection.endpointCell : projection.outerCell;
+  const step = epoch.ordinaryFlows.find(({ from, to }) =>
+    from.time === inner.time && to.time === outer.time &&
+    from.cellWidth === inner.max - inner.min && to.cellWidth === outer.max - outer.min);
+  if (!step) throw new Error('Missing ordinary expansion flow geometry');
+  return step.allocations.find(({ fromCell }) => fromCell.min === inner.min)
+    ?.destinations.find(({ cell }) => cell.min === outer.min)?.count ?? 0;
 }
 
 function readFrame(expansion: Birds2aExpansion, projection: ExpansionFrameProjection): ContributionFrame {

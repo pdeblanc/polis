@@ -39,6 +39,83 @@ function checkStep(model: Birds2aExpansion, step: ContributionStep) {
 }
 
 describe('Birds 2a expansion fact projections', () => {
+  for (const diffusion of [0, 0.5, 2]) it(`retains every ordinary flow margin at diffusion ${diffusion}`, () => {
+    const model = new Birds2aExpansion('ordinary-outputs', 48, diffusion, { min: -1, max: -0.5 });
+    for (let i = 0; i <= 3; i++) {
+      const epoch = model.getEpoch(i);
+      expect(Object.isFrozen(epoch.ordinaryFlows)).toBe(true);
+      expect(epoch.ordinaryFlows).toHaveLength(i === 0 ? 8 : 36);
+      const geometries = new Set<string>();
+      for (const step of epoch.ordinaryFlows) {
+        const geometry = JSON.stringify([step.from.time, step.to.time, step.from.cellWidth, step.to.cellWidth]);
+        expect(geometries.has(geometry)).toBe(false);
+        geometries.add(geometry);
+        expect(Object.isFrozen(step)).toBe(true);
+        expect(Object.isFrozen(step.allocations)).toBe(true);
+        checkStep(model, step);
+        checkFrame(model, step.from); checkFrame(model, step.to);
+        const incoming = new Map<number, number>();
+        for (const batch of step.allocations) {
+          expect(Object.isFrozen(batch.destinations)).toBe(true);
+          expect(batch.destinations.reduce((sum, entry) => sum + entry.count, 0))
+            .toBe(population(model, { ...batch.fromCell, time: step.from.time }));
+          for (const { cell, count } of batch.destinations) {
+            expect(count).toBeGreaterThan(0);
+            incoming.set(cell.min, (incoming.get(cell.min) ?? 0) + count);
+          }
+        }
+        expect([...incoming.values()].reduce((sum, count) => sum + count, 0)).toBe(epoch.population);
+        for (const { cell, count } of step.to.contributions) expect(incoming.get(cell.min)).toBe(count);
+
+        // Compare against the finest retained endpoint pairs, independently of
+        // the flow reader (which must only retrieve already-aggregated entries).
+        const extension = epoch.kind === 'expanded'
+          ? (step.to.time > 0 ? epoch.forwardExtension : epoch.backwardExtension) : undefined;
+        const raw = epoch.kind === 'initial'
+          ? (step.to.time > 0 ? epoch.forwardStep : epoch.backwardStep)
+          : extension && [extension.fromTwo, ...extension.steps].find((candidate) =>
+            candidate.from.time === step.from.time && candidate.to.time === step.to.time);
+        const expected = new Map<string, number>();
+        if (raw) {
+          for (const batch of raw.allocations) for (const { cell, count } of batch.destinations) {
+            if (!count) continue;
+            const key = `${coarse(batch.fromCell, step.from.cellWidth).min}:${coarse(cell, step.to.cellWidth).min}`;
+            expected.set(key, (expected.get(key) ?? 0) + count);
+          }
+        } else {
+          expect(step.from.time).toBe(0);
+          const endpoint = extension!.steps.find((candidate) => candidate.to.time === step.to.time)!.to;
+          for (const { cell, count } of endpoint.contributions) {
+            const key = `${coarse(model.origin, step.from.cellWidth).min}:${coarse(cell, step.to.cellWidth).min}`;
+            expected.set(key, (expected.get(key) ?? 0) + count);
+          }
+        }
+        const actual = new Map(step.allocations.flatMap(({ fromCell, destinations }) =>
+          destinations.map(({ cell, count }) => [`${fromCell.min}:${cell.min}`, count] as const)));
+        expect(actual).toEqual(expected);
+      }
+    }
+  });
+
+  it('provides an eager table for every expansion-classified ordinary geometry, including empty channels', () => {
+    const model = new Birds2aExpansion('all-geometries', 0, 1);
+    model.getEpoch(3);
+    withMultinomialObserver(() => { throw new Error('Flow read resampled'); }, () => {
+      for (const width of [0.5, 1, 2, 4, 8, 16]) {
+        for (const [fromWidth, toWidth, duration] of [
+          [width, width, width ** 2], [width, width, width ** 2 / 2],
+          [width, width, width ** 2 / 4], [width, 2 * width, width ** 2], [2 * width, width, width ** 2],
+        ]) for (let time = -64; time + duration <= 64; time += duration) {
+          const flow = { source: { min: 0, max: fromWidth, time },
+            destination: { min: 0, max: toWidth, time: time + duration } };
+          const construction = classifyBirds2aFlow(flow, model.origin);
+          if (construction?.kind === 'expansion') expect(readExpansionFlow(model, construction.projection)).toBe(0);
+        }
+      }
+    });
+    expect(model.retainedEpochCount).toBe(4);
+  });
+
   for (const origin of [{ min: 0, max: 1 }, { min: -2, max: -1 }, { min: 2, max: 4 }, { min: -0.5, max: 0 }]) {
     it(`recovers retained populations and chronological flows for origin ${origin.min}:${origin.max}`, () => {
       const model = new Birds2aExpansion('projection', 32, 0.5, origin);

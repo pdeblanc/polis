@@ -67,6 +67,9 @@ interface EpochState {
   readonly timeStep: number;
   readonly forward: ContributionFrame;
   readonly backward: ContributionFrame;
+  /** All ordinary flow geometries introduced by this epoch, including mixed widths.
+   * Sparse, eagerly aggregated, and oriented outwards on both time branches. */
+  readonly ordinaryFlows: readonly ContributionStep[];
 }
 export type ExpansionEpoch = EpochState & (
   | { readonly kind: 'initial'; readonly atZero: ContributionFrame;
@@ -152,6 +155,7 @@ export class Birds2aExpansion {
     const backwardStep = this.#advance(atZero, -duration, this.kernels.initialBackward);
     return Object.freeze({ kind: 'initial', index: 0, origin: this.origin, population,
       cellWidth: width, timeStep: duration, atZero, forwardStep, backwardStep,
+      ordinaryFlows: Object.freeze([forwardStep, backwardStep].flatMap(ordinaryQuarterFlows)),
       forward: forwardStep.to, backward: backwardStep.to });
   }
 
@@ -163,6 +167,15 @@ export class Birds2aExpansion {
     return Object.freeze({ kind: 'expanded', index: previous.index + 1,
       origin: this.origin, population: previous.population, cellWidth: width, timeStep: duration,
       forwardExtension, backwardExtension,
+      ordinaryFlows: Object.freeze([forwardExtension, backwardExtension].flatMap((extension) => [
+        // Single-origin membership determines 0 → 2T and 0 → 4T without
+        // reconstructing a joint trajectory across the intervening steps.
+        aggregateStep(originStep(this.origin, previous.population, extension.steps[0].to), width, width),
+        ...ordinaryQuarterFlows(aggregateStep(
+          originStep(this.origin, previous.population, extension.direct.to), width, width)),
+        aggregateStep(extension.fromTwo, width, width),
+        ...extension.steps.flatMap(ordinaryQuarterFlows),
+      ])),
       forward: forwardExtension.coarsened, backward: backwardExtension.coarsened });
   }
 
@@ -232,6 +245,43 @@ export class Birds2aExpansion {
       kernel.map(({ probability }, i) => ({ probability, address: [cells[i].min, cells[i].max] })));
     return Object.freeze(cells.map((cell, i) => contribution(cell, counts[i])));
   }
+}
+
+/** For duration w², ordinary queries allow (w,w), (2w,2w), and both
+ * mixed-width margins. This includes the coarse view needed by the next epoch.
+ * Half-duration flows have only one legal equal-width geometry. */
+function ordinaryQuarterFlows(step: ContributionStep): ContributionStep[] {
+  const width = step.from.cellWidth;
+  return [[width, width], [2 * width, 2 * width], [width, 2 * width], [2 * width, width]]
+    .map(([fromWidth, toWidth]) => aggregateStep(step, fromWidth, toWidth));
+}
+
+function originStep(origin: ExpansionCell, population: number, to: ContributionFrame): ContributionStep {
+  return Object.freeze({
+    from: frame(0, origin.max - origin.min, population ? [contribution(origin, population)] : []),
+    to,
+    allocations: Object.freeze(population ? [Object.freeze({ fromCell: origin, destinations: to.contributions })] : []),
+  });
+}
+
+/** Aggregate either endpoint independently; never draw new randomness. */
+function aggregateStep(step: ContributionStep, fromWidth: number, toWidth: number): ContributionStep {
+  const edges = new Map<number, Map<number, number>>();
+  const fromTotals = new Map<number, number>(), toTotals = new Map<number, number>();
+  for (const { fromCell, destinations } of step.allocations) for (const { cell, count } of destinations) {
+    if (!count) continue;
+    const from = Math.floor(fromCell.min / fromWidth) * fromWidth;
+    const to = Math.floor(cell.min / toWidth) * toWidth;
+    addEdge(edges, from, to, count);
+    add(fromTotals, from, count);
+    add(toTotals, to, count);
+  }
+  const from = frameFromTotals(step.from.time, fromWidth, fromTotals);
+  return Object.freeze({ from, to: frameFromTotals(step.to.time, toWidth, toTotals),
+    allocations: Object.freeze(from.contributions.map(({ cell: fromCell }) => Object.freeze({
+      fromCell, destinations: frameFromTotals(step.to.time, toWidth, edges.get(fromCell.min)!).contributions,
+    }))),
+  });
 }
 
 function coarsen(input: ContributionFrame): ContributionFrame {
