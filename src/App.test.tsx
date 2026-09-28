@@ -1,9 +1,33 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { App } from './App';
 
 describe('App routing', () => {
+  afterEach(() => { cleanup(); window.history.replaceState({}, '', '/'); });
+  it('renders the Birds 2a controls and shares edited origin parameters', () => {
+    window.history.replaceState({}, '', '/birds2a');
+    render(<MemoryRouter initialEntries={['/birds2a']}><App /></MemoryRouter>);
+    expect(document.title).toBe('Birds 2a (Polis 4)');
+    expect(screen.getByRole('heading', { name: 'Birds 2a: single origin' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cursor t coordinate')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Population density' })).toHaveValue('32');
+    const flows = screen.getByRole('checkbox', { name: 'Flows' });
+    expect(flows).toBeChecked();
+    fireEvent.click(flows);
+    expect(flows).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Origin minimum'), { target: { value: '-2' } });
+    fireEvent.change(screen.getByLabelText('Origin width'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply origin' }));
+    expect(new URLSearchParams(window.location.search).get('origin')).toBe('-2');
+    expect(new URLSearchParams(window.location.search).get('originWidth')).toBe('2');
+    fireEvent.change(screen.getByLabelText('Origin width'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply origin' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('aligned dyadic');
+    expect(screen.getByRole('button', { name: 'Reset cache' })).toBeInTheDocument();
+    window.history.replaceState({}, '', '/');
+  });
   it('renders the experiment index', () => {
     render(
       <MemoryRouter initialEntries={['/']}>

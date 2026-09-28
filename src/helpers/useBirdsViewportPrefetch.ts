@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
-  type Birds,
+  type BirdsQueryApi,
   type BirdsCell,
   type BirdsPopulationResolution,
 } from '../models/birds/birds';
@@ -15,10 +15,10 @@ const PREFETCH_LOOKAHEAD_SECONDS = 0.5;
 const MIN_PREFETCH_ZOOM_VELOCITY = 0.05;
 
 export function useBirdsViewportPrefetch(options: {
-  readonly birds: Birds;
+  readonly birds: BirdsQueryApi;
   readonly resolution: BirdsPopulationResolution | undefined;
   readonly resolveRenderResolution: (
-    birds: Birds,
+    birds: BirdsQueryApi,
     size: Size2D,
     world: Size2D,
   ) => BirdsPopulationResolution | undefined;
@@ -29,7 +29,7 @@ export function useBirdsViewportPrefetch(options: {
   readonly zoomVelocity: number;
 }): void {
   const prefetchedRef = useRef<{
-    readonly birds: Birds;
+    readonly birds: BirdsQueryApi;
     readonly resolution: BirdsPopulationResolution;
     readonly cells: Set<string>;
   } | undefined>(undefined);
@@ -118,7 +118,7 @@ export function useBirdsViewportPrefetch(options: {
 }
 
 function transitionAreaForResolution(
-  birds: Birds,
+  birds: BirdsQueryApi,
   size: Size2D,
   coarseArea: number,
   fineArea: number,
@@ -126,7 +126,7 @@ function transitionAreaForResolution(
   verticalZoomExponent: number,
   verticalScale: number,
   resolveRenderResolution: (
-    birds: Birds,
+    birds: BirdsQueryApi,
     size: Size2D,
     world: Size2D,
   ) => BirdsPopulationResolution | undefined,

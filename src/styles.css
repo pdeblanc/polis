@@ -316,7 +316,15 @@ h1 {
   white-space: nowrap;
 }
 
-.cache-control button {
+.birds2a-origin-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.cache-control button,
+.birds2a-origin-control button {
   display: inline-flex;
   gap: 0.3rem;
   align-items: center;
@@ -329,12 +337,14 @@ h1 {
   cursor: pointer;
 }
 
-.cache-control button:hover {
+.cache-control button:hover,
+.birds2a-origin-control button:hover {
   border-color: #8da2ca;
   background: #33415d;
 }
 
-.cache-control button:active {
+.cache-control button:active,
+.birds2a-origin-control button:active {
   background: #1d2739;
 }
 

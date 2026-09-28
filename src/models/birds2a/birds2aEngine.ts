@@ -50,6 +50,11 @@ export class Birds2aEngine {
     this.#splits.clear(); this.#incidence.clear(); this.#spatial.clear();
   }
 
+  getCacheUsage(): { readonly entries: number; readonly capacity: number } {
+    return { entries: this.#cells.size + this.#flows.size + this.#temporal.size + this.#splits.size + this.#incidence.size + this.#spatial.size,
+      capacity: 2 * BIRDS_2A_FACT_CACHE_CAPACITY + 4 * BIRDS_2A_BATCH_CACHE_CAPACITY };
+  }
+
   queryCell(cell: Birds2aCell): number {
     const construction = classifyBirds2aCell(cell, this.expansion.origin);
     if (!construction) throw new RangeError('Invalid Birds 2a cell');
@@ -64,6 +69,25 @@ export class Birds2aEngine {
           .reduce((sum, destination) => sum + this.queryFlow({ source: cell, destination }), 0);
       }
     });
+  }
+
+  /** Read-only lookup: never expands the channel or evaluates a dependency. */
+  queryCachedCell(cell: Birds2aCell): number | undefined {
+    if (!classifyBirds2aCell(cell, this.expansion.origin)) throw new RangeError('Invalid Birds 2a cell');
+    return this.#cells.peek(cellKey(cell));
+  }
+
+  queryCellSubdivision(cell: Birds2aCell) {
+    const subdivision = classifyBirds2aCellSubdivision(cell, this.expansion.origin);
+    if (!subdivision) throw new RangeError('Invalid Birds 2a cell');
+    const [left, right] = subdivision.children;
+    return {
+      parentCount: this.queryCell(cell),
+      children: [
+        { cell: left, count: this.queryCell(left) },
+        { cell: right, count: this.queryCell(right) },
+      ] as const,
+    };
   }
 
   queryFlow(flow: Birds2aFlow): number {

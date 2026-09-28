@@ -1,5 +1,5 @@
 import {
-  Birds,
+  type BirdsQueryApi,
   type BirdsCell,
   type BirdsIncidentFlowResult,
   type BirdsPopulationResolution,
@@ -37,7 +37,7 @@ export function createSightingDiagnostics(): SightingDiagnostics {
 }
 
 export interface SightingSelection {
-  readonly birds: Birds;
+  readonly birds: BirdsQueryApi;
   readonly cell: SightingCell;
   readonly resolution: BirdsPopulationResolution;
   readonly seed: Seed;
@@ -64,11 +64,11 @@ export class Sighting {
   readonly cell: SightingCell;
   readonly resolution: BirdsPopulationResolution;
 
-  readonly #birds: Birds;
+  readonly #birds: BirdsQueryApi;
   readonly #publicIndex: number;
   readonly #tube: readonly TubeEntry[];
 
-  private constructor(birds: Birds, tube: readonly TubeEntry[], publicIndex: number) {
+  private constructor(birds: BirdsQueryApi, tube: readonly TubeEntry[], publicIndex: number) {
     const frozenTube = Object.freeze(tube.map(freezeEntry));
     const publicEntry = frozenTube[publicIndex];
     if (publicEntry === undefined || frozenTube.at(-1)?.count !== 1) {
@@ -126,7 +126,7 @@ export class Sighting {
   }
 
   static #isolate(
-    birds: Birds,
+    birds: BirdsQueryApi,
     root: TubeEntry,
     initialRank: number,
     budget: QueryBudget,
@@ -506,7 +506,7 @@ class QueryBudget {
   }
 }
 
-function validateResolution(birds: Birds, resolution: BirdsPopulationResolution): void {
+function validateResolution(birds: BirdsQueryApi, resolution: BirdsPopulationResolution): void {
   birds.getNearbyPopulationResolutions(resolution, 0);
 }
 

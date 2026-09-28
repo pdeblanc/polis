@@ -20,6 +20,11 @@ const experiments = [
     path: '/birds',
     title: 'Diffusing birds',
   },
+  {
+    description: 'A single-origin population with outward expansion and inward refinement in spacetime.',
+    path: '/birds2a',
+    title: 'Birds 2a: single origin',
+  },
 ] as const;
 
 export function HomePage() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Sighting,
   SightingBudgetExceededError,
@@ -10,6 +10,7 @@ import { useUrlNumberParameter, useUrlSeed } from "../helpers/urlState";
 import { useViewport2D } from "../helpers/useViewport2D";
 import {
   Birds,
+  type BirdsQueryApi,
   type BirdsFlowListResult,
   type BirdsFlowSample,
   type BirdsPopulationResolution,
@@ -67,11 +68,29 @@ interface PopulationScaleOverlay {
   readonly resolution: BirdsPopulationResolution;
 }
 
-export function BirdsCanvas() {
-  const [seed, setSeed] = useUrlSeed(DEFAULT_SEED);
+interface BirdsCanvasProps {
+  readonly createModel?: (seed: string, density: number, diffusion: number) => BirdsQueryApi;
+  readonly defaultSeed?: string;
+  readonly defaultPopulationDensity?: number;
+  readonly initialViewport?: ViewportState;
+  readonly modelName?: string;
+  readonly children?: ReactNode;
+}
+
+const createBirds = (seed: string, density: number, diffusion: number) => new Birds(seed, density, diffusion);
+
+export function BirdsCanvas({
+  createModel = createBirds,
+  defaultSeed = DEFAULT_SEED,
+  defaultPopulationDensity = DEFAULT_POPULATION_DENSITY,
+  initialViewport = INITIAL_VIEWPORT,
+  modelName = "Birds",
+  children,
+}: BirdsCanvasProps = {}) {
+  const [seed, setSeed] = useUrlSeed(defaultSeed);
   const [populationDensity, setPopulationDensity] = useUrlNumberParameter(
     "density",
-    DEFAULT_POPULATION_DENSITY,
+    defaultPopulationDensity,
     isNonnegative,
   );
   const [diffusionRate, setDiffusionRate] = useUrlNumberParameter(
@@ -80,10 +99,10 @@ export function BirdsCanvas() {
     isNonnegative,
   );
   const birds = useMemo(
-    () => new Birds(seed, populationDensity, diffusionRate),
-    [diffusionRate, populationDensity, seed],
+    () => createModel(seed, populationDensity, diffusionRate),
+    [createModel, diffusionRate, populationDensity, seed],
   );
-  const viewport = useViewport2D(INITIAL_VIEWPORT, {
+  const viewport = useViewport2D(initialViewport, {
     verticalScale: TIME_WORLD_SCALE,
     verticalZoomExponent: TIME_ZOOM_EXPONENT,
   });
@@ -159,7 +178,7 @@ export function BirdsCanvas() {
     } satisfies BirdsFlowListResult;
   }, [birds, flowResolution, hoveredCell, showFlows]);
   const [tracked, setTracked] = useState<{
-    readonly birds: Birds;
+    readonly birds: BirdsQueryApi;
     readonly sighting: Sighting;
   }>();
   const trackedSighting =
@@ -222,7 +241,7 @@ export function BirdsCanvas() {
 
   return (
     <>
-      <title>{`Birds (${seed})`}</title>
+      <title>{`${modelName} (${seed})`}</title>
       <ViewportFrame
         axisLabels={{ x: "x", y: "t" }}
         canvasLabel="Pannable spacetime population view with future upward"
@@ -301,6 +320,7 @@ export function BirdsCanvas() {
           setValue={setDiffusionRate}
           value={diffusionRate}
         />
+        {children}
         <span>
           Δx = {formatResolution(resolution?.cellWidth)} · Δt ={" "}
           {formatResolution(resolution?.timeStep)}
@@ -327,14 +347,14 @@ export function BirdsCanvas() {
 }
 
 function usePopulationScaleTransition(
-  birds: Birds,
+  birds: BirdsQueryApi,
   resolution: BirdsPopulationResolution | undefined,
   size: Size2D,
   viewport: ViewportState,
 ): PopulationScaleOverlay | undefined {
   const previousRef = useRef<{
     readonly area: number;
-    readonly birds: Birds;
+    readonly birds: BirdsQueryApi;
     readonly resolution: BirdsPopulationResolution | undefined;
   }>({ area: viewport.area, birds, resolution });
   const [transition, setTransition] = useState<{
@@ -415,7 +435,7 @@ function usePopulationScaleTransition(
 }
 
 function populationResolutionTransitionArea(
-  birds: Birds,
+  birds: BirdsQueryApi,
   size: Size2D,
   currentArea: number,
   projectedArea: number,
@@ -445,7 +465,7 @@ function populationResolutionTransitionArea(
 }
 
 function buildTrackedTrajectory(
-  birds: Birds,
+  birds: BirdsQueryApi,
   origin: Sighting,
 ): TrackedTrajectory | undefined {
   const resolution = birds.resolveFlowResolution({
@@ -533,7 +553,7 @@ function drawBirds(
   size: Size2D,
   world: Size2D,
   viewport: ViewportState,
-  birds: Birds,
+  birds: BirdsQueryApi,
   resolution: BirdsPopulationResolution | undefined,
   hoveredCell: HoveredPopulationCell | undefined,
   hoveredFlows: BirdsFlowListResult | undefined,
@@ -632,7 +652,7 @@ function drawCachedPopulationLayer(
     readonly minTime: number;
     readonly minX: number;
   },
-  birds: Birds,
+  birds: BirdsQueryApi,
   overlay: PopulationScaleOverlay,
   populationDensity: number,
 ): void {
@@ -975,7 +995,7 @@ function populationCellAt(
 }
 
 function populationAt(
-  birds: Birds,
+  birds: BirdsQueryApi,
   cell: HoveredPopulationCell,
   resolution: BirdsPopulationResolution,
 ): number | undefined {
@@ -991,7 +1011,7 @@ function populationAt(
 }
 
 function birdsRenderResolution(
-  birds: Birds,
+  birds: BirdsQueryApi,
   size: Size2D,
   world: Size2D,
 ): BirdsPopulationResolution | undefined {

@@ -282,6 +282,10 @@ hits. No rank calculations run during ordinary queries.
 
 ## Motion windows for single-channel queries
 
+The experimental [`/birds2a`](../src/pages/Birds2aPage.tsx) GUI is described in the
+[viewer section](#experimental-viewer) below; it uses these local windows through
+the engine, without a global channel-selection API.
+
 [`motionSupport.ts`](../src/models/birds2a/motionSupport.ts) constructs a reusable,
 seed-independent support object from the diffusion rate. It supplies conservative
 flow predicates, source/destination enumeration at every legal opposite width,
@@ -364,5 +368,42 @@ diffusion, and a small viewport-like batch.
 
 Open work includes total-work analysis, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
-There is no consumer-facing Birds 2 API, trajectory matching, GUI integration, or coverage
-theorem in this prototype.
+The single-channel consumer API supports population and flow queries and the shared
+Sighting helper. Global channel selection and its coverage theorem remain open.
+
+## Experimental viewer
+
+The application index links to `/birds2a`, using the same
+[`BirdsCanvas`](../src/components/BirdsCanvas.tsx) as Birds 1. Defaults are seed
+`Polis 4`, density 32, diffusion 0.5, and origin `[0,1)` at time zero.
+The origin's total population is sampled once, not replenished at later times.
+
+[`BirdsQueryApi`](../src/models/birds/birdsQueryApi.ts) implements the shared
+consumer-facing capabilities: resolution selection, snapshot profiles, cached-only
+profiles, exact population cells and spatial refinement/coarsening, flow queries,
+incident-flow enumeration, and cache controls. Birds 1 and
+[`Birds2a`](../src/models/birds2a/birds2a.ts) supply their own engine, scales, and
+motion windows. Birds 2a has no fixed coarse resolution ceiling. Capabilities belong
+to the model instance that issued them.
+
+Both demos share rendering, navigation, momentum, animated reset, editable
+coordinates, URL state, hover readouts, flow arrows, click-to-track trajectories,
+zoom prefetching, and the cached-only scale-transition fade. Time points upward and
+zooms quadratically with space. The existing Sighting helper uses the common API;
+it does not need access to expansion records. Cells represent populations at
+sample times, not occupancy throughout time intervals.
+
+Birds 2a adds an aligned dyadic origin minimum/width editor, committed together by
+“Apply origin.” Query parameters include `seed`, `density`, `diffusion`,
+`origin`, `originWidth`, and the usual `x`, `y`, and `area`. Changing model
+parameters creates a new channel and discards the displayed track.
+
+Queries and rendering are synchronous, as in the Birds 1 viewer. Prefetching is
+opportunistic, not a hard frame-time guarantee; expensive cold queries can still
+block a frame. The shared tracker retains its query/refinement budgets and
+partial-track messages.
+
+The cache widget counts disposable contraction entries; resetting it preserves
+authoritative expansion records. The performance widget reports FPS and queries
+per frame. Tests cover route/control integration, both models' API behavior,
+cache-only reads, conservation, and Birds 2a tracking through the shared helper.

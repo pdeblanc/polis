@@ -24,7 +24,7 @@ use the analysis summary for findings and the canonical proposal for mathematica
   This is not a replacement for the production v1 specification.
 - [`BIRDS_EXPANSION_PROTOTYPE.md`](./BIRDS_EXPANSION_PROTOTYPE.md) describes the standalone
   single-origin expansion/contraction implementation supporting the Birds 2 proposal,
-  retained contribution records, motion windows, and expansion CLI. It does not replace
+  retained contribution records, motion windows, expansion CLI, and `/birds2a` viewer. It does not replace
   the production v1 specification.
 - [`BIRDS_2A_DEPENDENCIES.md`](./BIRDS_2A_DEPENDENCIES.md) gives the single-channel
   termination argument, decreasing dependency rank, and checks against engine calls.
