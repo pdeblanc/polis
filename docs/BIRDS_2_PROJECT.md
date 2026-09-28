@@ -79,7 +79,7 @@ The single-channel model should support random-access queries at finer spatial a
 
 This phase should also complete the single-channel dependency/support analysis needed to prove that such queries have finite ancestry.
 
-Implementation status: `src/models/birds2a` contains the unit-scale expansion, entry and owner classifiers, expansion-fact readers, conservative local motion windows, and the recursive single-channel contraction engine. Tests cover conservation, expansion-boundary routing, deterministic cache-independent replay, and decreasing ranks on actual engine dependencies. The [dependency analysis](./BIRDS_2A_DEPENDENCIES.md) establishes structural termination in representable geometry, and [CLI benchmarks](./BIRDS_2A_BENCHMARKS.md) separate expansion, cold contraction, and warm-query costs. The single-channel consumer API shares query-capability plumbing with Birds 1. The `/birds2a` demo uses the complete shared Birds viewer, including flow overlays, tracking, prefetching, and scale fades, with an additional origin editor. Total-work bounds and the global channel-selection envelope remain open. See the [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
+Implementation status: `src/models/birds2a` contains the unit-scale expansion, entry and owner classifiers, expansion-fact readers, conservative local motion windows, and the recursive single-channel contraction engine. Tests cover conservation, expansion-boundary routing, deterministic cache-independent replay, and decreasing ranks on actual engine dependencies. The [dependency analysis](./BIRDS_2A_DEPENDENCIES.md) establishes structural termination in representable geometry, and [CLI benchmarks](./BIRDS_2A_BENCHMARKS.md) separate expansion, cold contraction, and warm-query costs. The single-channel consumer API shares query-capability plumbing with Birds 1. The `/birds2a` demo uses the complete shared Birds viewer, including flow overlays, tracking, prefetching, and scale fades, with an additional origin editor. The time-only channel support and finite global channel selection are implemented; total-work bounds remain open. See the [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
 
 ### Phase 1 completion criteria
 
@@ -102,6 +102,14 @@ A global population or flow query is initially defined as the sum of every origi
 The completed single-channel support analysis must provide a finite way to enumerate all possible contributing channels for a supported global query.
 
 This explicit sum is the reference global construction.
+
+Implementation status: the explicit Birds 2b reference sum is implemented in
+`src/models/birds2b`, with finite origin selection from the existing local motion
+bounds and additional pruning by time-only channel support. It shares the query API
+and viewer with Birds 2a and is available at `/birds2b`. Tests cover direct-sum
+agreement, conservation, and deterministic replay. Earlier summation placements
+remain open; Phase 2 is not complete. See
+[implementation details and benchmark instructions](./BIRDS_2B_IMPLEMENTATION.md).
 
 ### Hierarchy placement of summation
 

@@ -77,6 +77,12 @@ npm run benchmark:birds2a
 npm run benchmark:birds2a -- --case viewport
 ```
 
+Run the Birds 2b cold/warm viewport benchmarks (20-second limit per case):
+
+```sh
+npm run benchmark:birds2b
+```
+
 Case definitions, limits, and results are in [the benchmark notes](docs/BIRDS_2A_BENCHMARKS.md).
 
 Run the distribution throughput benchmarks:

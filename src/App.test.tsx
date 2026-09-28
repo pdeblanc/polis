@@ -5,6 +5,17 @@ import { App } from './App';
 
 describe('App routing', () => {
   afterEach(() => { cleanup(); window.history.replaceState({}, '', '/'); });
+  it('reuses the complete Birds viewer for the summed model', () => {
+    window.history.replaceState({}, '', '/birds2b');
+    render(<MemoryRouter initialEntries={['/birds2b']}><App /></MemoryRouter>);
+    expect(document.title).toBe('Birds 2b (Polis 5)');
+    expect(screen.getByRole('heading', { name: 'Birds 2b: summed channels' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Flows' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Reset cache' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Origin interval' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Support bound' })).not.toBeInTheDocument();
+  });
   it('renders the Birds 2a controls and shares edited origin parameters', () => {
     window.history.replaceState({}, '', '/birds2a');
     render(<MemoryRouter initialEntries={['/birds2a']}><App /></MemoryRouter>);

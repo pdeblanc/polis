@@ -25,6 +25,11 @@ const experiments = [
     path: '/birds2a',
     title: 'Birds 2a: single origin',
   },
+  {
+    description: 'The global population formed by summing independent origin channels.',
+    path: '/birds2b',
+    title: 'Birds 2b: summed channels',
+  },
 ] as const;
 
 export function HomePage() {

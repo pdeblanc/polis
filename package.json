@@ -11,6 +11,7 @@
     "benchmark:distributions": "vitest bench --run src/benchmarks/distributions.bench.ts",
     "benchmark:complexity": "tsx src/benchmarks/modelComplexity.ts",
     "benchmark:birds2a": "node --import tsx src/benchmarks/birds2aComplexityReport.ts",
+    "benchmark:birds2b": "node --import tsx src/benchmarks/birds2bViewportReport.ts",
     "benchmark:birds-tracker": "tsx src/benchmarks/birdsTracker.ts",
     "characterize:birds-populations": "tsx src/benchmarks/birdsPopulationMarginals.ts",
     "characterize:birds-population-phases": "tsx src/benchmarks/birdsPopulationPhaseReport.ts",

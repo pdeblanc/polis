@@ -89,7 +89,8 @@ Motion truncation is an architectural finite-search constraint, not a property o
 target Poisson–Brownian law. Intermediate bridges can overshoot the direct endpoint
 envelope, so support bounds must include their excursions and rounding. The local
 flow bounds and time-only population envelope below include contraction;
-global-channel pruning remains open.
+the global reference sum uses them for channel selection as described in
+[Birds 2b](./BIRDS_2B_IMPLEMENTATION.md).
 
 Poisson initialization uses stdlib's inverse CDF and an addressed uniform, without an
 explicit population-tail clamp or large-mean normal approximation. Finite random-bit
@@ -359,18 +360,18 @@ index limits produce an error rather than a non-progressing enumeration loop.
 
 This is a local displacement bound for single-channel query evaluation, **not** the
 global channel-selection envelope about time zero. The time-only construction below
-tracks kernel supports across expansion and refinement; inverting support over the origin partition
-for Birds 2b's finite channel search remains separate work.
+tracks kernel supports across expansion and refinement. Birds 2b uses local bounds
+for a finite reverse search to zero and these tighter bounds for candidate pruning.
 
 The [CLI complexity benchmarks](./BIRDS_2A_BENCHMARKS.md) measure expansion, cold
 contraction, and warm queries separately, with bounded worker processes and independent
 dependency-count passes. Initial results cover refinement, time offsets, density,
 diffusion, and a small viewport-like batch.
 
-Open work includes total-work analysis, a motion-support bound
-that permits finite origin-channel searches, and a global model that sums those channels.
+Open work includes total-work analysis and efficient placement of channel sums.
 The single-channel consumer API supports population and flow queries and the shared
-Sighting helper. Global channel selection and its coverage theorem remain open.
+Sighting helper. The [Birds 2b reference model](./BIRDS_2B_IMPLEMENTATION.md) implements
+finite channel selection and explicit global summation.
 
 ### Time-only population envelope
 
@@ -420,8 +421,8 @@ Work follows only the expansion prefix and one temporal-refinement branch, rathe
 than enumerating possible trajectories. Tests cover endpoint regressions, retained
 expansion frames on both branches, contraction rows across shell interiors,
 rounding-sensitive diffusion rates, and absence of model evaluation.
-Inverting these bounds over the origin partition for global channel selection
-remains separate work.
+Birds 2b combines these bounds with a conservative reverse-time local-flow window
+to enumerate a finite set of origin channels.
 
 ## Experimental viewer
 

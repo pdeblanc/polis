@@ -20,7 +20,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_2_EXPANSION_PROPOSAL.md`](./BIRDS_2_EXPANSION_PROPOSAL.md) records the Birds 2
   expansion-phase proposal: single-origin expansion, classifier-based contraction,
   support-guided channel composition, and later local aggregation. Single-channel
-  expansion and contraction are implemented; global composition remains pending.
+  expansion, contraction, and explicit global composition are implemented; earlier
+  summation placements remain to be evaluated.
   This is not a replacement for the production v1 specification.
 - [`BIRDS_EXPANSION_PROTOTYPE.md`](./BIRDS_EXPANSION_PROTOTYPE.md) describes the standalone
   single-origin expansion/contraction implementation supporting the Birds 2 proposal,
@@ -30,6 +31,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
   termination argument, decreasing dependency rank, and checks against engine calls.
 - [`BIRDS_2A_BENCHMARKS.md`](./BIRDS_2A_BENCHMARKS.md) specifies bounded CLI complexity
   workloads, measurement phases, and initial expansion/cold/warm results.
+- [`BIRDS_2B_IMPLEMENTATION.md`](./BIRDS_2B_IMPLEMENTATION.md) describes the explicit
+  global channel sum, finite channel search, shared API/viewer, and cold/warm benchmarks.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
