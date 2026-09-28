@@ -79,7 +79,7 @@ The single-channel model should support random-access queries at finer spatial a
 
 This phase should also complete the single-channel dependency/support analysis needed to prove that such queries have finite ancestry.
 
-Implementation status: `src/models/birds2a` contains the unit-scale expansion, cell/flow entry classifiers, expansion-fact readers, and cell-subdivision batch classification. The remaining owner classifiers, support enumeration, and contraction query engine are not yet implemented. See the [expansion implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
+Implementation status: `src/models/birds2a` contains the unit-scale expansion, cell/flow entry classifiers, expansion-fact readers, and temporal, cell-subdivision, incidence, and spatial-reconciliation owner classifiers. Dependency-shape tests check sampled ancestry and expansion-boundary routing. Support enumeration and the contraction query engine are not yet implemented. See the [expansion implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
 
 ### Phase 1 completion criteria
 

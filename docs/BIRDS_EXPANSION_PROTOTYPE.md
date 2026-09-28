@@ -204,10 +204,20 @@ three-time facts are deferred until a contraction dependency demonstrably needs 
 
 Cell-subdivision batches are classified separately: either retrieve retained child
 populations or, when no finer expansion fact exists, identify a binomial owner. The
-recursive samplers are not implemented yet. Temporal and incidence batch ownership,
-the contraction query engine, motion-support enumeration, and finite-ancestry proof
-remain to be completed. These readers are internal building blocks, not a partial
+recursive samplers are not implemented yet. The contraction query engine,
+motion-support enumeration, and finite-ancestry proof remain to be completed.
+These readers are internal building blocks, not a partial
 consumer-facing Birds 2a query API.
+
+[`ownerClassifiers.ts`](../src/models/birds2a/ownerClassifiers.ts) supplies A/C temporal,
+G1/G2 incidence, and H spatial-reconciliation ownership. Geometry fields identify
+midpoint times, opposite endpoint widths/times, children, and mixed-width margins,
+without requiring query code to calculate with stage or epoch labels. Spatial batches
+either retrieve their expansion entries or use the usual hypergeometric construction.
+Temporal owners use multinomial subdivision only when their ordinary legs are not
+expansion facts. If expansion supplies both legs, the temporal-owner classifier throws:
+that batch must not be evaluated, and ordinary queries must retrieve the retained legs
+directly. This does not assert that leg counts determine a joint three-time allocation.
 
 Tests additionally check classifier domains and returned dependencies, frame and step
 projections, mixed-width margins, empty contributions, cold versus already-built epoch
@@ -215,6 +225,13 @@ access, and preservation of projected answers after further expansion.
 Ordinary-flow tests check all supported width combinations, row/column conservation,
 agreement with raw endpoint-pair aggregates, frozen output, and complete table coverage
 of expansion-classified geometries, including empty channels.
+Owner tests check whole-batch coverage and reject temporal evaluation for retained legs.
+A deterministic randomized dependency-shape walk covers fine/coarse scales and positive
+and negative times, checking termination at expansion facts without requesting those
+forbidden temporal batches. Spatial indices do not affect these classifications, so
+the walk uses representative endpoints rather than enumerating motion windows. This
+is structural regression coverage, not a proof of finite spatial enumeration or an
+end-to-end engine test.
 
 Open work includes contraction consistent with retained batches, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
