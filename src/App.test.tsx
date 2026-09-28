@@ -16,6 +16,10 @@ describe('App routing', () => {
     expect(flows).toBeChecked();
     fireEvent.click(flows);
     expect(flows).not.toBeChecked();
+    const support = screen.getByRole('checkbox', { name: 'Support bound' });
+    expect(support).toBeChecked();
+    fireEvent.click(support);
+    expect(support).not.toBeChecked();
     expect(screen.getByRole('button', { name: 'Reset view to origin' })).toBeInTheDocument();
     const origin = screen.getByRole('group', { name: 'Origin interval' });
     expect(origin).toHaveTextContent('[0, 1)');

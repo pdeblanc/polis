@@ -87,8 +87,9 @@ containing that contribution.
 
 Motion truncation is an architectural finite-search constraint, not a property of the
 target Poisson–Brownian law. Intermediate bridges can overshoot the direct endpoint
-envelope, so a future support bound must include their excursions and rounding. This
-prototype does not yet derive a support envelope for contraction or global-channel pruning.
+envelope, so support bounds must include their excursions and rounding. The local
+flow bounds and finite-resolution population envelope below include contraction;
+global-channel pruning remains open.
 
 Poisson initialization uses stdlib's inverse CDF and an addressed uniform, without an
 explicit population-tail clamp or large-mean normal approximation. Finite random-bit
@@ -357,9 +358,9 @@ times/coordinates, and retained expansion flows across origins and scales. Numer
 index limits produce an error rather than a non-progressing enumeration loop.
 
 This is a local displacement bound for single-channel query evaluation, **not** the
-global channel-selection envelope about time zero. The latter must still include
-contraction at unrecorded times and account for the origin partition before Birds 2b
-can sum a finite set of channels.
+global channel-selection envelope about time zero. The snapshot construction below
+combines local bounds across scales; inverting support over the origin partition
+for Birds 2b's finite channel search remains separate work.
 
 The [CLI complexity benchmarks](./BIRDS_2A_BENCHMARKS.md) measure expansion, cold
 contraction, and warm queries separately, with bounded worker processes and independent
@@ -370,6 +371,34 @@ Open work includes total-work analysis, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
 The single-channel consumer API supports population and flow queries and the shared
 Sighting helper. Global channel selection and its coverage theorem remain open.
+
+### Display-resolution population envelope
+
+[`populationSupport.ts`](../src/models/birds2a/populationSupport.ts) combines the
+local quarter-flow bound into a conservative, seed-independent interval at an
+exact snapshot time and query-cell width. It uses geometry only, without generating
+expansion epochs or querying populations.
+
+For width `w`, write `n = |t| / (w² / 4)` (including the model's time-per-width-squared
+constant in the duration). Let `R = floor(quarterRadius)`. Traverse toward zero:
+take `n mod 4` quarter-duration steps, accumulating `(n mod 4) R w` of possible
+displacement, then replace `n` with `floor(n/4)` and, if nonzero, double `w`.
+At zero, round the origin outward to this final spatial lattice. Expand that
+interval on each side by the accumulated displacement.
+
+Why this contains all populated cells: a positive population has a positive
+incident flow toward zero, whose same-width offset is at most `R`. Once time is
+aligned with the next scale, spatial aggregation preserves that population in its
+parent cell. Reversing these steps, children stay inside their parent interval and
+each temporal step expands the interval by at most its local displacement bound.
+The construction takes logarithmically many steps in the time index and applies
+equally on both time branches. It includes whole query cells, so it depends on the
+display resolution and need not be tight or monotone in time.
+
+This is a finite-resolution snapshot bound, not a continuous-time trajectory
+envelope or a completed inversion for global channel selection. Invalid or unsafe
+numeric time indices return no bound. Tests check retained expansion populations,
+sampled contraction rows, conservation inside the bound, and geometry-only API reads.
 
 ## Experimental viewer
 
@@ -398,6 +427,11 @@ Birds 2a adds an origin interval selector with left/right arrows through
 starting at `[0,1)`. Query parameters include `seed`, `density`, `diffusion`,
 `origin`, `originWidth`, and the usual `x`, `y`, and `area`. Changing model
 parameters creates a new channel and discards the displayed track.
+
+“Support bound,” enabled by default, draws the finite-resolution envelope as an
+amber stepped outline and dims the area outside it. It is independent of sampled
+occupancy and may be substantially wider. The outline follows displayed snapshot
+bands, changes with resolution, and is not an interpolated trajectory bound.
 
 Queries and rendering are synchronous, as in the Birds 1 viewer. Prefetching is
 opportunistic, not a hard frame-time guarantee; expensive cold queries can still

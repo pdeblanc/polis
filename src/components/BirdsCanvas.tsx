@@ -69,6 +69,7 @@ interface PopulationScaleOverlay {
 }
 
 interface BirdsCanvasProps {
+  readonly populationSupport?: (model: BirdsQueryApi, time: number, resolution: BirdsPopulationResolution) => { readonly min: number; readonly max: number } | undefined;
   readonly createModel?: (seed: string, density: number, diffusion: number) => BirdsQueryApi;
   readonly defaultSeed?: string;
   readonly defaultPopulationDensity?: number;
@@ -86,6 +87,7 @@ export function BirdsCanvas({
   initialViewport = INITIAL_VIEWPORT,
   modelName = "Birds",
   children,
+  populationSupport,
 }: BirdsCanvasProps = {}) {
   const [seed, setSeed] = useUrlSeed(defaultSeed);
   const [populationDensity, setPopulationDensity] = useUrlNumberParameter(
@@ -221,6 +223,7 @@ export function BirdsCanvas({
         trackedTrajectory,
         populationDensity,
         scaleOverlay,
+        populationSupport,
       ),
     );
     updateCacheUsage(setCacheUsage, birds.getCacheUsage());
@@ -237,6 +240,7 @@ export function BirdsCanvas({
     trackedTrajectory,
     world,
     scaleOverlay,
+    populationSupport,
   ]);
 
   return (
@@ -560,6 +564,7 @@ function drawBirds(
   trackedTrajectory: TrackedTrajectory | undefined,
   populationDensity: number,
   scaleOverlay: PopulationScaleOverlay | undefined,
+  populationSupport: BirdsCanvasProps['populationSupport'],
 ): number {
   drawBackground(context, size, viewport);
   const bounds = {
@@ -626,6 +631,10 @@ function drawBirds(
       populationDensity,
     );
   }
+  if (populationSupport !== undefined) {
+    drawPopulationSupport(context, size, viewport, resolution, firstTimeIndex, finalTimeIndex,
+      (time) => populationSupport(birds, time, resolution));
+  }
   if (hoveredCell !== undefined) {
     drawHoveredCell(context, size, viewport, resolution, hoveredCell);
   }
@@ -640,6 +649,43 @@ function drawBirds(
   }
   drawDirection(context);
   return queries;
+}
+
+/** Stepped outline follows the displayed snapshot bands, not an interpolated path. */
+function drawPopulationSupport(
+  context: CanvasRenderingContext2D, size: Size2D, viewport: ViewportState,
+  resolution: BirdsPopulationResolution, firstRow: number, lastRow: number,
+  supportAt: (time: number) => { readonly min: number; readonly max: number } | undefined,
+): void {
+  const bands = [];
+  for (let row = firstRow; row <= lastRow; row++) {
+    const time = row * resolution.timeStep;
+    const support = supportAt(time);
+    if (!support) continue;
+    const bottom = worldToScreen({ x: support.min, y: time - resolution.timeStep / 2 }, size, viewport, TIME_ZOOM_EXPONENT, TIME_WORLD_SCALE);
+    const top = worldToScreen({ x: support.max, y: time + resolution.timeStep / 2 }, size, viewport, TIME_ZOOM_EXPONENT, TIME_WORLD_SCALE);
+    bands.push({ left: bottom.x, right: top.x, bottom: bottom.y, top: top.y, row });
+    context.fillStyle = 'rgb(0 0 0 / 35%)';
+    const left = Math.max(0, Math.min(size.width, bottom.x));
+    const right = Math.max(0, Math.min(size.width, top.x));
+    context.fillRect(0, top.y, left, bottom.y - top.y);
+    context.fillRect(right, top.y, size.width - right, bottom.y - top.y);
+  }
+  for (const [color, width] of [['#080d13', 5], ['#ffc86a', 2]] as const) {
+    context.strokeStyle = color;
+    context.lineWidth = width;
+    context.beginPath();
+    for (const edge of ['left', 'right'] as const) {
+      let previousRow: number | undefined;
+      for (const band of bands) {
+        if (previousRow === band.row - 1) context.lineTo(band[edge], band.bottom);
+        else context.moveTo(band[edge], band.bottom);
+        context.lineTo(band[edge], band.top);
+        previousRow = band.row;
+      }
+    }
+    context.stroke();
+  }
 }
 
 function drawCachedPopulationLayer(

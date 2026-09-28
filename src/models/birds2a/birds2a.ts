@@ -4,9 +4,12 @@ import { Birds2aEngine } from './birds2aEngine';
 import { birds2aScale, classifyBirds2aCellGeometry } from './classifiers';
 import type { ExpansionCell } from './expansion';
 import { possibleBirds2aFlowDestinations, possibleBirds2aFlowSources } from './motionSupport';
+import type { BirdsPopulationResolution } from '../birds/birdsQueryApi';
+import { birds2aPopulationSupport } from './populationSupport';
 
 /** Single-origin model with the same consumer capabilities as Birds 1. */
 export class Birds2a extends BirdsQueryApi {
+  readonly #engine: Birds2aEngine;
   constructor(seed: Seed, populationDensity: number, diffusionRate: number, origin?: ExpansionCell) {
     const engine = new Birds2aEngine(seed, populationDensity, diffusionRate, origin);
     super({
@@ -35,5 +38,12 @@ export class Birds2a extends BirdsQueryApi {
         cell, duration, engine.expansion.origin, engine.motionSupport,
       ),
     });
+    this.#engine = engine;
+  }
+
+  /** Geometry-only support at an exact snapshot time; never populates caches. */
+  populationSupport(time: number, resolution: BirdsPopulationResolution): ExpansionCell | undefined {
+    this.getNearbyPopulationResolutions(resolution, 0);
+    return birds2aPopulationSupport(this.#engine.expansion.origin, this.#engine.motionSupport, time, resolution.cellWidth);
   }
 }

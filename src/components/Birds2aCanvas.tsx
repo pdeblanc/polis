@@ -1,12 +1,16 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
+import type { BirdsQueryApi, BirdsPopulationResolution } from '../models/birds/birdsQueryApi';
 import { useUrlNumberParameter } from '../helpers/urlState';
 import { Birds2a } from '../models/birds2a/birds2a';
 import { BirdsCanvas } from './BirdsCanvas';
 
 const INITIAL_VIEW = { centerX: 0.5, centerY: 0, area: 2 };
 const dyadicWidth = (n: number) => n > 0 && Number.isInteger(Math.log2(n));
+const populationSupport = (model: BirdsQueryApi, time: number, resolution: BirdsPopulationResolution) =>
+  model instanceof Birds2a ? model.populationSupport(time, resolution) : undefined;
 
 export function Birds2aCanvas() {
+  const [showSupport, setShowSupport] = useState(true);
   const [originMin, setOriginMin] = useUrlNumberParameter('origin', 0);
   const [originWidth, setOriginWidth] = useUrlNumberParameter('originWidth', 1, dyadicWidth);
   const validOrigin = Number.isSafeInteger(originMin / originWidth);
@@ -20,8 +24,11 @@ export function Birds2aCanvas() {
   }} />;
   if (!validOrigin) return <>{control}<span role="alert">Origin must be an aligned dyadic interval.</span></>;
   return <BirdsCanvas createModel={createModel} defaultSeed="Polis 4" defaultPopulationDensity={32}
-    initialViewport={INITIAL_VIEW} modelName="Birds 2a">
+    initialViewport={INITIAL_VIEW} modelName="Birds 2a" populationSupport={showSupport ? populationSupport : undefined}>
     {control}
+    <label title="Amber: conservative support at the displayed resolution, not the occupied region or a continuous-time bound.">
+      <input type="checkbox" checked={showSupport} onChange={(event) => setShowSupport(event.target.checked)} /> Support bound
+    </label>
   </BirdsCanvas>;
 }
 
