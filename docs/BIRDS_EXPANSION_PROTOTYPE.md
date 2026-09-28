@@ -357,7 +357,12 @@ global channel-selection envelope about time zero. The latter must still include
 contraction at unrecorded times and account for the origin partition before Birds 2b
 can sum a finite set of channels.
 
-Open work includes query-complexity measurements and total-work analysis, a motion-support bound
+The [CLI complexity benchmarks](./BIRDS_2A_BENCHMARKS.md) measure expansion, cold
+contraction, and warm queries separately, with bounded worker processes and independent
+dependency-count passes. Initial results cover refinement, time offsets, density,
+diffusion, and a small viewport-like batch.
+
+Open work includes total-work analysis, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
 There is no consumer-facing Birds 2 API, trajectory matching, GUI integration, or coverage
 theorem in this prototype.

@@ -28,6 +28,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
   the production v1 specification.
 - [`BIRDS_2A_DEPENDENCIES.md`](./BIRDS_2A_DEPENDENCIES.md) gives the single-channel
   termination argument, decreasing dependency rank, and checks against engine calls.
+- [`BIRDS_2A_BENCHMARKS.md`](./BIRDS_2A_BENCHMARKS.md) specifies bounded CLI complexity
+  workloads, measurement phases, and initial expansion/cold/warm results.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements

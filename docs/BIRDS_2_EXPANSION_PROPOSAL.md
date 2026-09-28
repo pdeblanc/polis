@@ -262,7 +262,8 @@ base length 1 and duration 1. Cell/flow entry and batch-owner classifiers,
 expansion-projection readers, local motion-support enumeration, and the recursive
 single-channel contraction engine are implemented. Tests cover conservation and
 deterministic replay across expansion/refinement boundaries. The next work includes
-query-complexity measurements, total-work analysis, and the origin-relative support envelope.
+total-work analysis and the origin-relative support envelope.
+The [CLI benchmarks](./BIRDS_2A_BENCHMARKS.md) provide initial complexity measurements.
 The [dependency analysis](./BIRDS_2A_DEPENDENCIES.md) establishes structural termination.
 Global channel
 composition and local pooling remain explicitly later steps. The

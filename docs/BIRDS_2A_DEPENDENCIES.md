@@ -129,8 +129,9 @@ prefix. Expansion cannot introduce a dependency back into the contraction tree.
 
 This proves structural termination in representable geometry. It does **not**
 prove polynomial total work: the rank bounds depth, not the number of distinct
-nodes or repeated evaluations after eviction. CLI complexity measurements are
-the next step. Nor does it establish the origin-relative envelope needed to
+nodes or repeated evaluations after eviction. The
+[CLI benchmarks](./BIRDS_2A_BENCHMARKS.md) provide empirical request counts and timings.
+Nor does it establish the origin-relative envelope needed to
 select finitely many channels in Birds 2b.
 
 ## Executable checks

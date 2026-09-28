@@ -70,6 +70,15 @@ Print tab-separated terrain and starfield complexity measurements:
 npm run benchmark:complexity
 ```
 
+Run bounded Birds 2a complexity benchmarks (JSONL output):
+
+```sh
+npm run benchmark:birds2a
+npm run benchmark:birds2a -- --case viewport
+```
+
+Case definitions, limits, and results are in [the benchmark notes](docs/BIRDS_2A_BENCHMARKS.md).
+
 Run the distribution throughput benchmarks:
 
 ```sh
