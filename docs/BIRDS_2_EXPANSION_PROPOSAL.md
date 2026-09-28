@@ -258,10 +258,10 @@ analysis.
 ## Implementation status and next work
 
 The single-origin expansion is implemented in `src/models/birds2a/expansion.ts`, with
-base length 1 and duration 1. Cell/flow entry classifiers and expansion-projection
-readers are implemented, including classification of whole cell-subdivision batches.
-They do not yet constitute a complete contraction query engine. The next work is the
-remaining temporal/incidence/reconciliation owner classifications, support enumeration,
-and recursive queries, followed by complete dependency/support analysis. Global channel
+base length 1 and duration 1. Cell/flow entry and batch-owner classifiers,
+expansion-projection readers, local motion-support enumeration, and the recursive
+single-channel contraction engine are implemented. Tests cover conservation and
+deterministic replay across expansion/refinement boundaries. The next work includes
+complete dependency/complexity analysis and the origin-relative support envelope. Global channel
 composition and local pooling remain explicitly later steps. The
 [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) describe the current modules and CLI.

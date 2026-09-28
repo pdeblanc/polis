@@ -203,9 +203,7 @@ There is no two-stage query interface or explicit `(0,T,2T)` allocation table. A
 three-time facts are deferred until a contraction dependency demonstrably needs them.
 
 Cell-subdivision batches are classified separately: either retrieve retained child
-populations or, when no finer expansion fact exists, identify a binomial owner. The
-recursive samplers are not implemented yet. The contraction query engine
-and finite-ancestry proof remain to be completed.
+populations or, when no finer expansion fact exists, identify a binomial owner.
 These readers are internal building blocks, not a partial
 consumer-facing Birds 2a query API.
 
@@ -232,6 +230,52 @@ forbidden temporal batches. Spatial indices do not affect these classifications,
 the walk uses representative endpoints rather than enumerating motion windows. This
 is structural regression coverage, not a proof of finite spatial enumeration or an
 end-to-end engine test.
+
+## Single-channel contraction engine
+
+[`birds2aEngine.ts`](../src/models/birds2a/birds2aEngine.ts) combines the retained
+expansion with recursive A–H contraction. Its internal `queryCell(cell)` and
+`queryFlow(flow)` methods accept exact hierarchy coordinates and return this
+origin channel's integer contribution. They do not expose a consumer resolution
+wrapper or sum other origins. The production Birds 1 API and GUI are unchanged.
+
+```ts
+const engine = new Birds2aEngine('example', 2, 0.5, { min: 0, max: 1 });
+const count = engine.queryCell({ min: 0, max: 0.5, time: 0.25 });
+```
+
+Expansion-classified queries retrieve retained counts. Otherwise the engine uses:
+
+- A/C addressed multinomial midpoint allocations and B/D temporal leg sums;
+- E outgoing-flow sums for introduced cell populations;
+- F binomial cell splits, or retained child populations where available;
+- G1/G2 multivariate-hypergeometric incidence splits respecting child populations;
+- H hypergeometric 2×2 reconciliation respecting both mixed-width margins.
+
+Temporal batches remain private and are reached only from contraction-owned legs.
+No expansion two-stage query interface is needed. Queries use classifier-provided
+dependency geometry without arithmetic on epoch or stage labels. Motion windows
+bound incidence and temporal-parent searches; zero populations and zero parent
+flows avoid unnecessary sampling and reconciliation.
+
+Random addresses use a `birds2a.refinement` namespace, the fixed origin interval,
+the operation, and full owner coordinates. Category addresses use their cell
+coordinates. Query order, cache state, and expansion depth are not random inputs.
+The two time directions and incoming/outgoing incidence owners have distinct
+addresses. The existing expansion namespace and sampled records are unchanged.
+
+Disposable facts and batches use model-scoped `QuickLRU` caches with named capacity
+constants. `clearCache()` clears contraction caches only; authoritative expansion
+epochs remain retained and immutable. A new engine is required for a fully cold
+expansion run. Neither eviction nor clearing changes query answers.
+
+Engine tests check spatial conservation, incoming/outgoing conservation at all
+three equal-width durations, mixed-width margins, whole-channel population across
+refined time slices, positive and negative times, and nondefault origins. They also
+check retained-output agreement without resampling, replay after cache clearing,
+reversed query order and later expansion, empty channels, and invalid geometry.
+These are structural correctness checks, not statistical calibration or a complete
+complexity/finite-ancestry proof.
 
 ## Motion windows for single-channel queries
 
@@ -310,7 +354,7 @@ global channel-selection envelope about time zero. The latter must still include
 contraction at unrecorded times and account for the origin partition before Birds 2b
 can sum a finite set of channels.
 
-Open work includes contraction consistent with retained batches, a motion-support bound
+Open work includes complete dependency/complexity analysis, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
-There is no inward query implementation, trajectory matching, GUI integration, or coverage
+There is no consumer-facing Birds 2 API, trajectory matching, GUI integration, or coverage
 theorem in this prototype.
