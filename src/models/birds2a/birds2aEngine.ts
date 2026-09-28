@@ -5,6 +5,7 @@ import { hypergeometric } from '../../utils/distributions/hypergeometric';
 import { multivariateHypergeometric } from '../../utils/distributions/multivariateHypergeometric';
 import { createAddressedRandom, type AddressedRandom, type Seed } from '../../utils/rng/addressedRandom';
 import type { Address } from '../../utils/rng/address';
+import type { Birds2aDependencyEdge, Birds2aDependencyNode } from './dependencyRanks';
 import { Birds2aExpansion, type ExpansionCell } from './expansion';
 import { classifyBirds2aCell, classifyBirds2aCellSubdivision, classifyBirds2aFlow,
   type Birds2aCell, type Birds2aFlow } from './classifiers';
@@ -25,6 +26,8 @@ export class Birds2aEngine {
   readonly motionSupport: ReturnType<typeof createBirds2aMotionSupport>;
   readonly #random: AddressedRandom;
   readonly #prefix: Address;
+  readonly #observeDependency?: (edge: Birds2aDependencyEdge) => void;
+  #activeDependency?: Birds2aDependencyNode;
   readonly #cells = new QuickLRU<string, number>({ maxSize: BIRDS_2A_FACT_CACHE_CAPACITY });
   readonly #flows = new QuickLRU<string, number>({ maxSize: BIRDS_2A_FACT_CACHE_CAPACITY });
   readonly #temporal = new QuickLRU<string, ReadonlyMap<number, number>>({ maxSize: BIRDS_2A_BATCH_CACHE_CAPACITY });
@@ -32,11 +35,13 @@ export class Birds2aEngine {
   readonly #incidence = new QuickLRU<string, ReadonlyMap<number, Pair>>({ maxSize: BIRDS_2A_BATCH_CACHE_CAPACITY });
   readonly #spatial = new QuickLRU<string, readonly number[]>({ maxSize: BIRDS_2A_BATCH_CACHE_CAPACITY });
 
-  constructor(seed: Seed, populationDensity: number, diffusionRate: number, origin?: ExpansionCell) {
+  constructor(seed: Seed, populationDensity: number, diffusionRate: number, origin?: ExpansionCell,
+    observeDependency?: (edge: Birds2aDependencyEdge) => void) {
     this.expansion = new Birds2aExpansion(seed, populationDensity, diffusionRate, origin);
     this.motionSupport = createBirds2aMotionSupport(diffusionRate);
     this.#random = createAddressedRandom(seed);
     this.#prefix = ['birds2a.refinement', this.expansion.origin.min, this.expansion.origin.max];
+    this.#observeDependency = observeDependency;
   }
 
   /** Clears disposable contraction caches; authoritative expansion batches remain. */
@@ -49,7 +54,7 @@ export class Birds2aEngine {
     const construction = classifyBirds2aCell(cell, this.expansion.origin);
     if (!construction) throw new RangeError('Invalid Birds 2a cell');
     if (this.expansion.getEpoch(0).population === 0) return 0;
-    return cached(this.#cells, cellKey(cell), () => {
+    return this.#cached(this.#cells, cellKey(cell), this.#observeDependency && { role: 'cell', cell }, () => {
       switch (construction.kind) {
         case 'expansion': return readExpansionCell(this.expansion, cell, construction.projection);
         case 'spatial-child': return this.#subdivideCell(construction.subdivisionOwner)[construction.childIndex];
@@ -65,7 +70,7 @@ export class Birds2aEngine {
     const construction = classifyBirds2aFlow(flow, this.expansion.origin);
     if (!construction) throw new RangeError('Invalid Birds 2a flow');
     if (this.expansion.getEpoch(0).population === 0) return 0;
-    return cached(this.#flows, flowKey(flow), () => {
+    return this.#cached(this.#flows, flowKey(flow), this.#observeDependency && { role: 'flow', flow }, () => {
       if (!isPossibleBirds2aFlow(flow, this.expansion.origin, this.motionSupport)) return 0;
       switch (construction.kind) {
         case 'expansion': return readExpansionFlow(this.expansion, construction.projection);
@@ -87,7 +92,7 @@ export class Birds2aEngine {
   }
 
   #subdivideTime(flow: Birds2aFlow): ReadonlyMap<number, number> {
-    return cached(this.#temporal, flowKey(flow), () => {
+    return this.#cached(this.#temporal, flowKey(flow), this.#observeDependency && { role: 'temporal-subdivision', flow }, () => {
       // Checks ownership even for zero counts: an expansion-owned joint must
       // never be silently replaced by a contraction draw.
       const categories = birds2aMidpointCellProbabilities(flow, this.expansion.origin, this.motionSupport);
@@ -100,7 +105,7 @@ export class Birds2aEngine {
   }
 
   #subdivideCell(cell: Birds2aCell): Pair {
-    return cached(this.#splits, cellKey(cell), () => {
+    return this.#cached(this.#splits, cellKey(cell), this.#observeDependency && { role: 'cell-subdivision', cell }, () => {
       const owner = classifyBirds2aCellSubdivision(cell, this.expansion.origin)!;
       if (owner.kind === 'expansion') return [
         readExpansionCell(this.expansion, owner.children[0], owner.projection),
@@ -114,7 +119,8 @@ export class Birds2aEngine {
 
   #subdivideIncidence(cell: Birds2aCell, outgoing: boolean): ReadonlyMap<number, Pair> {
     const role = outgoing ? 'outflows' : 'inflows';
-    return cached(this.#incidence, `${role}:${cellKey(cell)}`, () => {
+    return this.#cached(this.#incidence, `${role}:${cellKey(cell)}`,
+      this.#observeDependency && { role: outgoing ? 'outflow-subdivision' : 'inflow-subdivision', cell }, () => {
       const owner = (outgoing ? classifyBirds2aOutflowSubdivision : classifyBirds2aInflowSubdivision)(cell, this.expansion.origin)!;
       if (this.queryCell(cell) === 0) return new Map();
       const endpoints = (outgoing ? possibleBirds2aFlowDestinations : possibleBirds2aFlowSources)(
@@ -138,7 +144,7 @@ export class Birds2aEngine {
   }
 
   #subdivideSpace(flow: Birds2aFlow): readonly number[] {
-    return cached(this.#spatial, flowKey(flow), () => {
+    return this.#cached(this.#spatial, flowKey(flow), this.#observeDependency && { role: 'flow-space-subdivision', flow }, () => {
       const owner = classifyBirds2aFlowSpaceSubdivision(flow, this.expansion.origin)!;
       if (owner.kind === 'expansion') return owner.childFlows.map((child) => this.queryFlow(child));
       const count = this.queryFlow(flow);
@@ -147,6 +153,15 @@ export class Birds2aEngine {
       const upperLeft = hypergeometric(this.#random, [...this.#prefix, 'space', ...flowAddress(flow)], count, row, column);
       return [upperLeft, row - upperLeft, column - upperLeft, count - row - column + upperLeft];
     });
+  }
+
+  #cached<T>(cache: QuickLRU<string, T>, key: string, node: Birds2aDependencyNode | undefined, compute: () => T): T {
+    if (!node) return cached(cache, key, compute);
+    const dependent = this.#activeDependency;
+    if (dependent) this.#observeDependency!({ dependent, dependency: node });
+    this.#activeDependency = node;
+    try { return cached(cache, key, compute); }
+    finally { this.#activeDependency = dependent; }
   }
 }
 

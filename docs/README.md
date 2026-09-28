@@ -26,6 +26,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
   single-origin expansion/contraction implementation supporting the Birds 2 proposal,
   retained contribution records, motion windows, and expansion CLI. It does not replace
   the production v1 specification.
+- [`BIRDS_2A_DEPENDENCIES.md`](./BIRDS_2A_DEPENDENCIES.md) gives the single-channel
+  termination argument, decreasing dependency rank, and checks against engine calls.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements

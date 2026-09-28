@@ -274,8 +274,11 @@ three equal-width durations, mixed-width margins, whole-channel population acros
 refined time slices, positive and negative times, and nondefault origins. They also
 check retained-output agreement without resampling, replay after cache clearing,
 reversed query order and later expansion, empty channels, and invalid geometry.
-These are structural correctness checks, not statistical calibration or a complete
-complexity/finite-ancestry proof.
+These are structural correctness checks, not statistical calibration or a total-work
+complexity bound. The [dependency analysis](./BIRDS_2A_DEPENDENCIES.md) supplies a
+root-specific finite-ancestry argument and decreasing natural-number rank. Optional
+engine dependency observation checks that rank against actual calls, including cache
+hits. No rank calculations run during ordinary queries.
 
 ## Motion windows for single-channel queries
 
@@ -354,7 +357,7 @@ global channel-selection envelope about time zero. The latter must still include
 contraction at unrecorded times and account for the origin partition before Birds 2b
 can sum a finite set of channels.
 
-Open work includes complete dependency/complexity analysis, a motion-support bound
+Open work includes query-complexity measurements and total-work analysis, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.
 There is no consumer-facing Birds 2 API, trajectory matching, GUI integration, or coverage
 theorem in this prototype.

@@ -79,7 +79,7 @@ The single-channel model should support random-access queries at finer spatial a
 
 This phase should also complete the single-channel dependency/support analysis needed to prove that such queries have finite ancestry.
 
-Implementation status: `src/models/birds2a` contains the unit-scale expansion, entry and owner classifiers, expansion-fact readers, conservative local motion windows, and the recursive single-channel contraction engine. Tests cover dependency shapes, conservation, expansion-boundary routing, and deterministic cache-independent replay. Complete dependency/complexity analysis and the global channel-selection envelope remain open; no consumer API or GUI uses Birds 2 yet. See the [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
+Implementation status: `src/models/birds2a` contains the unit-scale expansion, entry and owner classifiers, expansion-fact readers, conservative local motion windows, and the recursive single-channel contraction engine. Tests cover conservation, expansion-boundary routing, deterministic cache-independent replay, and decreasing ranks on actual engine dependencies. The [dependency analysis](./BIRDS_2A_DEPENDENCIES.md) establishes structural termination in representable geometry; query-complexity measurements, total-work bounds, and the global channel-selection envelope remain open. No consumer API or GUI uses Birds 2 yet. See the [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md) for details; Phase 1 is not complete.
 
 ### Phase 1 completion criteria
 
