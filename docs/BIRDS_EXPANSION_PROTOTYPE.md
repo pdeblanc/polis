@@ -204,8 +204,8 @@ three-time facts are deferred until a contraction dependency demonstrably needs 
 
 Cell-subdivision batches are classified separately: either retrieve retained child
 populations or, when no finer expansion fact exists, identify a binomial owner. The
-recursive samplers are not implemented yet. The contraction query engine,
-motion-support enumeration, and finite-ancestry proof remain to be completed.
+recursive samplers are not implemented yet. The contraction query engine
+and finite-ancestry proof remain to be completed.
 These readers are internal building blocks, not a partial
 consumer-facing Birds 2a query API.
 
@@ -232,6 +232,83 @@ forbidden temporal batches. Spatial indices do not affect these classifications,
 the walk uses representative endpoints rather than enumerating motion windows. This
 is structural regression coverage, not a proof of finite spatial enumeration or an
 end-to-end engine test.
+
+## Motion windows for single-channel queries
+
+[`motionSupport.ts`](../src/models/birds2a/motionSupport.ts) constructs a reusable,
+seed-independent support object from the diffusion rate. It supplies conservative
+flow predicates, source/destination enumeration at every legal opposite width,
+midpoint probability tables for contraction-owned temporal batches, and inverse
+parent-flow searches for temporal legs. No sampled counts, expansion-cache state,
+or arbitrary maximum epoch enter the bounds. A window includes candidates whose
+actual population may be zero; it is not an exact reachability test.
+
+The temporal kernels reuse Birds 1's midpoint implementation, including its
+zero-diffusion boundary convention, with variance `D * duration / 4`. Expansion
+keeps its separately specified kernels. Midpoint queries for expansion-supplied
+legs throw through the owner classifier; parent searches for those legs return
+no dependencies because their counts are already retained.
+
+### Bound derivation
+
+Let `r` be the named duration/width-squared ratio (currently 1), `v=D*r`, and `K`
+the normal cutoff. Bounds below measure center displacements in the indicated
+cell width and include at most half a cell of rounding error:
+
+```text
+a = K sqrt(3v)   + 1/2   direct expansion over 3T
+b = K sqrt(2v/3) + 1/2   first expansion bridge residual
+c = K sqrt(v/2)  + 1/2   second expansion bridge residual
+```
+
+The expansion endpoint radius at width `L` is at most `(a+1/2)L` about the
+original origin center: initialization satisfies it and doubling the width
+preserves it under direct transport and endpoint coarsening. Moving to the
+containing time-zero cell center gives an entry-flow offset bound `E₀=a+1`.
+For a width-`2L` half-duration flow, the origin-to-`2T` bound dominates the
+`2T → 4T` bound, giving `H₀=2a/3+b/2+1`.
+
+The fine adjacent expansion displacements are bounded by `a/3+b` for
+`T → 2T`, and `a/3+b/2+c` for each of the next two legs. Aggregating both
+endpoints to double-width cells changes the normalized offset bound from `d`
+to `d/2+1/2`. The quarter-duration expansion seed is therefore:
+
+```text
+Q₀ = max(E₀/2 + 1/2, (a/3+b)/2 + 1/2, (a/3+b/2+c)/2 + 1/2)
+```
+
+This also covers the extra coarser views of initial and origin-to-horizon flows.
+All bounds are absolute, so apply on both time branches and at every spatial
+alignment, including negative coordinates.
+
+For refinement define `u=K sqrt(v/4)+1/2` and `w=K sqrt(v/8)+1/2`.
+An entry flow with offset bound `E` produces half-duration legs within
+`E/2+u`; a half flow bounded by `H` produces quarter legs within `H/2+w`.
+Spatial refinement changes a quarter offset `q` to `2q+j-i`, with child indices
+`i,j` in `{0,1}`. Thus closure requires `E >= 2Q+1`. A sufficient closed solution is:
+
+```text
+E = ceil(max(E₀, 2Q₀+1, H₀+2w+1, 2u+4w+2))
+H = max(H₀, E/2+u)
+Q = max(Q₀, H/2+w)
+```
+
+The implementation retains these real-valued bounds and enumerates integer offsets
+up to their floors. Mixed-width flows are tested using their equal-width coarse
+parent's quarter bound. This covers every possible spatial child assignment, even
+at zero diffusion. No distribution is clipped again to enforce the search window.
+
+For fixed parameters, every incidence window is finite and scale-independent in
+cell counts. Parent searches enumerate the appropriate parent window and filter
+by the actual positive-probability midpoint categories. Tests check kernel extremes,
+refinement closure, source/destination duality, inverse parent searches, negative
+times/coordinates, and retained expansion flows across origins and scales. Numeric
+index limits produce an error rather than a non-progressing enumeration loop.
+
+This is a local displacement bound for single-channel query evaluation, **not** the
+global channel-selection envelope about time zero. The latter must still include
+contraction at unrecorded times and account for the origin partition before Birds 2b
+can sum a finite set of channels.
 
 Open work includes contraction consistent with retained batches, a motion-support bound
 that permits finite origin-channel searches, and a global model that sums those channels.

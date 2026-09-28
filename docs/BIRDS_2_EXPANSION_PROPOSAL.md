@@ -166,7 +166,10 @@ independence, and preservation of earlier answers after further expansion.
 ## What expansion tells us about support
 
 The following bounds concern the records expansion generates, in representable geometry.
-They are analytic bounds, not yet executable support helpers or a bound for contraction.
+They describe the expansion envelope about the origin. Separate executable local
+flow-displacement bounds cover both expansion and contraction search windows; their
+derivation is in the [implementation notes](./BIRDS_EXPANSION_PROTOTYPE.md#motion-windows-for-single-channel-queries).
+They do not yet establish the global channel-selection envelope.
 Let `K` be the normal cutoff, `c₀` the original cell center, and `R_e` a radius around
 `c₀` containing endpoint-cell centers at epoch `e`.
 
