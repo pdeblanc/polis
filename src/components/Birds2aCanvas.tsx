@@ -6,8 +6,12 @@ import { BirdsCanvas } from './BirdsCanvas';
 
 const INITIAL_VIEW = { centerX: 0.5, centerY: 0, area: 2 };
 const dyadicWidth = (n: number) => n > 0 && Number.isInteger(Math.log2(n));
-const populationSupport = (model: BirdsQueryApi, time: number, resolution: BirdsPopulationResolution) =>
-  model instanceof Birds2a ? model.populationSupport(time, resolution) : undefined;
+const populationSupport = (model: BirdsQueryApi, time: number, resolution: BirdsPopulationResolution) => {
+  const bound = model instanceof Birds2a ? model.populationSupport(time) : undefined;
+  if (!bound) return undefined;
+  const width = resolution.cellWidth;
+  return { min: Math.floor(bound.min / width) * width, max: Math.ceil(bound.max / width) * width };
+};
 
 export function Birds2aCanvas() {
   const [showSupport, setShowSupport] = useState(true);
@@ -26,7 +30,7 @@ export function Birds2aCanvas() {
   return <BirdsCanvas createModel={createModel} defaultSeed="Polis 4" defaultPopulationDensity={32}
     initialViewport={INITIAL_VIEW} modelName="Birds 2a" populationSupport={showSupport ? populationSupport : undefined}>
     {control}
-    <label title="Amber: conservative support at the displayed resolution, not the occupied region or a continuous-time bound.">
+    <label title="Amber: conservative population support at each sampled time, rounded outward to the display grid; not the occupied region.">
       <input type="checkbox" checked={showSupport} onChange={(event) => setShowSupport(event.target.checked)} /> Support bound
     </label>
   </BirdsCanvas>;

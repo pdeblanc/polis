@@ -88,7 +88,7 @@ containing that contribution.
 Motion truncation is an architectural finite-search constraint, not a property of the
 target Poisson–Brownian law. Intermediate bridges can overshoot the direct endpoint
 envelope, so support bounds must include their excursions and rounding. The local
-flow bounds and finite-resolution population envelope below include contraction;
+flow bounds and time-only population envelope below include contraction;
 global-channel pruning remains open.
 
 Poisson initialization uses stdlib's inverse CDF and an addressed uniform, without an
@@ -358,8 +358,8 @@ times/coordinates, and retained expansion flows across origins and scales. Numer
 index limits produce an error rather than a non-progressing enumeration loop.
 
 This is a local displacement bound for single-channel query evaluation, **not** the
-global channel-selection envelope about time zero. The snapshot construction below
-combines local bounds across scales; inverting support over the origin partition
+global channel-selection envelope about time zero. The time-only construction below
+tracks kernel supports across expansion and refinement; inverting support over the origin partition
 for Birds 2b's finite channel search remains separate work.
 
 The [CLI complexity benchmarks](./BIRDS_2A_BENCHMARKS.md) measure expansion, cold
@@ -372,33 +372,56 @@ that permits finite origin-channel searches, and a global model that sums those 
 The single-channel consumer API supports population and flow queries and the shared
 Sighting helper. Global channel selection and its coverage theorem remain open.
 
-### Display-resolution population envelope
+### Time-only population envelope
 
-[`populationSupport.ts`](../src/models/birds2a/populationSupport.ts) combines the
-local quarter-flow bound into a conservative, seed-independent interval at an
-exact snapshot time and query-cell width. It uses geometry only, without generating
-expansion epochs or querying populations.
+The public `Birds2a.populationSupport(time)` returns a conservative half-open
+spatial interval containing this channel's population at the requested time.
+It takes no cell width and depends on origin geometry, diffusion, and kernel
+supports, not seed or density. Nonfinite times or unrepresentable intermediate
+geometry return `undefined`, which means unavailable, not empty support.
 
-For width `w`, write `n = |t| / (w² / 4)` (including the model's time-per-width-squared
-constant in the duration). Let `R = floor(quarterRadius)`. Traverse toward zero:
-take `n mod 4` quarter-duration steps, accumulating `(n mod 4) R w` of possible
-displacement, then replace `n` with `floor(n/4)` and, if nonzero, double `w`.
-At zero, round the origin outward to this final spatial lattice. Expand that
-interval on each side by the accumulated displacement.
+[`populationSupport.ts`](../src/models/birds2a/populationSupport.ts) follows the
+construction using intervals of possible cells instead of sampled counts:
 
-Why this contains all populated cells: a positive population has a positive
-incident flow toward zero, whose same-width offset is at most `R`. Once time is
-aligned with the next scale, spatial aggregation preserves that population in its
-parent cell. Reversing these steps, children stay inside their parent interval and
-each temporal step expands the interval by at most its local displacement bound.
-The construction takes logarithmically many steps in the time index and applies
-equally on both time branches. It includes whole query cells, so it depends on the
-display resolution and need not be tight or monotone in time.
+1. At zero, support is exactly the origin. At the initial endpoints, translate
+   it by the smallest/largest positive-probability offsets in the actual initial
+   kernels. Negative times use the reflected backward kernel.
+2. For each expansion shell, extend the inherited endpoint interval with the
+   actual direct-extension kernel. Round outward to the doubled spatial grid
+   only when that coarsened endpoint feeds another expansion. A query exactly at
+   a recorded endpoint retains its finer pre-coarsening bound.
+3. Within the shell, bound the `2T` bridge using endpoint-index weights
+   `(2 source + destination)/3`, and the `3T` bridge using
+   `(source + destination)/2`. Enumerate the three or two possible fractional
+   phases and use each kernel's positive-probability extrema. Aggregating flows
+   before the second bridge does not change the endpoint enclosure.
+4. Between consecutive retained times, follow A/C temporal bisection toward the
+   requested time. Use both parity-dependent midpoint kernels, alternating
+   normalized durations 1 and 1/2. After each pair of bisections, halve spatial
+   width, matching F/H. Stop at the requested time; further spatial subdivision
+   cannot enlarge support.
 
-This is a finite-resolution snapshot bound, not a continuous-time trajectory
-envelope or a completed inversion for global channel selection. Invalid or unsafe
-numeric time indices return no bound. Tests check retained expansion populations,
-sampled contraction rows, conservation inside the bound, and geometry-only API reads.
+The bridge interval calculation encloses every possible pair of endpoint cell
+indices. Some such pairs may be incompatible with actual flows, so this can be
+loose, but cannot exclude an allowed midpoint. Using table extrema rather than
+a symmetric sigma estimate preserves the implemented rounding, clamping, and
+zero-diffusion conventions. Induction over these expansion and refinement steps
+gives a bound on all finer spatial population subdivisions at the requested time.
+This does not claim that the model defines continuous individual trajectories.
+
+For origin `[0,1)` and diffusion 0.5, initial offsets are −4 through 4 and direct
+extension offsets are −7 through 7. The support bound at `t=4096` is
+`[-448,448)`; at `t=4`, retaining the finer endpoint gives `[-11,12)`.
+Population allocation uses exact inverse-CDF binomials, without an additional
+count-tail clamp, so lowering density does not tighten these kernel-based bounds.
+
+The calculation evaluates neither stochastic queries nor expansion batches.
+Work follows only the expansion prefix and one temporal-refinement branch, rather
+than enumerating possible trajectories. Tests cover endpoint regressions, retained
+expansion frames on both branches, contraction rows across shell interiors,
+rounding-sensitive diffusion rates, and absence of model evaluation.
+Inverting these bounds over the origin partition for global channel selection
+remains separate work.
 
 ## Experimental viewer
 
@@ -428,10 +451,11 @@ starting at `[0,1)`. Query parameters include `seed`, `density`, `diffusion`,
 `origin`, `originWidth`, and the usual `x`, `y`, and `area`. Changing model
 parameters creates a new channel and discards the displayed track.
 
-“Support bound,” enabled by default, draws the finite-resolution envelope as an
-amber stepped outline and dims the area outside it. It is independent of sampled
-occupancy and may be substantially wider. The outline follows displayed snapshot
-bands, changes with resolution, and is not an interpolated trajectory bound.
+“Support bound,” enabled by default, draws an amber stepped outline and dims the
+area outside it. The model's time-only interval is rounded outward to the displayed
+spatial grid by the viewer. The outline follows displayed snapshot bands; it is
+independent of sampled occupancy, may be wider than the occupied region, and is not
+an interpolated trajectory bound.
 
 Queries and rendering are synchronous, as in the Birds 1 viewer. Prefetching is
 opportunistic, not a hard frame-time guarantee; expensive cold queries can still
