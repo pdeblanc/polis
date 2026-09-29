@@ -83,6 +83,15 @@ Run the Birds 2b cold/warm viewport benchmarks (20-second limit per case):
 npm run benchmark:birds2b
 ```
 
+Profile cold Birds 2b viewport queries at several scales:
+
+```sh
+npm run profile:birds2b
+```
+
+Each profile case has a 30-second subprocess deadline. Output includes sampled
+CPU categories, channel-boundary time, and unprofiled baseline timing.
+
 Case definitions, limits, and results are in [the benchmark notes](docs/BIRDS_2A_BENCHMARKS.md).
 
 Run the distribution throughput benchmarks:

@@ -165,3 +165,66 @@ The composite implements an earlier summation placement. Statistical comparison
 with the explicit reference and broader workload evaluation remain open before
 closing Phase 2. Statistical calibration and Birds 2c materialization remain later
 phases; none of them are implicit in this implementation.
+
+## Initial composite profile
+
+Run `npm run profile:birds2b` for four isolated 600-cell workloads. Each uses
+24 spatial columns and 25 time rows, spatially centered on zero, with time step
+`w²/4`. The cases below specify width and central time; seed is `Polis 5`,
+density 2, diffusion 0.5. Each subprocess has a 30-second deadline including a
+disposable JIT warm-up, fresh-model baseline, and fresh-model profile.
+
+The profiler samples V8 stacks every 500 microseconds during queries only.
+Constructors, imports and rendering are outside the measured query interval.
+Inspector start/stop samples are excluded and reported separately. Categories
+are disjoint, assigned to the deepest recognized stack frame; e.g. classifier
+work called from support enumeration counts as classifiers, not support.
+Native/inlined work can be attributed to its calling frame, so small percentages
+are estimates, not precise per-operation timings. The separate boundary timer
+includes all work inside the reference-sum provider and overlaps these categories.
+
+Local Node 22.22.3/macOS arm64 results:
+
+| Width; central time | Cold baseline | Profiled | Boundary share of profiled wall time |
+| --- | ---: | ---: | ---: |
+| 1; 0 | 1.24 s | 1.36 s | 77% |
+| 1/4; 0 | 0.82 s | 0.82 s | 19% |
+| 4; 0 | 1.98 s | 2.08 s | 88% |
+| 1/4; 6 | 0.90 s | 0.92 s | 23% |
+
+| Sample category | Width 1 | Width 1/4 | Width 4 | Width 1/4, t=6 |
+| --- | ---: | ---: | ---: | ---: |
+| Classifiers | 35.9% | 46.2% | 42.4% | 47.0% |
+| Support/geometry, excluding classifiers | 33.6% | 25.4% | 31.6% | 23.4% |
+| Cache operations | 12.3% | 6.9% | 7.4% | 8.4% |
+| Cache key construction | 0.2% | 7.4% | 0.2% | 6.3% |
+| Garbage collection | 9.6% | 7.2% | 10.3% | 7.2% |
+| Distributions, excluding RNG/encoding | 0.6% | 1.1% | 0.6% | 0.8% |
+| Address encoding | 0.9% | 0.6% | 0.7% | 0.6% |
+| Hashing/RNG | 0.2% | 0.2% | 0.4% | 0.5% |
+| Other | 6.6% | 5.1% | 6.3% | 5.8% |
+
+These are single-run diagnostics, not stable timing thresholds. An earlier pass
+showed the same dominant costs. Warm replays took 0.2–0.5 ms. All profiled results
+matched their unprofiled baseline and warm replay exactly.
+
+Low-risk optimization candidates, not yet implemented:
+
+1. Move full construction classification behind successful scalar-cache lookups
+   in both engines. Currently every recursive hit repeats classification.
+   Preserve validation on misses, invalid-input behavior, and dependency observers.
+2. Replace full midpoint-table construction during parent-support membership
+   tests with a direct test against the precomputed parity kernel. Current searches
+   repeatedly translate, filter and allocate whole tables just to call `some`.
+   Preserve positive-probability membership, including the zero-diffusion cases.
+3. Avoid repeated scale validation and owner reconstruction within one support
+   operation. `birds2aScale` alone accounts for roughly 8–16% of self samples;
+   both composite and channel classifiers use it. Keep public validation intact.
+4. Enumerate only the endpoint width requested by the recursive caller, rather
+   than enumerating/sorting all legal widths and then filtering most of them out.
+
+Apply improvements to the channel and composite paths where relevant: optimizing
+only the composite cannot address the dominant cost of the coarse workload.
+Sampler replacement and another cache-library change are not the first priorities
+for these default-density population-query workloads. High-density and overlay/
+tracking workloads may have different bottlenecks and are not covered by this run.
