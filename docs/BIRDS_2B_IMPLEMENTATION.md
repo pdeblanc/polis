@@ -282,3 +282,32 @@ performance guarantee. Classifier samples fell from about 37–47% to 23–36%;
 boundary read counts and retained channel/epoch counts were unchanged.
 Repeated legality checks and midpoint-table allocation remain optimization
 opportunities; this change does not implement the remaining candidates above.
+
+### Direct midpoint-support membership
+
+Both parent-flow searches now scan the original parity kernel directly for the
+requested midpoint cell, without allocating translated probability tables or
+world-space cell arrays. Actual temporal sampling still uses the full table.
+Ownership checks, radius checks, parent enumeration order and positive-mass
+semantics are unchanged. Coordinate arithmetic preserves the original addition
+order rather than subtracting large coordinates to recover a relative index.
+
+Tests compare the helper with full-table membership, including zero diffusion,
+both duration/parity cases, zero-mass entries and large coordinate indices.
+Parent-search tests compare the entire ordered result against the old full-table
+algorithm for both engines, several origins, scales and diffusion rates, and
+positive/negative times.
+
+The next local profile run measured the following unprofiled cold-query times:
+
+| Width; central time | Full midpoint tables | Direct membership |
+| --- | ---: | ---: |
+| 1; 0 | 940 ms | 797 ms |
+| 1/4; 0 | 627 ms | 540 ms |
+| 4; 0 | 1544 ms | 1374 ms |
+| 1/4; 6 | 692 ms | 615 ms |
+
+This suggests another 11–15% reduction in these workloads, subject to single-run
+timing variation. Boundary read counts and retained channel/epoch counts remained
+unchanged. Classification still occurs per candidate; reusing validated geometry
+and moving invariant ownership checks outside these loops remain separate work.

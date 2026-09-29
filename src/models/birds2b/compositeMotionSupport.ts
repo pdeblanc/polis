@@ -2,7 +2,7 @@ import { classifyBirds2FlowGeometry } from '../birds2a/classifiers';
 import { isWithinBirds2MotionSupport } from '../birds2a/motionSupport';
 import { EXPANSION_TIME_PER_WIDTH_SQUARED } from '../birds2a/expansion';
 import type { Birds2aMotionSupport as CompositeMotionSupport } from '../birds2a/motionSupport';
-import { midpointKernelForFlow } from '../birds/midpointKernels';
+import { midpointKernelForFlow, midpointKernelContainsCell } from '../birds/midpointKernels';
 import { classifyCompositeCellGeometry, classifyCompositeFlow, type CompositeCell, type CompositeFlow } from './compositeClassifiers';
 import { classifyCompositeFlowTimeSubdivision } from './compositeOwnerClassifiers';
 
@@ -76,8 +76,14 @@ export function possibleCompositeParentFlows(
     : possibleCompositeFlowSources(flow.destination, construction.parentDuration, support);
   return endpoints.filter((cell) => cell.max - cell.min === width)
     .map((cell) => first ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination })
-    .filter((parent) => compositeMidpointCellProbabilities(parent, support)
-      .some(({ cell }) => cell.min === midpoint.min));
+    .filter((parent) => {
+      const owner = classifyCompositeFlowTimeSubdivision(parent);
+      if (!owner || !isWithinBirds2MotionSupport(parent, support)) return false;
+      const sourceIndex = parent.source.min / owner.midpointCellWidth;
+      return midpointKernelContainsCell(support.midpointKernels,
+        parent.destination.min / owner.midpointCellWidth - sourceIndex,
+        owner.normalizedDuration, sourceIndex, owner.midpointCellWidth, midpoint.min);
+    });
 }
 
 function indexedCell(index: number, width: number, time: number): CompositeCell {

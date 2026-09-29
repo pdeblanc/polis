@@ -4,11 +4,38 @@ import {
   createMidpointKernels,
   getMidpointKernel,
   midpointKernelForFlow,
+  midpointKernelContainsCell,
   type MidpointAlignment,
   type NormalizedDuration,
 } from './midpointKernels';
 
 describe('Birds midpoint kernels', () => {
+  it('direct membership matches translated tables, including floating-point limits', () => {
+    for (const diffusion of [0, 0.5, 4]) {
+      const kernels = createMidpointKernels(diffusion);
+      for (const duration of [1, 0.5] as const) for (const offset of [-9, -2, 0, 3, 8]) {
+        const table = midpointKernelForFlow(kernels, offset, duration);
+        for (const source of [-(2 ** 40), -3, 0, 2 ** 52]) for (const width of [0.125, 1, 8]) {
+          for (let i = -20; i <= 20; i++) {
+            const min = (source + i) * width;
+            const expected = table.some(({ value, probability }) =>
+              probability > 0 && (source + value) * width === min);
+            expect(midpointKernelContainsCell(kernels, offset, duration, source, width, min)).toBe(expected);
+          }
+        }
+      }
+    }
+  });
+
+  it('does not treat zero-probability entries as support', () => {
+    const pair = { midCell: [{ value: 0, probability: 0 }, { value: 1, probability: 1 }],
+      cellBoundary: [{ value: 0, probability: 1 }] };
+    const kernels = { 1: pair, 0.5: pair };
+    expect(midpointKernelContainsCell(kernels, 0, 1, 0, 1, 0)).toBe(false);
+    expect(midpointKernelContainsCell(kernels, 0, 1, 0, 1, 1)).toBe(true);
+    expect(() => midpointKernelContainsCell(kernels, Infinity, 1, 0, 1, 0)).toThrow(RangeError);
+  });
+
   it('constructs the two zero-diffusion limits at both durations', () => {
     const kernels = createMidpointKernels(0);
 

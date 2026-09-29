@@ -57,6 +57,28 @@ export function midpointKernelForFlow(
   );
 }
 
+/** Tests one world-space cell against the original parity kernel without
+ * allocating a translated table or midpoint cells. Keep the same addition order
+ * as midpointKernelForFlow followed by world-coordinate conversion, including
+ * near floating-point precision limits. Zero-mass entries do not count. */
+export function midpointKernelContainsCell(
+  kernels: MidpointKernels,
+  flowOffset: number,
+  normalizedDuration: NormalizedDuration,
+  sourceIndex: number,
+  cellWidth: number,
+  midpointMin: number,
+): boolean {
+  if (!Number.isSafeInteger(flowOffset)) throw new RangeError('Flow offset must be a safe integer');
+  const table = getMidpointKernel(kernels, normalizedDuration,
+    flowOffset % 2 === 0 ? 'mid-cell' : 'cell-boundary');
+  const translation = Math.floor(flowOffset / 2);
+  for (const { value, probability } of table) {
+    if (probability > 0 && (sourceIndex + (value + translation)) * cellWidth === midpointMin) return true;
+  }
+  return false;
+}
+
 function createKernelPair(
   diffusionRate: number,
   normalizedDuration: NormalizedDuration,

@@ -1,5 +1,5 @@
 import { NORMAL_MAX_DEVIATIONS } from '../../utils/distributions/normal';
-import { createMidpointKernels, midpointKernelForFlow, type MidpointKernels } from '../birds/midpointKernels';
+import { createMidpointKernels, midpointKernelForFlow, midpointKernelContainsCell, type MidpointKernels } from '../birds/midpointKernels';
 import { EXPANSION_TIME_PER_WIDTH_SQUARED, type ExpansionCell } from './expansion';
 import { classifyBirds2aCellGeometry, classifyBirds2aFlow, classifyBirds2FlowGeometry, type Birds2aCell, type Birds2aFlow } from './classifiers';
 import { classifyBirds2aFlowTimeSubdivision } from './ownerClassifiers';
@@ -128,8 +128,15 @@ export function possibleBirds2aParentFlows(
     : possibleBirds2aFlowSources(flow.destination, construction.parentDuration, origin, support);
   return endpoints.filter((cell) => cell.max - cell.min === width)
     .map((cell) => first ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination })
-    .filter((parent) => birds2aMidpointCellProbabilities(parent, origin, support)
-      .some(({ cell }) => cell.min === midpoint.min));
+    .filter((parent) => {
+      // Preserve ownership validation (including the retained-joint error).
+      const owner = classifyBirds2aFlowTimeSubdivision(parent, origin);
+      if (!owner || !isWithinBirds2MotionSupport(parent, support)) return false;
+      const sourceIndex = parent.source.min / owner.midpointCellWidth;
+      return midpointKernelContainsCell(support.midpointKernels,
+        parent.destination.min / owner.midpointCellWidth - sourceIndex,
+        owner.normalizedDuration, sourceIndex, owner.midpointCellWidth, midpoint.min);
+    });
 }
 
 function indexedCell(index: number, width: number, time: number): Birds2aCell {
