@@ -56,10 +56,11 @@ export class Birds2aEngine {
   }
 
   queryCell(cell: Birds2aCell): number {
-    const construction = classifyBirds2aCell(cell, this.expansion.origin);
-    if (!construction) throw new RangeError('Invalid Birds 2a cell');
-    if (this.expansion.getEpoch(0).population === 0) return 0;
     return this.#cached(this.#cells, cellKey(cell), this.#observeDependency && { role: 'cell', cell }, () => {
+      // Cache entries are already validated; classify only misses.
+      const construction = classifyBirds2aCell(cell, this.expansion.origin);
+      if (!construction) throw new RangeError('Invalid Birds 2a cell');
+      if (this.expansion.getEpoch(0).population === 0) return 0;
       switch (construction.kind) {
         case 'expansion': return readExpansionCell(this.expansion, cell, construction.projection);
         case 'spatial-child': return this.#subdivideCell(construction.subdivisionOwner)[construction.childIndex];
@@ -73,8 +74,10 @@ export class Birds2aEngine {
 
   /** Read-only lookup: never expands the channel or evaluates a dependency. */
   queryCachedCell(cell: Birds2aCell): number | undefined {
+    const previous = this.#cells.peek(cellKey(cell));
+    if (previous !== undefined) return previous;
     if (!classifyBirds2aCell(cell, this.expansion.origin)) throw new RangeError('Invalid Birds 2a cell');
-    return this.#cells.peek(cellKey(cell));
+    return undefined;
   }
 
   queryCellSubdivision(cell: Birds2aCell) {
@@ -91,10 +94,10 @@ export class Birds2aEngine {
   }
 
   queryFlow(flow: Birds2aFlow): number {
-    const construction = classifyBirds2aFlow(flow, this.expansion.origin);
-    if (!construction) throw new RangeError('Invalid Birds 2a flow');
-    if (this.expansion.getEpoch(0).population === 0) return 0;
     return this.#cached(this.#flows, flowKey(flow), this.#observeDependency && { role: 'flow', flow }, () => {
+      const construction = classifyBirds2aFlow(flow, this.expansion.origin);
+      if (!construction) throw new RangeError('Invalid Birds 2a flow');
+      if (this.expansion.getEpoch(0).population === 0) return 0;
       if (!isPossibleBirds2aFlow(flow, this.expansion.origin, this.motionSupport)) return 0;
       switch (construction.kind) {
         case 'expansion': return readExpansionFlow(this.expansion, construction.projection);

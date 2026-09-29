@@ -67,9 +67,10 @@ export class CompositeEngine {
   }
 
   queryCell(cell: CompositeCell): number {
-    const construction = classifyCompositeCell(cell);
-    if (!construction) throw new RangeError('Invalid composite cell');
     return this.#cached(this.#cells, cellKey(cell), this.#observeDependency && { role: 'cell', cell }, () => {
+      // Cache entries are already validated; classify only misses.
+      const construction = classifyCompositeCell(cell);
+      if (!construction) throw new RangeError('Invalid composite cell');
       switch (construction.kind) {
         case 'channel-merge': return this.#source.queryCell(cell);
         case 'spatial-child': return this.#subdivideCell(construction.subdivisionOwner)[construction.childIndex];
@@ -83,8 +84,10 @@ export class CompositeEngine {
 
   /** Read-only lookup: never evaluates a dependency in either layer. */
   queryCachedCell(cell: CompositeCell): number | undefined {
+    const previous = this.#cells.peek(cellKey(cell));
+    if (previous !== undefined) return previous;
     if (!classifyCompositeCell(cell)) throw new RangeError('Invalid composite cell');
-    return this.#cells.peek(cellKey(cell));
+    return undefined;
   }
 
   queryCellSubdivision(cell: CompositeCell) {
@@ -101,9 +104,9 @@ export class CompositeEngine {
   }
 
   queryFlow(flow: CompositeFlow): number {
-    const construction = classifyCompositeFlow(flow);
-    if (!construction) throw new RangeError('Invalid composite flow');
     return this.#cached(this.#flows, flowKey(flow), this.#observeDependency && { role: 'flow', flow }, () => {
+      const construction = classifyCompositeFlow(flow);
+      if (!construction) throw new RangeError('Invalid composite flow');
       if (!isPossibleCompositeFlow(flow, this.motionSupport)) return 0;
       switch (construction.kind) {
         case 'channel-merge': return this.#source.queryFlow(flow);

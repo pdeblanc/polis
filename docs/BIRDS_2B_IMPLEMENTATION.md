@@ -208,11 +208,12 @@ These are single-run diagnostics, not stable timing thresholds. An earlier pass
 showed the same dominant costs. Warm replays took 0.2–0.5 ms. All profiled results
 matched their unprofiled baseline and warm replay exactly.
 
-Low-risk optimization candidates, not yet implemented:
+Low-risk optimization candidates:
 
-1. Move full construction classification behind successful scalar-cache lookups
-   in both engines. Currently every recursive hit repeats classification.
-   Preserve validation on misses, invalid-input behavior, and dependency observers.
+1. Move full construction classification behind successful scalar-cache lookups.
+   Implemented in the channel, composite and reference-sum engines, including
+   cached-only population reads. Misses retain validation, and dependency observers
+   still see cache-hit edges. Valid zero answers from empty channels are cached too.
 2. Replace full midpoint-table construction during parent-support membership
    tests with a direct test against the precomputed parity kernel. Current searches
    repeatedly translate, filter and allocate whole tables just to call `some`.
@@ -228,3 +229,27 @@ only the composite cannot address the dominant cost of the coarse workload.
 Sampler replacement and another cache-library change are not the first priorities
 for these default-density population-query workloads. High-density and overlay/
 tracking workloads may have different bottlenecks and are not covered by this run.
+
+### Cache-first comparison
+
+A fresh before/after run of the same profiler produced these unprofiled cold-query
+timings (milliseconds):
+
+| Width; central time | Before | Cache first |
+| --- | ---: | ---: |
+| 1; 0 | 1167 | 1188 |
+| 1/4; 0 | 806 | 808 |
+| 4; 0 | 1989 | 2032 |
+| 1/4; 6 | 908 | 920 |
+
+There is no demonstrated cold-query speedup: differences of 0–2% in these
+single-run measurements are too small to distinguish from runtime variation.
+Warm replay remained sub-millisecond. Classifier samples remain prominent
+(37–47% after the change), consistent with the substantial repeated classification
+inside support searches, which scalar-cache lookup ordering does not remove.
+Direct midpoint-support membership tests remain the next optimization candidate.
+
+Regression tests explicitly verify that zero-valued hits skip classifiers,
+misses still reject illegal/nonfinite geometry without populating caches, and
+clearing caches restores miss-time classification. Existing conservation,
+deterministic replay, and decreasing-dependency-rank tests cover the recursive paths.

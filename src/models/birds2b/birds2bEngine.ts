@@ -37,9 +37,9 @@ export class Birds2bEngine {
   }
 
   queryCell(cell: Birds2aCell): number {
-    if (!classifyBirds2aCellGeometry(cell)) throw new RangeError('Invalid Birds 2b cell');
     const key = cellKey(cell), cached = this.#cells.get(key);
     if (cached !== undefined) return cached;
+    if (!classifyBirds2aCellGeometry(cell)) throw new RangeError('Invalid Birds 2b cell');
     let count = 0;
     if (this.#density !== 0) for (const origin of this.candidateOrigins(cell)) {
       count = addCounts(count, this.#channel(origin).queryCell(cell));
@@ -49,9 +49,11 @@ export class Birds2bEngine {
   }
 
   queryCachedCell(cell: Birds2aCell): number | undefined {
+    const cached = this.#cells.peek(cellKey(cell));
+    if (cached !== undefined) return cached;
     if (!classifyBirds2aCellGeometry(cell)) throw new RangeError('Invalid Birds 2b cell');
     // Only complete global results count as cached; never evaluate a missing channel.
-    return this.#cells.peek(cellKey(cell));
+    return undefined;
   }
 
   queryCellSubdivision(cell: Birds2aCell) {
@@ -63,9 +65,9 @@ export class Birds2bEngine {
   }
 
   queryFlow(flow: Birds2aFlow): number {
-    if (!classifyBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN)) throw new RangeError('Invalid Birds 2b flow');
     const key = `${cellKey(flow.source)}:${cellKey(flow.destination)}`, cached = this.#flows.get(key);
     if (cached !== undefined) return cached;
+    if (!classifyBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN)) throw new RangeError('Invalid Birds 2b flow');
     let count = 0;
     if (this.#density !== 0 && isPossibleBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN, this.motionSupport)) {
       for (const origin of this.candidateOrigins(flow.source)) if (this.#mayContribute(origin, flow.destination)) {
