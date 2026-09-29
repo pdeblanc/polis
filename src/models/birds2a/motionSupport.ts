@@ -62,26 +62,28 @@ export function isWithinBirds2MotionSupport(flow: Birds2aFlow, support: Birds2aM
   return Math.abs(offset) <= radius;
 }
 
-/** All legal opposite widths, sorted spatially; callers may select their required width. */
+/** Enumerate all legal opposite widths, or just oppositeWidth when supplied.
+ * Both paths return spatial order; the single-width path needs no sorting. */
 export function possibleBirds2aFlowDestinations(
-  source: Birds2aCell, duration: number, origin: ExpansionCell, support: Birds2aMotionSupport,
+  source: Birds2aCell, duration: number, origin: ExpansionCell, support: Birds2aMotionSupport, oppositeWidth?: number,
 ): readonly Birds2aCell[] {
-  return incidentCells(source, duration, origin, support, true);
+  return incidentCells(source, duration, origin, support, true, oppositeWidth);
 }
 
 export function possibleBirds2aFlowSources(
-  destination: Birds2aCell, duration: number, origin: ExpansionCell, support: Birds2aMotionSupport,
+  destination: Birds2aCell, duration: number, origin: ExpansionCell, support: Birds2aMotionSupport, oppositeWidth?: number,
 ): readonly Birds2aCell[] {
-  return incidentCells(destination, duration, origin, support, false);
+  return incidentCells(destination, duration, origin, support, false, oppositeWidth);
 }
 
 function incidentCells(fixed: Birds2aCell, duration: number, origin: ExpansionCell,
-  support: Birds2aMotionSupport, forwards: boolean): readonly Birds2aCell[] {
+  support: Birds2aMotionSupport, forwards: boolean, oppositeWidth?: number): readonly Birds2aCell[] {
   const scale = classifyBirds2aCellGeometry(fixed);
   if (!scale || !(duration > 0) || !Number.isFinite(duration)) return [];
   const time = fixed.time + (forwards ? duration : -duration);
   const result: Birds2aCell[] = [];
-  for (const width of [scale.cellWidth / 2, scale.cellWidth, scale.cellWidth * 2]) {
+  for (const width of oppositeWidth === undefined
+    ? [scale.cellWidth / 2, scale.cellWidth, scale.cellWidth * 2] : [oppositeWidth]) {
     const probe = indexedCell(0, width, time);
     const makeFlow = (opposite: Birds2aCell): Birds2aFlow => forwards
       ? { source: fixed, destination: opposite } : { source: opposite, destination: fixed };
@@ -96,7 +98,7 @@ function incidentCells(fixed: Birds2aCell, duration: number, origin: ExpansionCe
     if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) throw new RangeError('Motion window exceeds numeric index precision');
     for (let index = first; index <= last; index++) result.push(indexedCell(index, width, time));
   }
-  return result.sort((a, b) => a.min - b.min || a.max - b.max);
+  return oppositeWidth === undefined ? result.sort((a, b) => a.min - b.min || a.max - b.max) : result;
 }
 
 /** Only contraction-owned A/C batches are valid here. Expansion-owned legs throw
@@ -123,10 +125,9 @@ export function possibleBirds2aParentFlows(
   const first = construction.leg === 'first';
   const width = flow.source.max - flow.source.min;
   const midpoint = first ? flow.destination : flow.source;
-  const endpoints = first
-    ? possibleBirds2aFlowDestinations(flow.source, construction.parentDuration, origin, support)
-    : possibleBirds2aFlowSources(flow.destination, construction.parentDuration, origin, support);
-  const candidates = endpoints.filter((cell) => cell.max - cell.min === width);
+  const candidates = first
+    ? possibleBirds2aFlowDestinations(flow.source, construction.parentDuration, origin, support, width)
+    : possibleBirds2aFlowSources(flow.destination, construction.parentDuration, origin, support, width);
   if (candidates.length === 0) return [];
   const makeParent = (cell: Birds2aCell): Birds2aFlow => first
     ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination };

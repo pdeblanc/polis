@@ -75,8 +75,8 @@ export class CompositeEngine {
         case 'channel-merge': return this.#source.queryCell(cell);
         case 'spatial-child': return this.#subdivideCell(construction.subdivisionOwner)[construction.childIndex];
         case 'temporal-aggregation': return possibleCompositeFlowDestinations(
-          cell, construction.outgoingDuration, this.motionSupport,
-        ).filter((other) => width(other) === width(cell))
+          cell, construction.outgoingDuration, this.motionSupport, width(cell),
+        )
           .reduce((sum, destination) => sum + this.queryFlow({ source: cell, destination }), 0);
       }
     });
@@ -159,8 +159,8 @@ export class CompositeEngine {
       const owner = (outgoing ? classifyCompositeOutflowSubdivision : classifyCompositeInflowSubdivision)(cell)!;
       if (this.queryCell(cell) === 0) return new Map();
       const endpoints = (outgoing ? possibleCompositeFlowDestinations : possibleCompositeFlowSources)(
-        cell, owner.flowDuration, this.motionSupport,
-      ).filter((other) => width(other) === owner.oppositeCellWidth);
+        cell, owner.flowDuration, this.motionSupport, owner.oppositeCellWidth,
+      );
       const makeFlow = (local: CompositeCell, other: CompositeCell): CompositeFlow => outgoing
         ? { source: local, destination: other } : { source: other, destination: local };
       if (owner.kind === 'channel-merge') return new Map(endpoints.map((other) => [other.min,

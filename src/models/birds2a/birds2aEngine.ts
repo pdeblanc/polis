@@ -65,8 +65,8 @@ export class Birds2aEngine {
         case 'expansion': return readExpansionCell(this.expansion, cell, construction.projection);
         case 'spatial-child': return this.#subdivideCell(construction.subdivisionOwner)[construction.childIndex];
         case 'temporal-aggregation': return possibleBirds2aFlowDestinations(
-          cell, construction.outgoingDuration, this.expansion.origin, this.motionSupport,
-        ).filter((other) => width(other) === width(cell))
+          cell, construction.outgoingDuration, this.expansion.origin, this.motionSupport, width(cell),
+        )
           .reduce((sum, destination) => sum + this.queryFlow({ source: cell, destination }), 0);
       }
     });
@@ -151,8 +151,8 @@ export class Birds2aEngine {
       const owner = (outgoing ? classifyBirds2aOutflowSubdivision : classifyBirds2aInflowSubdivision)(cell, this.expansion.origin)!;
       if (this.queryCell(cell) === 0) return new Map();
       const endpoints = (outgoing ? possibleBirds2aFlowDestinations : possibleBirds2aFlowSources)(
-        cell, owner.flowDuration, this.expansion.origin, this.motionSupport,
-      ).filter((other) => width(other) === owner.oppositeCellWidth);
+        cell, owner.flowDuration, this.expansion.origin, this.motionSupport, owner.oppositeCellWidth,
+      );
       const makeFlow = (local: Birds2aCell, other: Birds2aCell): Birds2aFlow => outgoing
         ? { source: local, destination: other } : { source: other, destination: local };
       if (owner.kind === 'expansion') return new Map(endpoints.map((other) => [other.min,

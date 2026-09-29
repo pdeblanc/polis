@@ -340,3 +340,31 @@ fell from 29–40% to 9–12%. Boundary read counts and channel/epoch counts rem
 unchanged. Support enumeration, cache operations and key construction are now
 more prominent targets; the remaining enumeration still constructs all legal
 endpoint widths before selecting the required one.
+
+### Width-specific endpoint enumeration
+
+Both channel and composite support enumerators accept an optional opposite width.
+Without it, their all-width interface is unchanged. With it, they validate and
+enumerate only that width, in spatial order without sorting. Parent searches,
+population aggregation and incidence subdivision use this path instead of
+generating all widths and filtering afterward. Unsupported widths return no cells;
+the requested window retains its numeric-index overflow guard.
+
+Tests compare the ordered single-width result with filtering all-width enumeration
+across signs, scales, time alignments, diffusion rates, large coordinates and
+invalid widths. Parent-search reference tests continue to use the all-width path.
+
+The next profile run measured these unprofiled cold-query times:
+
+| Width; central time | All widths then filter | Requested width only |
+| --- | ---: | ---: |
+| 1; 0 | 567 ms | 456 ms |
+| 1/4; 0 | 329 ms | 283 ms |
+| 4; 0 | 820 ms | 702 ms |
+| 1/4; 6 | 362 ms | 305 ms |
+
+This suggests 14–20% less time in the single-run comparison. Boundary read and
+retained channel/epoch counts were unchanged. Cache operations now account for
+about 18–19% of sampled time; key construction accounts for another 14–16% in
+the finer views. These percentages identify possible next targets, not guaranteed
+recoverable speedups.

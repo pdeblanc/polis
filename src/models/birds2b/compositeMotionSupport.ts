@@ -10,26 +10,28 @@ export function isPossibleCompositeFlow(flow: CompositeFlow, support: CompositeM
   return !!classifyBirds2FlowGeometry(flow) && isWithinBirds2MotionSupport(flow, support);
 }
 
-/** All legal opposite widths, sorted spatially; callers may select their required width. */
+/** Enumerate all legal opposite widths, or just oppositeWidth when supplied.
+ * Both paths return spatial order; the single-width path needs no sorting. */
 export function possibleCompositeFlowDestinations(
-  source: CompositeCell, duration: number, support: CompositeMotionSupport,
+  source: CompositeCell, duration: number, support: CompositeMotionSupport, oppositeWidth?: number,
 ): readonly CompositeCell[] {
-  return incidentCells(source, duration, support, true);
+  return incidentCells(source, duration, support, true, oppositeWidth);
 }
 
 export function possibleCompositeFlowSources(
-  destination: CompositeCell, duration: number, support: CompositeMotionSupport,
+  destination: CompositeCell, duration: number, support: CompositeMotionSupport, oppositeWidth?: number,
 ): readonly CompositeCell[] {
-  return incidentCells(destination, duration, support, false);
+  return incidentCells(destination, duration, support, false, oppositeWidth);
 }
 
 function incidentCells(fixed: CompositeCell, duration: number,
-  support: CompositeMotionSupport, forwards: boolean): readonly CompositeCell[] {
+  support: CompositeMotionSupport, forwards: boolean, oppositeWidth?: number): readonly CompositeCell[] {
   const scale = classifyCompositeCellGeometry(fixed);
   if (!scale || !(duration > 0) || !Number.isFinite(duration)) return [];
   const time = fixed.time + (forwards ? duration : -duration);
   const result: CompositeCell[] = [];
-  for (const width of [scale.cellWidth / 2, scale.cellWidth, scale.cellWidth * 2]) {
+  for (const width of oppositeWidth === undefined
+    ? [scale.cellWidth / 2, scale.cellWidth, scale.cellWidth * 2] : [oppositeWidth]) {
     const probe = indexedCell(0, width, time);
     const makeFlow = (opposite: CompositeCell): CompositeFlow => forwards
       ? { source: fixed, destination: opposite } : { source: opposite, destination: fixed };
@@ -44,7 +46,7 @@ function incidentCells(fixed: CompositeCell, duration: number,
     if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) throw new RangeError('Motion window exceeds numeric index precision');
     for (let index = first; index <= last; index++) result.push(indexedCell(index, width, time));
   }
-  return result.sort((a, b) => a.min - b.min || a.max - b.max);
+  return oppositeWidth === undefined ? result.sort((a, b) => a.min - b.min || a.max - b.max) : result;
 }
 
 /** Only refinement-owned A/C batches are valid here. Merge-owned legs throw
@@ -71,10 +73,9 @@ export function possibleCompositeParentFlows(
   const first = construction.leg === 'first';
   const width = flow.source.max - flow.source.min;
   const midpoint = first ? flow.destination : flow.source;
-  const endpoints = first
-    ? possibleCompositeFlowDestinations(flow.source, construction.parentDuration, support)
-    : possibleCompositeFlowSources(flow.destination, construction.parentDuration, support);
-  const candidates = endpoints.filter((cell) => cell.max - cell.min === width);
+  const candidates = first
+    ? possibleCompositeFlowDestinations(flow.source, construction.parentDuration, support, width)
+    : possibleCompositeFlowSources(flow.destination, construction.parentDuration, support, width);
   if (candidates.length === 0) return [];
   const makeParent = (cell: CompositeCell): CompositeFlow => first
     ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination };
