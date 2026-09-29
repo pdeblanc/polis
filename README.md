@@ -92,6 +92,12 @@ npm run profile:birds2b
 Each profile case has a 30-second subprocess deadline. Output includes sampled
 CPU categories, channel-boundary time, and unprofiled baseline timing.
 
+Compare numeric cache-key construction alternatives (bounded microbenchmark):
+
+```sh
+npm run benchmark:birds2-keys
+```
+
 Case definitions, limits, and results are in [the benchmark notes](docs/BIRDS_2A_BENCHMARKS.md).
 
 Run the distribution throughput benchmarks:

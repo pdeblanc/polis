@@ -368,3 +368,37 @@ retained channel/epoch counts were unchanged. Cache operations now account for
 about 18–19% of sampled time; key construction accounts for another 14–16% in
 the finer views. These percentages identify possible next targets, not guaranteed
 recoverable speedups.
+
+### Flow-key construction experiment
+
+`npm run benchmark:birds2-keys` compares nested cell-key templates, one flat
+template, and numeric-array joining. It uses 10,000 flows across five widths
+(4 through 2^-20), performs 100,000 key constructions plus Map lookups per
+measurement, rotates variant order, discards two warm-up rounds and reports five
+samples. Map lookups force consumption of the strings. It verifies identical
+keys, including signed zero, nonfinite inputs and numeric extremes.
+
+The initial microbenchmark medians were approximately 66 ms nested, 66 ms flat,
+and 62 ms joined. Whole-query trials were then run with each flow-key variant in
+the channel, composite and reference-sum engines:
+
+| Width; central time | Original, confirmation run | Flat template | Array join |
+| --- | ---: | ---: | ---: |
+| 1; 0 | 461 ms | 467 ms | 448 ms |
+| 1/4; 0 | 277 ms | 291 ms | 264 ms |
+| 4; 0 | 688 ms | 699 ms | 666 ms |
+| 1/4; 6 | 311 ms | 308 ms | 291 ms |
+
+These are unprofiled cold timings from the existing profile runner. Restoring the
+original implementation after the alternative trials provided the confirmation
+column. Flat templates did not show a consistent improvement. Array joining was
+adopted for flow keys only, with a modest observed 3–6% reduction (about 6.5% in the
+last case). This is a small local result, not a cross-runtime guarantee.
+
+The six raw numeric fields, delimiters and resulting key strings are unchanged.
+Cell keys and RNG addresses are unchanged. No extra cache or object mutation was
+introduced. Shortened keys were not adopted: with lookup preceding validation,
+any such scheme must prevent invalid inputs from aliasing valid cached facts as
+well as distinguish all legal facts. Object-identity memoization would also need
+to account for mutable caller-owned inputs; neither complication is justified by
+this experiment.

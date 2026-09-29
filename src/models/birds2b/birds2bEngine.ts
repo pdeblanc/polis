@@ -65,7 +65,8 @@ export class Birds2bEngine {
   }
 
   queryFlow(flow: Birds2aFlow): number {
-    const key = `${cellKey(flow.source)}:${cellKey(flow.destination)}`, cached = this.#flows.get(key);
+    const { source: s, destination: d } = flow;
+    const key = [s.min, s.max, s.time, d.min, d.max, d.time].join(':'), cached = this.#flows.get(key);
     if (cached !== undefined) return cached;
     if (!classifyBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN)) throw new RangeError('Invalid Birds 2b flow');
     let count = 0;

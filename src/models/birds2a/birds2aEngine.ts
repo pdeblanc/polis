@@ -199,6 +199,8 @@ function cached<T>(cache: QuickLRU<string, T>, key: string, compute: () => T): T
 }
 function width(cell: Birds2aCell): number { return cell.max - cell.min; }
 function cellKey(cell: Birds2aCell): string { return `${cell.min}:${cell.max}:${cell.time}`; }
-function flowKey(flow: Birds2aFlow): string { return `${cellKey(flow.source)}:${cellKey(flow.destination)}`; }
+function flowKey({ source: s, destination: d }: Birds2aFlow): string {
+  return [s.min, s.max, s.time, d.min, d.max, d.time].join(':');
+}
 function cellAddress(cell: Birds2aCell): Address { return [cell.min, cell.max, cell.time]; }
 function flowAddress(flow: Birds2aFlow): Address { return [...cellAddress(flow.source), ...cellAddress(flow.destination)]; }

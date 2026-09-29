@@ -207,6 +207,8 @@ function cached<T>(cache: QuickLRU<string, T>, key: string, compute: () => T): T
 }
 function width(cell: CompositeCell): number { return cell.max - cell.min; }
 function cellKey(cell: CompositeCell): string { return `${cell.min}:${cell.max}:${cell.time}`; }
-function flowKey(flow: CompositeFlow): string { return `${cellKey(flow.source)}:${cellKey(flow.destination)}`; }
+function flowKey({ source: s, destination: d }: CompositeFlow): string {
+  return [s.min, s.max, s.time, d.min, d.max, d.time].join(':');
+}
 function cellAddress(cell: CompositeCell): Address { return [cell.min, cell.max, cell.time]; }
 function flowAddress(flow: CompositeFlow): Address { return [...cellAddress(flow.source), ...cellAddress(flow.destination)]; }
