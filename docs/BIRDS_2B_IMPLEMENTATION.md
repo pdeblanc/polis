@@ -311,3 +311,32 @@ This suggests another 11–15% reduction in these workloads, subject to single-r
 timing variation. Boundary read counts and retained channel/epoch counts remained
 unchanged. Classification still occurs per candidate; reusing validated geometry
 and moving invariant ownership checks outside these loops remain separate work.
+
+### Shared parent-search geometry
+
+Both parent searches now classify temporal ownership once using an actual
+same-width candidate. All candidates share times, widths and ownership; the
+endpoint enumerator supplies aligned geometry. The shared normalized duration,
+motion radius and fixed endpoint index are reused. Each candidate only checks
+its offset and midpoint-kernel membership; parent flow objects are created only
+for accepted candidates. Temporal owner classifiers also reuse the geometry
+result instead of validating their source cell separately.
+
+Reference tests compare the complete ordered parent lists with the original
+full-table algorithm, now including translations by 2^40 cells. A spy test verifies
+one temporal-owner classification per search even when multiple parents match.
+
+Unprofiled cold-query timings from the next local profile run:
+
+| Width; central time | Per-candidate ownership | Shared ownership |
+| --- | ---: | ---: |
+| 1; 0 | 797 ms | 567 ms |
+| 1/4; 0 | 540 ms | 329 ms |
+| 4; 0 | 1374 ms | 820 ms |
+| 1/4; 6 | 615 ms | 362 ms |
+
+This is about 29–41% less time in the single-run comparison. Classifier samples
+fell from 29–40% to 9–12%. Boundary read counts and channel/epoch counts remained
+unchanged. Support enumeration, cache operations and key construction are now
+more prominent targets; the remaining enumeration still constructs all legal
+endpoint widths before selecting the required one.

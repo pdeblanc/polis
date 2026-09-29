@@ -38,10 +38,9 @@ export type Birds2aSpaceSubdivision = {
 export function classifyBirds2aFlowTimeSubdivision(
   flow: Birds2aFlow, origin: ExpansionCell,
 ): Birds2aTimeSubdivision | undefined {
-  const scale = classifyBirds2aCellGeometry(flow.source);
-  if (!scale || !classifyBirds2FlowGeometry(flow) ||
-    flow.destination.max - flow.destination.min !== scale.cellWidth) return undefined;
-  const duration = flow.destination.time - flow.source.time;
+  const geometry = classifyBirds2FlowGeometry(flow);
+  if (!geometry || !geometry.equalWidth) return undefined;
+  const scale = geometry.source, duration = geometry.duration;
   if (duration !== scale.duration && duration !== scale.halfDuration) return undefined;
   const midpointTime = flow.source.time + duration / 2;
   const midpoint = { min: 0, max: scale.cellWidth, time: midpointTime };

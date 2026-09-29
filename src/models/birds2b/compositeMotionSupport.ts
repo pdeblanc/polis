@@ -74,16 +74,26 @@ export function possibleCompositeParentFlows(
   const endpoints = first
     ? possibleCompositeFlowDestinations(flow.source, construction.parentDuration, support)
     : possibleCompositeFlowSources(flow.destination, construction.parentDuration, support);
-  return endpoints.filter((cell) => cell.max - cell.min === width)
-    .map((cell) => first ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination })
-    .filter((parent) => {
-      const owner = classifyCompositeFlowTimeSubdivision(parent);
-      if (!owner || !isWithinBirds2MotionSupport(parent, support)) return false;
-      const sourceIndex = parent.source.min / owner.midpointCellWidth;
-      return midpointKernelContainsCell(support.midpointKernels,
-        parent.destination.min / owner.midpointCellWidth - sourceIndex,
-        owner.normalizedDuration, sourceIndex, owner.midpointCellWidth, midpoint.min);
-    });
+  const candidates = endpoints.filter((cell) => cell.max - cell.min === width);
+  if (candidates.length === 0) return [];
+  const makeParent = (cell: CompositeCell): CompositeFlow => first
+    ? { source: flow.source, destination: cell } : { source: cell, destination: flow.destination };
+  // All candidates have identical times and widths. Their temporal ownership
+  // and legality are therefore shared; the enumerator supplies aligned cells.
+  // Still use a real candidate so numeric-boundary validation is preserved.
+  const owner = classifyCompositeFlowTimeSubdivision(makeParent(candidates[0]));
+  if (!owner) return [];
+  const radius = owner.normalizedDuration === 1 ? support.entryRadius : support.halfRadius;
+  const fixedIndex = (first ? flow.source.min : flow.destination.min) / width;
+  const result: CompositeFlow[] = [];
+  for (const cell of candidates) {
+    const sourceIndex = first ? fixedIndex : cell.min / width;
+    const destinationIndex = first ? cell.min / width : fixedIndex;
+    if (Math.abs(Math.floor(destinationIndex) - Math.floor(sourceIndex)) > radius) continue;
+    if (midpointKernelContainsCell(support.midpointKernels, destinationIndex - sourceIndex,
+      owner.normalizedDuration, sourceIndex, width, midpoint.min)) result.push(makeParent(cell));
+  }
+  return result;
 }
 
 function indexedCell(index: number, width: number, time: number): CompositeCell {
