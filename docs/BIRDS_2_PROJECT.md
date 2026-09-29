@@ -103,12 +103,15 @@ The completed single-channel support analysis must provide a finite way to enume
 
 This explicit sum is the reference global construction.
 
-Implementation status: the explicit Birds 2b reference sum is implemented in
+Implementation status: the explicit Birds 2b reference sum and composite refinement layer are implemented in
 `src/models/birds2b`, with finite origin selection from the existing local motion
 bounds and additional pruning by time-only channel support. It shares the query API
-and viewer with Birds 2a and is available at `/birds2b`. Tests cover direct-sum
-agreement, conservation, and deterministic replay. Earlier summation placements
-remain open; Phase 2 is not complete. See
+and viewer with Birds 2a. The composite is available at `/birds2b`: it merges
+boundary populations/flows, then owns their refinements without modifying the
+underlying channels. Tests cover reference direct-sum agreement, composite boundary
+ownership, conservation, finite dependencies, and deterministic replay.
+Statistical comparison and broader cost-benefit evaluation remain open;
+Phase 2 is not complete. See
 [implementation details and benchmark instructions](./BIRDS_2B_IMPLEMENTATION.md).
 
 ### Hierarchy placement of summation
@@ -163,6 +166,11 @@ Calibration changes must preserve the structural invariants of the model, especi
 - Corrections have been implemented and characterized where worthwhile; deferred or declined corrections have an explicit cost-benefit rationale.
 - The resulting aggregate model has a documented relationship to its Poisson–Brownian reference.
 - Remaining discrepancies are explicit rather than accidental.
+- Reconsider flow-dependent stage F splitting together with expansion generation
+  order and composite merge ownership. Imported fine populations may precede flows
+  that a new conditioning scheme would need. Implement a consistent change or
+  explicitly document a decision to defer it; see the
+  [composite follow-up](./BIRDS_2B_IMPLEMENTATION.md#flow-dependent-stage-f-follow-up).
 
 ---
 

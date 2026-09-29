@@ -31,8 +31,9 @@ use the analysis summary for findings and the canonical proposal for mathematica
   termination argument, decreasing dependency rank, and checks against engine calls.
 - [`BIRDS_2A_BENCHMARKS.md`](./BIRDS_2A_BENCHMARKS.md) specifies bounded CLI complexity
   workloads, measurement phases, and initial expansion/cold/warm results.
-- [`BIRDS_2B_IMPLEMENTATION.md`](./BIRDS_2B_IMPLEMENTATION.md) describes the explicit
-  global channel sum, finite channel search, shared API/viewer, and cold/warm benchmarks.
+- [`BIRDS_2B_IMPLEMENTATION.md`](./BIRDS_2B_IMPLEMENTATION.md) describes the reference
+  channel sum, composite refinement and merge ownership, finite channel search,
+  shared API/viewer, and cold/warm benchmarks.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
