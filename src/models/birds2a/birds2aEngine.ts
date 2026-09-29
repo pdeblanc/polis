@@ -12,7 +12,7 @@ import { classifyBirds2aCell, classifyBirds2aCellSubdivision, classifyBirds2aFlo
 import { classifyBirds2aFlowSpaceSubdivision, classifyBirds2aInflowSubdivision,
   classifyBirds2aOutflowSubdivision } from './ownerClassifiers';
 import { readExpansionCell, readExpansionFlow } from './expansionFacts';
-import { createBirds2aMotionSupport, isPossibleBirds2aFlow, birds2aMidpointCellProbabilities,
+import { createBirds2aMotionSupport, isWithinBirds2MotionSupport, birds2aMidpointCellProbabilities,
   possibleBirds2aFlowDestinations, possibleBirds2aFlowSources, possibleBirds2aParentFlows } from './motionSupport';
 
 export const BIRDS_2A_FACT_CACHE_CAPACITY = 50_000;
@@ -98,7 +98,7 @@ export class Birds2aEngine {
       const construction = classifyBirds2aFlow(flow, this.expansion.origin);
       if (!construction) throw new RangeError('Invalid Birds 2a flow');
       if (this.expansion.getEpoch(0).population === 0) return 0;
-      if (!isPossibleBirds2aFlow(flow, this.expansion.origin, this.motionSupport)) return 0;
+      if (!isWithinBirds2MotionSupport(flow, this.motionSupport)) return 0;
       switch (construction.kind) {
         case 'expansion': return readExpansionFlow(this.expansion, construction.projection);
         case 'temporal-aggregation': {

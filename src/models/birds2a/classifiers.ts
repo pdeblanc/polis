@@ -95,7 +95,9 @@ export function classifyBirds2aCellSubdivision(cell: Birds2aCell, origin: Expans
     : { kind: 'binomial', owner: cell, children, probability: 0.5 };
 }
 
-export function classifyBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell): Birds2aFlowConstruction | undefined {
+/** Legal flow geometry only: no expansion lookup or refinement-owner allocation.
+ * Shared by the channel and composite, whose legal lattices are identical. */
+export function classifyBirds2FlowGeometry(flow: Birds2aFlow) {
   const source = classifyBirds2aCellGeometry(flow.source), destination = classifyBirds2aCellGeometry(flow.destination);
   const duration = flow.destination.time - flow.source.time;
   if (!source || !destination || !(duration > 0) || !Number.isFinite(duration) ||
@@ -105,6 +107,13 @@ export function classifyBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell): B
     : !((source.cellWidth === 2 * destination.cellWidth && duration === destination.duration) ||
         (destination.cellWidth === 2 * source.cellWidth && duration === source.duration))) return undefined;
 
+  return { source, destination, duration, equalWidth };
+}
+
+export function classifyBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell): Birds2aFlowConstruction | undefined {
+  const geometry = classifyBirds2FlowGeometry(flow);
+  if (!geometry) return undefined;
+  const { source, destination, duration, equalWidth } = geometry;
   const projection = expansionFlow(flow, origin.max - origin.min);
   if (projection) return { kind: 'expansion', projection };
   if (!equalWidth) {
@@ -122,6 +131,28 @@ export function classifyBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell): B
   return { kind: 'temporal-aggregation', stage: duration === source.halfDuration ? 'B' : 'D',
     leg: first ? 'first' : 'second', parentDuration: 2 * duration,
     enclosingStartTime: start, enclosingEndTime: start + 2 * duration };
+}
+
+/** Checked ownership predicate, without constructing a flow projection or parents. */
+export function isBirds2aExpansionFlow(flow: Birds2aFlow, origin: ExpansionCell): boolean {
+  if (!classifyBirds2FlowGeometry(flow)) return false;
+  const backwards = flow.destination.time <= 0;
+  const inner = backwards ? flow.destination : flow.source;
+  const outer = backwards ? flow.source : flow.destination;
+  const originWidth = origin.max - origin.min;
+  if (inner.time === 0) {
+    if (inner.max - inner.min < originWidth) return false;
+    const location = shellAt(Math.abs(outer.time), originWidth);
+    if (!location || !Number.isInteger(location.slot)) return false;
+    const width = location.slot === 1 && location.epoch > 0 ? location.cellWidth / 2 : location.cellWidth;
+    return outer.max - outer.min >= width;
+  }
+  const location = shellAt(Math.abs(inner.time), originWidth);
+  if (!location || !Number.isInteger(location.slot) || inner.max - inner.min < location.cellWidth ||
+    outer.max - outer.min < location.cellWidth) return false;
+  const slot = Math.abs(outer.time) / location.duration;
+  return Number.isInteger(slot) && slot > location.slot && slot <= 4 &&
+    ((location.slot === 2 && slot === 4) || slot === location.slot + 1);
 }
 
 function expansionFrameAt(time: number, originWidth: number): ExpansionFrameProjection | undefined {

@@ -1,5 +1,5 @@
 import { EXPANSION_DEFAULT_CELL_WIDTH, EXPANSION_TIME_PER_WIDTH_SQUARED } from '../birds2a/expansion';
-import { classifyBirds2aCellGeometry as classifyCompositeCellGeometry } from '../birds2a/classifiers';
+import { classifyBirds2aCellGeometry as classifyCompositeCellGeometry, classifyBirds2FlowGeometry } from '../birds2a/classifiers';
 export { classifyBirds2aCellGeometry as classifyCompositeCellGeometry } from '../birds2a/classifiers';
 export type { BirdCell as CompositeCell, BirdFlow as CompositeFlow } from '../birds/entities';
 import type { BirdCell as CompositeCell, BirdFlow as CompositeFlow } from '../birds/entities';
@@ -58,15 +58,9 @@ export function classifyCompositeCellSubdivision(cell: CompositeCell): Composite
 }
 
 export function classifyCompositeFlow(flow: CompositeFlow): CompositeFlowConstruction | undefined {
-  const source = classifyCompositeCellGeometry(flow.source), destination = classifyCompositeCellGeometry(flow.destination);
-  const duration = flow.destination.time - flow.source.time;
-  if (!source || !destination || !(duration > 0) || !Number.isFinite(duration) ||
-    !Number.isInteger(flow.source.time / duration)) return undefined;
-  const equalWidth = source.cellWidth === destination.cellWidth;
-  if (equalWidth ? ![source.duration, source.halfDuration, source.quarterDuration].includes(duration)
-    : !((source.cellWidth === 2 * destination.cellWidth && duration === destination.duration) ||
-        (destination.cellWidth === 2 * source.cellWidth && duration === source.duration))) return undefined;
-
+  const geometry = classifyBirds2FlowGeometry(flow);
+  if (!geometry) return undefined;
+  const { source, destination, duration, equalWidth } = geometry;
   if (isChannelMergeFlow(flow)) return { kind: 'channel-merge' };
   if (!equalWidth) {
     return source.cellWidth < destination.cellWidth
@@ -92,6 +86,11 @@ function mergeFrameWidth(time: number): number | undefined {
   if (!band || !Number.isInteger(band.slot)) return undefined;
   if (band.slot === 1) return band.epoch === 0 ? band.cellWidth : band.cellWidth / 2;
   return band.cellWidth;
+}
+
+/** Checked ownership predicate; does not allocate refinement owners. */
+export function isCompositeMergeFlow(flow: CompositeFlow): boolean {
+  return !!classifyBirds2FlowGeometry(flow) && isChannelMergeFlow(flow);
 }
 
 function isChannelMergeFlow(flow: CompositeFlow): boolean {

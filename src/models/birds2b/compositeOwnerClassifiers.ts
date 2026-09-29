@@ -1,5 +1,6 @@
+import { classifyBirds2FlowGeometry } from '../birds2a/classifiers';
 import {
-  classifyCompositeCellGeometry, classifyCompositeFlow,
+  classifyCompositeCellGeometry, isCompositeMergeFlow,
   type CompositeCell, type CompositeFlow,
 } from './compositeClassifiers';
 
@@ -38,7 +39,7 @@ export function classifyCompositeFlowTimeSubdivision(
   flow: CompositeFlow,
 ): CompositeTimeSubdivision | undefined {
   const scale = classifyCompositeCellGeometry(flow.source);
-  if (!scale || !classifyCompositeFlow(flow) ||
+  if (!scale || !classifyBirds2FlowGeometry(flow) ||
     flow.destination.max - flow.destination.min !== scale.cellWidth) return undefined;
   const duration = flow.destination.time - flow.source.time;
   if (duration !== scale.duration && duration !== scale.halfDuration) return undefined;
@@ -84,7 +85,7 @@ export function classifyCompositeFlowSpaceSubdivision(
   flow: CompositeFlow,
 ): CompositeSpaceSubdivision | undefined {
   const scale = classifyCompositeCellGeometry(flow.source);
-  if (!scale || !classifyCompositeFlow(flow) ||
+  if (!scale || !classifyBirds2FlowGeometry(flow) ||
     flow.destination.max - flow.destination.min !== scale.cellWidth ||
     flow.destination.time - flow.source.time !== scale.quarterDuration) return undefined;
   const sourceChildren = subdivide(flow.source), destinationChildren = subdivide(flow.destination);
@@ -107,7 +108,7 @@ export function classifyCompositeFlowSpaceSubdivision(
 }
 
 function isChannelMerge(flow: CompositeFlow): boolean {
-  return classifyCompositeFlow(flow)?.kind === 'channel-merge';
+  return isCompositeMergeFlow(flow);
 }
 
 function subdivide(cell: CompositeCell): readonly [CompositeCell, CompositeCell] {

@@ -1,7 +1,7 @@
 import type { ExpansionCell } from './expansion';
 import {
-  classifyBirds2aCellGeometry, classifyBirds2aFlow,
-  type Birds2aCell, type Birds2aFlow,
+  classifyBirds2aCellGeometry, isBirds2aExpansionFlow,
+  classifyBirds2FlowGeometry, type Birds2aCell, type Birds2aFlow,
 } from './classifiers';
 
 type SpatialConstruction = { readonly kind: 'expansion' } | { readonly kind: 'hypergeometric' };
@@ -39,7 +39,7 @@ export function classifyBirds2aFlowTimeSubdivision(
   flow: Birds2aFlow, origin: ExpansionCell,
 ): Birds2aTimeSubdivision | undefined {
   const scale = classifyBirds2aCellGeometry(flow.source);
-  if (!scale || !classifyBirds2aFlow(flow, origin) ||
+  if (!scale || !classifyBirds2FlowGeometry(flow) ||
     flow.destination.max - flow.destination.min !== scale.cellWidth) return undefined;
   const duration = flow.destination.time - flow.source.time;
   if (duration !== scale.duration && duration !== scale.halfDuration) return undefined;
@@ -85,7 +85,7 @@ export function classifyBirds2aFlowSpaceSubdivision(
   flow: Birds2aFlow, origin: ExpansionCell,
 ): Birds2aSpaceSubdivision | undefined {
   const scale = classifyBirds2aCellGeometry(flow.source);
-  if (!scale || !classifyBirds2aFlow(flow, origin) ||
+  if (!scale || !classifyBirds2FlowGeometry(flow) ||
     flow.destination.max - flow.destination.min !== scale.cellWidth ||
     flow.destination.time - flow.source.time !== scale.quarterDuration) return undefined;
   const sourceChildren = subdivide(flow.source), destinationChildren = subdivide(flow.destination);
@@ -108,7 +108,7 @@ export function classifyBirds2aFlowSpaceSubdivision(
 }
 
 function isExpansion(flow: Birds2aFlow, origin: ExpansionCell): boolean {
-  return classifyBirds2aFlow(flow, origin)?.kind === 'expansion';
+  return isBirds2aExpansionFlow(flow, origin);
 }
 
 function subdivide(cell: Birds2aCell): readonly [Birds2aCell, Birds2aCell] {

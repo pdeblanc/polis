@@ -253,3 +253,32 @@ Regression tests explicitly verify that zero-valued hits skip classifiers,
 misses still reject illegal/nonfinite geometry without populating caches, and
 clearing caches restores miss-time classification. Existing conservation,
 deterministic replay, and decreasing-dependency-rank tests cover the recursive paths.
+
+### Geometry and ownership predicates
+
+Flow legality is now checked separately from construction ownership, using shared
+`classifyBirds2FlowGeometry`. Support enumeration uses this geometry check rather
+than constructing full flow-owner results. Already-classified flows use a
+radius-only support predicate; the checked support entry points still reject
+invalid geometry. Temporal/spatial owner queries use direct expansion/merge
+predicates instead of constructing unrelated refinement owners.
+
+The change applies to both channel and composite paths. Predicates are checked
+against full classification across origins, scales, both time directions, mixed
+widths and invalid geometry; existing tests still check conservation and ancestry.
+It does not change kernels, random addresses or intended stochastic semantics.
+
+Using the same four profile workloads, unprofiled cold-query timings were:
+
+| Width; central time | Cache-first version | Separated predicates |
+| --- | ---: | ---: |
+| 1; 0 | 1188 ms | 940 ms |
+| 1/4; 0 | 808 ms | 627 ms |
+| 4; 0 | 2032 ms | 1544 ms |
+| 1/4; 6 | 920 ms | 692 ms |
+
+This is about 21–25% less wall time in a single-run comparison, not a stable
+performance guarantee. Classifier samples fell from about 37–47% to 23–36%;
+boundary read counts and retained channel/epoch counts were unchanged.
+Repeated legality checks and midpoint-table allocation remain optimization
+opportunities; this change does not implement the remaining candidates above.

@@ -1,3 +1,5 @@
+import { classifyBirds2FlowGeometry } from '../birds2a/classifiers';
+import { isWithinBirds2MotionSupport } from '../birds2a/motionSupport';
 import { EXPANSION_TIME_PER_WIDTH_SQUARED } from '../birds2a/expansion';
 import type { Birds2aMotionSupport as CompositeMotionSupport } from '../birds2a/motionSupport';
 import { midpointKernelForFlow } from '../birds/midpointKernels';
@@ -5,14 +7,7 @@ import { classifyCompositeCellGeometry, classifyCompositeFlow, type CompositeCel
 import { classifyCompositeFlowTimeSubdivision } from './compositeOwnerClassifiers';
 
 export function isPossibleCompositeFlow(flow: CompositeFlow, support: CompositeMotionSupport): boolean {
-  if (!classifyCompositeFlow(flow)) return false;
-  const sw = flow.source.max - flow.source.min, dw = flow.destination.max - flow.destination.min;
-  const width = Math.max(sw, dw);
-  const offset = Math.floor(flow.destination.min / width) - Math.floor(flow.source.min / width);
-  const duration = flow.destination.time - flow.source.time;
-  const full = EXPANSION_TIME_PER_WIDTH_SQUARED * width ** 2;
-  const radius = duration === full ? support.entryRadius : duration === full / 2 ? support.halfRadius : support.quarterRadius;
-  return Math.abs(offset) <= radius;
+  return !!classifyBirds2FlowGeometry(flow) && isWithinBirds2MotionSupport(flow, support);
 }
 
 /** All legal opposite widths, sorted spatially; callers may select their required width. */
@@ -38,7 +33,7 @@ function incidentCells(fixed: CompositeCell, duration: number,
     const probe = indexedCell(0, width, time);
     const makeFlow = (opposite: CompositeCell): CompositeFlow => forwards
       ? { source: fixed, destination: opposite } : { source: opposite, destination: fixed };
-    if (!classifyCompositeFlow(makeFlow(probe))) continue;
+    if (!classifyBirds2FlowGeometry(makeFlow(probe))) continue;
     const coarseWidth = Math.max(width, scale.cellWidth);
     const full = EXPANSION_TIME_PER_WIDTH_SQUARED * coarseWidth ** 2;
     const radius = Math.floor(duration === full ? support.entryRadius
@@ -58,7 +53,7 @@ export function compositeMidpointCellProbabilities(
   flow: CompositeFlow, support: CompositeMotionSupport,
 ): readonly { readonly cell: CompositeCell; readonly probability: number }[] {
   const owner = classifyCompositeFlowTimeSubdivision(flow);
-  if (!owner || !isPossibleCompositeFlow(flow, support)) return [];
+  if (!owner || !isWithinBirds2MotionSupport(flow, support)) return [];
   const width = owner.midpointCellWidth, sourceIndex = flow.source.min / width;
   const offset = flow.destination.min / width - sourceIndex;
   return midpointKernelForFlow(support.midpointKernels, offset, owner.normalizedDuration)
@@ -72,7 +67,7 @@ export function possibleCompositeParentFlows(
   flow: CompositeFlow, support: CompositeMotionSupport,
 ): readonly CompositeFlow[] {
   const construction = classifyCompositeFlow(flow);
-  if (construction?.kind !== 'temporal-aggregation' || !isPossibleCompositeFlow(flow, support)) return [];
+  if (construction?.kind !== 'temporal-aggregation' || !isWithinBirds2MotionSupport(flow, support)) return [];
   const first = construction.leg === 'first';
   const width = flow.source.max - flow.source.min;
   const midpoint = first ? flow.destination : flow.source;

@@ -1,4 +1,4 @@
-import { createBirds2aMotionSupport } from '../birds2a/motionSupport';
+import { createBirds2aMotionSupport, isWithinBirds2MotionSupport } from '../birds2a/motionSupport';
 import QuickLRU from 'quick-lru';
 import { binomial } from '../../utils/distributions/binomial';
 import { multinomial } from '../../utils/distributions/multinomial';
@@ -10,7 +10,7 @@ import { classifyCompositeCell, classifyCompositeCellSubdivision, classifyCompos
   type CompositeCell, type CompositeFlow } from './compositeClassifiers';
 import { classifyCompositeFlowSpaceSubdivision, classifyCompositeInflowSubdivision,
   classifyCompositeOutflowSubdivision } from './compositeOwnerClassifiers';
-import { isPossibleCompositeFlow, compositeMidpointCellProbabilities,
+import { compositeMidpointCellProbabilities,
   possibleCompositeFlowDestinations, possibleCompositeFlowSources, possibleCompositeParentFlows } from './compositeMotionSupport';
 
 export const BIRDS_COMPOSITE_FACT_CACHE_CAPACITY = 50_000;
@@ -107,7 +107,7 @@ export class CompositeEngine {
     return this.#cached(this.#flows, flowKey(flow), this.#observeDependency && { role: 'flow', flow }, () => {
       const construction = classifyCompositeFlow(flow);
       if (!construction) throw new RangeError('Invalid composite flow');
-      if (!isPossibleCompositeFlow(flow, this.motionSupport)) return 0;
+      if (!isWithinBirds2MotionSupport(flow, this.motionSupport)) return 0;
       switch (construction.kind) {
         case 'channel-merge': return this.#source.queryFlow(flow);
         case 'temporal-aggregation': {

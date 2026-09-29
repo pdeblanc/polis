@@ -3,7 +3,7 @@ import type { Seed } from '../../utils/rng/addressedRandom';
 import { Birds2aEngine } from '../birds2a/birds2aEngine';
 import { classifyBirds2aCellGeometry, classifyBirds2aFlow, type Birds2aCell, type Birds2aFlow } from '../birds2a/classifiers';
 import { Birds2aExpansion, EXPANSION_DEFAULT_CELL_WIDTH, type ExpansionCell } from '../birds2a/expansion';
-import { createBirds2aMotionSupport, isPossibleBirds2aFlow } from '../birds2a/motionSupport';
+import { createBirds2aMotionSupport, isWithinBirds2MotionSupport } from '../birds2a/motionSupport';
 import { birds2aPopulationSupport } from '../birds2a/populationSupport';
 import { originChannelsIn, originSearchWindow } from './channels';
 
@@ -69,7 +69,7 @@ export class Birds2bEngine {
     if (cached !== undefined) return cached;
     if (!classifyBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN)) throw new RangeError('Invalid Birds 2b flow');
     let count = 0;
-    if (this.#density !== 0 && isPossibleBirds2aFlow(flow, BIRDS_2B_GEOMETRY_ORIGIN, this.motionSupport)) {
+    if (this.#density !== 0 && isWithinBirds2MotionSupport(flow, this.motionSupport)) {
       for (const origin of this.candidateOrigins(flow.source)) if (this.#mayContribute(origin, flow.destination)) {
         count = addCounts(count, this.#channel(origin).queryFlow(flow));
       }

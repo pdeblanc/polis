@@ -1,7 +1,7 @@
 import { NORMAL_MAX_DEVIATIONS } from '../../utils/distributions/normal';
 import { createMidpointKernels, midpointKernelForFlow, type MidpointKernels } from '../birds/midpointKernels';
 import { EXPANSION_TIME_PER_WIDTH_SQUARED, type ExpansionCell } from './expansion';
-import { classifyBirds2aCellGeometry, classifyBirds2aFlow, type Birds2aCell, type Birds2aFlow } from './classifiers';
+import { classifyBirds2aCellGeometry, classifyBirds2aFlow, classifyBirds2FlowGeometry, type Birds2aCell, type Birds2aFlow } from './classifiers';
 import { classifyBirds2aFlowTimeSubdivision } from './ownerClassifiers';
 
 /** Conservative, seed-independent offset bounds, not exact nonzero-flow supports.
@@ -47,8 +47,12 @@ export function createBirds2aMotionSupport(diffusionRate: number): Birds2aMotion
     midpointKernels: Object.freeze(midpointKernels) });
 }
 
-export function isPossibleBirds2aFlow(flow: Birds2aFlow, origin: ExpansionCell, support: Birds2aMotionSupport): boolean {
-  if (!classifyBirds2aFlow(flow, origin)) return false;
+export function isPossibleBirds2aFlow(flow: Birds2aFlow, _origin: ExpansionCell, support: Birds2aMotionSupport): boolean {
+  return !!classifyBirds2FlowGeometry(flow) && isWithinBirds2MotionSupport(flow, support);
+}
+
+/** Radius-only check. Caller must already have established legal flow geometry. */
+export function isWithinBirds2MotionSupport(flow: Birds2aFlow, support: Birds2aMotionSupport): boolean {
   const sw = flow.source.max - flow.source.min, dw = flow.destination.max - flow.destination.min;
   const width = Math.max(sw, dw);
   const offset = Math.floor(flow.destination.min / width) - Math.floor(flow.source.min / width);
@@ -81,7 +85,7 @@ function incidentCells(fixed: Birds2aCell, duration: number, origin: ExpansionCe
     const probe = indexedCell(0, width, time);
     const makeFlow = (opposite: Birds2aCell): Birds2aFlow => forwards
       ? { source: fixed, destination: opposite } : { source: opposite, destination: fixed };
-    if (!classifyBirds2aFlow(makeFlow(probe), origin)) continue;
+    if (!classifyBirds2FlowGeometry(makeFlow(probe))) continue;
     const coarseWidth = Math.max(width, scale.cellWidth);
     const full = EXPANSION_TIME_PER_WIDTH_SQUARED * coarseWidth ** 2;
     const radius = Math.floor(duration === full ? support.entryRadius
@@ -101,7 +105,7 @@ export function birds2aMidpointCellProbabilities(
   flow: Birds2aFlow, origin: ExpansionCell, support: Birds2aMotionSupport,
 ): readonly { readonly cell: Birds2aCell; readonly probability: number }[] {
   const owner = classifyBirds2aFlowTimeSubdivision(flow, origin);
-  if (!owner || !isPossibleBirds2aFlow(flow, origin, support)) return [];
+  if (!owner || !isWithinBirds2MotionSupport(flow, support)) return [];
   const width = owner.midpointCellWidth, sourceIndex = flow.source.min / width;
   const offset = flow.destination.min / width - sourceIndex;
   return midpointKernelForFlow(support.midpointKernels, offset, owner.normalizedDuration)
@@ -115,7 +119,7 @@ export function possibleBirds2aParentFlows(
   flow: Birds2aFlow, origin: ExpansionCell, support: Birds2aMotionSupport,
 ): readonly Birds2aFlow[] {
   const construction = classifyBirds2aFlow(flow, origin);
-  if (construction?.kind !== 'temporal-aggregation' || !isPossibleBirds2aFlow(flow, origin, support)) return [];
+  if (construction?.kind !== 'temporal-aggregation' || !isWithinBirds2MotionSupport(flow, support)) return [];
   const first = construction.leg === 'first';
   const width = flow.source.max - flow.source.min;
   const midpoint = first ? flow.destination : flow.source;
