@@ -44,6 +44,17 @@ npm run experiment:birds-expansion
 npm run experiment:birds-expansion -- --origin 32 64
 ```
 
+Save Birds 2 expansion measurements with a progress bar:
+
+```sh
+npm run measure:birds2-expansion -- --seed-count 32 --output expansion-pilot.jsonl
+npm run measure:birds2-expansion -- --list-stages
+npm run measure:birds2-expansion -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
+```
+
+Output files must not already exist. See the
+[manifest and output format](docs/BIRDS_2_EXPANSION_MANIFEST.md) for details.
+
 See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
 
 For resumable Birds standard-A evaluation collection, use `npm run evaluate:birds`.
