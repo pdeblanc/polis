@@ -44,12 +44,13 @@ npm run experiment:birds-expansion
 npm run experiment:birds-expansion -- --origin 32 64
 ```
 
-Save Birds 2 expansion measurements with a progress bar:
+Save Birds 2 single-channel expansion and refinement measurements with a progress bar:
 
 ```sh
 npm run measure:birds2-expansion -- --seed-count 32 --output expansion-pilot.jsonl
 npm run measure:birds2-expansion -- --list-stages
 npm run measure:birds2-expansion -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
+npm run measure:birds2-expansion -- --seed-count 100 --stage refinement.origin.level-0.forward.A --output refinement-A.jsonl
 ```
 
 Output files must not already exist. See the

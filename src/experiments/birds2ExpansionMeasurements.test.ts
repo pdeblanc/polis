@@ -18,6 +18,10 @@ it('reads every stage, preserves zero observations and matches a filtered run', 
   }
   const stageIndex = manifest.stages.findIndex((stage) => stage.id === 'epoch-2.backward.second-split');
   expect(measureExpansionWorld('measurement-test', parameters, [manifest.stages[stageIndex]])).toEqual([all[stageIndex]]);
+  for (const id of ['refinement.origin.level-0.forward.A', 'refinement.later.level-2.backward.H']) {
+    const index = manifest.stages.findIndex((stage) => stage.id === id);
+    expect(measureExpansionWorld('measurement-test', parameters, [manifest.stages[index]])).toEqual([all[index]]);
+  }
   const empty = measureExpansionWorld('empty-measurement', { ...parameters, populationDensity: 0 }, manifest.stages);
   expect(empty.flat().every((count) => count === 0)).toBe(true);
 });
@@ -80,7 +84,7 @@ it('CLI writes self-describing samples, advances progress and refuses to overwri
     const fullSamples = fullLines.filter((line) => line.type === 'sample');
     expect(fullSamples).toHaveLength(16);
     for (const [index, sample] of fullSamples.entries()) {
-      expect(sample.counts.flat()).toHaveLength(7415);
+      expect(sample.counts.flat()).toHaveLength(16199);
       expect(sample.counts[0]).toEqual(samples[index].counts[0]);
     }
     expect(cli(args).status).not.toBe(0);

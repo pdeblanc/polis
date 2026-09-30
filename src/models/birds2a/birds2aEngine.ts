@@ -7,9 +7,9 @@ import { createAddressedRandom, type AddressedRandom, type Seed } from '../../ut
 import type { Address } from '../../utils/rng/address';
 import type { Birds2aDependencyEdge, Birds2aDependencyNode } from './dependencyRanks';
 import { Birds2aExpansion, type ExpansionCell } from './expansion';
-import { classifyBirds2aCell, classifyBirds2aCellSubdivision, classifyBirds2aFlow,
+import { classifyBirds2aCell, classifyBirds2aCellGeometry, classifyBirds2aCellSubdivision, classifyBirds2aFlow,
   type Birds2aCell, type Birds2aFlow } from './classifiers';
-import { classifyBirds2aFlowSpaceSubdivision, classifyBirds2aInflowSubdivision,
+import { classifyBirds2aFlowTimeSubdivision, classifyBirds2aFlowSpaceSubdivision, classifyBirds2aInflowSubdivision,
   classifyBirds2aOutflowSubdivision } from './ownerClassifiers';
 import { readExpansionCell, readExpansionFlow } from './expansionFacts';
 import { createBirds2aMotionSupport, isWithinBirds2MotionSupport, birds2aMidpointCellProbabilities,
@@ -116,6 +116,17 @@ export class Birds2aEngine {
         }
       }
     });
+  }
+
+  /** Internal three-time fact for calibration; not part of the consumer API.
+   * Uses exactly the A/C allocation used by ordinary leg queries. */
+  queryTemporalSplit(flow: Birds2aFlow, midpoint: Birds2aCell): number {
+    const owner = classifyBirds2aFlowTimeSubdivision(flow, this.expansion.origin);
+    if (!owner || !classifyBirds2aCellGeometry(midpoint) ||
+      midpoint.time !== owner.midpointTime || width(midpoint) !== owner.midpointCellWidth) {
+      throw new RangeError('Invalid Birds 2a temporal split');
+    }
+    return this.#subdivideTime(flow).get(midpoint.min) ?? 0;
   }
 
   #subdivideTime(flow: Birds2aFlow): ReadonlyMap<number, number> {

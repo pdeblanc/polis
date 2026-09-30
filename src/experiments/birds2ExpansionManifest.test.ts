@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { classifyBirds2aCell, classifyBirds2aFlow } from '../models/birds2a/classifiers';
+import { classifyBirds2aFlowTimeSubdivision } from '../models/birds2a/ownerClassifiers';
 import { birds2ExpansionManifest as manifest, type ExpansionMeasurementQuery } from './birds2ExpansionManifest';
 
 it('is a serializable specification with independent model parameters and seed IDs', () => {
@@ -9,8 +11,26 @@ it('is a serializable specification with independent model parameters and seed I
     diffusionRates: [0, 0.5, 2, 4],
   });
   expect(manifest.seeds).toEqual({ prefix: 'Polis Birds 2 expansion calibration:', firstId: 0, count: 1000 });
-  expect(manifest.stages).toHaveLength(109);
-  expect(manifest.stages.reduce((sum, stage) => sum + stage.queries.length, 0)).toBe(7415);
+  expect(manifest.stages).toHaveLength(217);
+  expect(manifest.stages.reduce((sum, stage) => sum + stage.queries.length, 0)).toBe(16199);
+  const expansion = manifest.stages.filter((stage) => !stage.refinement);
+  expect(expansion).toHaveLength(109);
+  expect(expansion.reduce((sum, stage) => sum + stage.queries.length, 0)).toBe(7415);
+});
+
+it('targets the stated refinement owner for every query, including negative time', () => {
+  const origin = { min: 0, max: 1 };
+  for (const stage of manifest.stages) {
+    if (!stage.refinement) continue;
+    for (const query of stage.queries) {
+      const flow = query.kind === 'population' ? undefined : query.from.time < query.to.time
+        ? { source: query.from, destination: query.to } : { source: query.to, destination: query.from };
+      const owner = query.kind === 'population' ? classifyBirds2aCell(query.cell, origin)
+        : query.kind === 'flow' ? classifyBirds2aFlow(flow!, origin)
+          : classifyBirds2aFlowTimeSubdivision(flow!, origin);
+      expect(owner, `${stage.id}/${query.id}`).toMatchObject({ stage: stage.refinement.stage });
+    }
+  }
 });
 
 it('provides unique stage-scoped query IDs and finite aligned intervals', () => {

@@ -1,7 +1,8 @@
-import { Birds2aExpansion, type BridgeBatch, type ContributionFrame, type ContributionStep,
+import { type BridgeBatch, type ContributionFrame, type ContributionStep,
   type ExpansionCell, type ExpansionEpoch } from '../models/birds2a/expansion';
 import { birds2ExpansionManifest, type ExpansionMeasurementQuery,
   type ExpansionMeasurementStage } from './birds2ExpansionManifest';
+import { Birds2aEngine } from '../models/birds2a/birds2aEngine';
 
 export interface ExpansionParameters {
   readonly origin: ExpansionCell;
@@ -19,8 +20,22 @@ export const expansionParameterCombinations: readonly ExpansionParameters[] =
  * Array positions correspond to the stage and query order in the file header. */
 export function measureExpansionWorld(seed: string, parameters: ExpansionParameters,
   stages: readonly ExpansionMeasurementStage[]): readonly (readonly number[])[] {
-  const model = new Birds2aExpansion(seed, parameters.populationDensity, parameters.diffusionRate, parameters.origin);
-  return stages.map((stage) => readExpansionMeasurements(model.getEpoch(stage.epoch), stage));
+  const model = new Birds2aEngine(seed, parameters.populationDensity, parameters.diffusionRate, parameters.origin);
+  return stages.map((stage) => {
+    if (stage.refinement) return readRefinementMeasurements(model, stage);
+    if (stage.epoch === undefined) throw new Error('Missing expansion epoch');
+    return readExpansionMeasurements(model.expansion.getEpoch(stage.epoch), stage);
+  });
+}
+
+export function readRefinementMeasurements(model: Birds2aEngine, stage: ExpansionMeasurementStage): number[] {
+  if (!stage.refinement) throw new Error('Expected a refinement stage');
+  return stage.queries.map((query) => {
+    if (query.kind === 'population') return model.queryCell(query.cell);
+    const flow = query.from.time < query.to.time
+      ? { source: query.from, destination: query.to } : { source: query.to, destination: query.from };
+    return query.kind === 'flow' ? model.queryFlow(flow) : model.queryTemporalSplit(flow, query.via);
+  });
 }
 
 export function readExpansionMeasurements(epoch: ExpansionEpoch, stage: ExpansionMeasurementStage): number[] {

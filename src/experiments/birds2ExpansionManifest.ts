@@ -1,3 +1,5 @@
+import { birds2RefinementStages } from './birds2RefinementManifest';
+
 /** Fixed measurement queries, independent of density, diffusion and sampled support.
  * Times follow the expansion's outward direction, including on the negative branch.
  * This object is a specification only: importing it does not initialize any models.
@@ -19,9 +21,16 @@ export interface ExpansionMeasurementStage {
   readonly id: string;
   readonly title: string;
   readonly description: string;
-  readonly epoch: number;
+  readonly epoch?: number;
+  readonly refinement?: {
+    readonly stage: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G1' | 'G2' | 'H';
+    readonly level: number;
+    readonly parentWidth: number;
+    readonly startTime: number;
+    readonly endTime: number;
+  };
   readonly branch?: 'forward' | 'backward';
-  /** Path within the retained epoch; interpret missing sparse entries as zero. */
+  /** Expansion record path, or internal query method for a refinement stage. */
   readonly record: string;
   readonly queries: readonly ExpansionMeasurementQuery[];
 }
@@ -38,7 +47,7 @@ const BRANCHES = [{ name: 'forward', sign: 1 }, { name: 'backward', sign: -1 }] 
 
 export const birds2ExpansionManifest = {
   id: 'birds2-single-channel-expansion',
-  title: 'Birds 2 single-channel expansion count distributions',
+  title: 'Birds 2 single-channel expansion and refinement count distributions',
   description: 'Unconditional counts in generation order. Run every query for every initialization; absent sparse entries are zero.',
   seeds: {
     prefix: 'Polis Birds 2 expansion calibration:',
@@ -84,6 +93,7 @@ export const birds2ExpansionManifest = {
       queries: quarterViews(QUERY_BASE_WIDTH, 0, sign * QUERY_BASE_DURATION),
     })),
     ...[1, 2, 3].flatMap(expansionStages),
+    ...birds2RefinementStages,
   ] satisfies readonly ExpansionMeasurementStage[],
 } as const;
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Birds2aEngine } from './birds2aEngine';
 import { classifyBirds2aFlowSpaceSubdivision } from './ownerClassifiers';
-import { possibleBirds2aFlowDestinations, possibleBirds2aFlowSources } from './motionSupport';
+import { birds2aMidpointCellProbabilities, possibleBirds2aFlowDestinations, possibleBirds2aFlowSources } from './motionSupport';
 import type { Birds2aCell, Birds2aFlow } from './classifiers';
 import { withMultinomialObserver } from '../../utils/distributions/multinomial';
 
@@ -15,6 +15,27 @@ function incidentTotal(engine: Birds2aEngine, c: Birds2aCell, duration: number, 
 }
 
 describe('Birds 2a contraction engine', () => {
+  it('exposes canonical temporal allocations without changing ordinary leg counts', () => {
+    const engine = new Birds2aEngine('temporal-measurements', 250, 0.5);
+    for (const [start, duration] of [[0, 1], [0, 0.5], [-1, 1], [-1, 0.5]]) {
+      const flow = { source: cell(0, 1, start), destination: cell(0, 1, start + duration) };
+      const categories = birds2aMidpointCellProbabilities(flow, engine.expansion.origin, engine.motionSupport);
+      const counts = categories.map(({ cell }) => engine.queryTemporalSplit(flow, cell));
+      expect(counts.reduce((a, b) => a + b, 0)).toBe(engine.queryFlow(flow));
+      expect(counts.some((count) => count > 0)).toBe(true);
+      const midpoint = categories[0].cell;
+      const leg = { source: flow.source, destination: midpoint };
+      const legCount = engine.queryFlow(leg);
+      engine.clearCache();
+      expect(engine.queryFlow(leg)).toBe(legCount);
+      expect(categories.map(({ cell }) => engine.queryTemporalSplit(flow, cell))).toEqual(counts);
+      expect(engine.queryTemporalSplit(flow, cell(10000, 1, start + duration / 2))).toBe(0);
+      expect(() => engine.queryTemporalSplit(flow, { ...midpoint, time: start })).toThrow();
+      expect(() => engine.queryTemporalSplit(flow, { ...midpoint, max: midpoint.max + 1 })).toThrow();
+    }
+    expect(() => engine.queryTemporalSplit({ source: cell(0, 2, 0), destination: cell(0, 2, 4) }, cell(0, 2, 2))).toThrow();
+  });
+
   for (const diffusion of [0, 0.5, 2]) it(`conserves populations through refinement at diffusion ${diffusion}`, () => {
     const engine = new Birds2aEngine('engine-conservation', 12, diffusion);
     for (const width of [1, 0.5]) for (const time of [-1, -0.25, 0, 0.25, 1, 1.25]) {
