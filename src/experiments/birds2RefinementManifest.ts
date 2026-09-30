@@ -1,5 +1,5 @@
-import type { ExpansionMeasurementQuery as Query, ExpansionMeasurementStage as Stage,
-  ExpansionObservationCell as Cell } from './birds2ExpansionManifest';
+import type { CalibrationMeasurementQuery as Query, CalibrationMeasurementStage as Stage,
+  CalibrationObservationCell as Cell } from './birds2CalibrationManifest';
 
 // Fixed observation windows, not derived from model parameters or motion support.
 const WINDOWS = [

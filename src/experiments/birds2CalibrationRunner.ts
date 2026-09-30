@@ -2,11 +2,11 @@
 import { openSync, writeSync, closeSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { birds2ExpansionManifest as manifest } from './birds2ExpansionManifest';
-import { expansionParameterCombinations, measureExpansionWorld } from './birds2ExpansionMeasurements';
+import { birds2CalibrationManifest as manifest } from './birds2CalibrationManifest';
+import { calibrationParameterCombinations, measureCalibrationWorld } from './birds2CalibrationMeasurements';
 
-const usage = `Usage: npm run measure:birds2-expansion -- [options]
-  --output PATH       JSONL output (default: birds2-expansion.jsonl; must not exist)
+const usage = `Usage: npm run measure:birds2-calibration -- [options]
+  --output PATH       JSONL output (default: birds2-calibration.jsonl; must not exist)
   --seed-count N      Positive number of seeds (default: ${manifest.seeds.count})
   --stage ID          Measure only this exact stage ID
   --list-stages       Print available IDs and titles, then exit
@@ -15,7 +15,7 @@ const usage = `Usage: npm run measure:birds2-expansion -- [options]
 
 function main(): void {
   const args = process.argv.slice(2);
-  let output = 'birds2-expansion.jsonl', seedCount: number = manifest.seeds.count, stageId: string | undefined;
+  let output = 'birds2-calibration.jsonl', seedCount: number = manifest.seeds.count, stageId: string | undefined;
   const seen = new Set<string>();
   for (let i = 0; i < args.length; i++) {
     const option = args[i];
@@ -64,14 +64,14 @@ function main(): void {
     write({ type: 'manifest', formatVersion: 1, startedAt: new Date().toISOString(), git,
       runtime: { node: process.version, platform: process.platform, arch: process.arch },
       manifest: { ...manifest, seeds: { ...manifest.seeds, count: seedCount }, stages },
-      parameters: expansionParameterCombinations,
+      parameters: calibrationParameterCombinations,
       layout: 'Each sample counts[stageIndex][queryIndex] follows manifest.stages; parameterIndex refers to parameters.' });
     progress();
     for (let i = 0; i < seedCount; i++) {
       seedId = manifest.seeds.firstId + i;
       const seed = manifest.seeds.prefix + seedId;
-      for (parameterIndex = 0; parameterIndex < expansionParameterCombinations.length; parameterIndex++) {
-        const counts = measureExpansionWorld(seed, expansionParameterCombinations[parameterIndex], stages);
+      for (parameterIndex = 0; parameterIndex < calibrationParameterCombinations.length; parameterIndex++) {
+        const counts = measureCalibrationWorld(seed, calibrationParameterCombinations[parameterIndex], stages);
         write({ type: 'sample', seedId, parameterIndex, counts });
         completedWorlds++;
       }

@@ -34,8 +34,8 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_2B_IMPLEMENTATION.md`](./BIRDS_2B_IMPLEMENTATION.md) describes the reference
   channel sum, composite refinement and merge ownership, finite channel search,
   shared API/viewer, and cold/warm benchmarks.
-- [`BIRDS_2_EXPANSION_MANIFEST.md`](./BIRDS_2_EXPANSION_MANIFEST.md) specifies the
-  format and use of the [code manifest](../src/experiments/birds2ExpansionManifest.ts):
+- [`BIRDS_2_CALIBRATION_MANIFEST.md`](./BIRDS_2_CALIBRATION_MANIFEST.md) specifies the
+  format and use of the [code manifest](../src/experiments/birds2CalibrationManifest.ts):
   independent model parameter arrays, a seed prefix and stage-grouped fixed queries
   for single-channel expansion and A–H refinement measurements.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1

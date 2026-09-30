@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "measure:birds2-expansion": "node --import tsx src/experiments/birds2ExpansionRunner.ts",
+    "measure:birds2-calibration": "node --import tsx src/experiments/birds2CalibrationRunner.ts",
     "experiment:birds-expansion": "node --import tsx src/experiments/birdsExpansionReport.ts",
     "analyze:birds-evaluation": "node --import tsx src/benchmarks/evaluationInferenceReport.ts",
     "evaluate:birds": "node --import tsx src/benchmarks/evaluationCampaignReport.ts",

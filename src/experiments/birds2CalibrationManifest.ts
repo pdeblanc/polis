@@ -4,20 +4,20 @@ import { birds2RefinementStages } from './birds2RefinementManifest';
  * Times follow the expansion's outward direction, including on the negative branch.
  * This object is a specification only: importing it does not initialize any models.
  */
-export interface ExpansionObservationCell {
+export interface CalibrationObservationCell {
   readonly min: number;
   readonly max: number;
   readonly time: number;
 }
 
-export type ExpansionMeasurementQuery =
-  | { readonly id: string; readonly kind: 'population'; readonly cell: ExpansionObservationCell }
-  | { readonly id: string; readonly kind: 'flow'; readonly from: ExpansionObservationCell;
-      readonly to: ExpansionObservationCell }
-  | { readonly id: string; readonly kind: 'temporal-split'; readonly from: ExpansionObservationCell;
-      readonly via: ExpansionObservationCell; readonly to: ExpansionObservationCell };
+export type CalibrationMeasurementQuery =
+  | { readonly id: string; readonly kind: 'population'; readonly cell: CalibrationObservationCell }
+  | { readonly id: string; readonly kind: 'flow'; readonly from: CalibrationObservationCell;
+      readonly to: CalibrationObservationCell }
+  | { readonly id: string; readonly kind: 'temporal-split'; readonly from: CalibrationObservationCell;
+      readonly via: CalibrationObservationCell; readonly to: CalibrationObservationCell };
 
-export interface ExpansionMeasurementStage {
+export interface CalibrationMeasurementStage {
   readonly id: string;
   readonly title: string;
   readonly description: string;
@@ -32,7 +32,7 @@ export interface ExpansionMeasurementStage {
   readonly branch?: 'forward' | 'backward';
   /** Expansion record path, or internal query method for a refinement stage. */
   readonly record: string;
-  readonly queries: readonly ExpansionMeasurementQuery[];
+  readonly queries: readonly CalibrationMeasurementQuery[];
 }
 
 // Query coordinates are deliberately fixed, not derived from modelParameters.
@@ -45,8 +45,8 @@ const FLOW_OFFSETS = [-4, -2, -1, 0, 1, 2, 4] as const;
 const INTERMEDIATE_OFFSETS = [-2, -1, 0, 1, 2] as const;
 const BRANCHES = [{ name: 'forward', sign: 1 }, { name: 'backward', sign: -1 }] as const;
 
-export const birds2ExpansionManifest = {
-  id: 'birds2-single-channel-expansion',
+export const birds2CalibrationManifest = {
+  id: 'birds2-single-channel-calibration',
   title: 'Birds 2 single-channel expansion and refinement count distributions',
   description: 'Unconditional counts in generation order. Run every query for every initialization; absent sparse entries are zero.',
   seeds: {
@@ -68,7 +68,7 @@ export const birds2ExpansionManifest = {
       record: 'atZero',
       queries: [{ id: 'origin', kind: 'population', cell: cell(QUERY_BASE_WIDTH, 0, 0) }],
     },
-    ...BRANCHES.flatMap(({ name, sign }): ExpansionMeasurementStage[] => {
+    ...BRANCHES.flatMap(({ name, sign }): CalibrationMeasurementStage[] => {
       const time = sign * QUERY_BASE_DURATION;
       return [
         {
@@ -86,7 +86,7 @@ export const birds2ExpansionManifest = {
         },
       ];
     }),
-    ...BRANCHES.map(({ name, sign }): ExpansionMeasurementStage => ({
+    ...BRANCHES.map(({ name, sign }): CalibrationMeasurementStage => ({
       id: `initial.${name}.ordinary-flows`, title: `Initial ${name} coarsened and mixed flows`,
       description: 'Deterministic endpoint aggregations of the initial step.',
       epoch: 0, branch: name, record: 'ordinaryFlows',
@@ -94,18 +94,18 @@ export const birds2ExpansionManifest = {
     })),
     ...[1, 2, 3].flatMap(expansionStages),
     ...birds2RefinementStages,
-  ] satisfies readonly ExpansionMeasurementStage[],
+  ] satisfies readonly CalibrationMeasurementStage[],
 } as const;
 
-function cell(width: number, index: number, time: number): ExpansionObservationCell {
+function cell(width: number, index: number, time: number): CalibrationObservationCell {
   return { min: index === 0 ? 0 : index * width, max: (index + 1) * width, time };
 }
 
-function populations(width: number, time: number, indices: readonly number[] = POPULATION_INDICES): ExpansionMeasurementQuery[] {
+function populations(width: number, time: number, indices: readonly number[] = POPULATION_INDICES): CalibrationMeasurementQuery[] {
   return indices.map((j) => ({ id: `cell-${j}`, kind: 'population', cell: cell(width, j, time) }));
 }
 
-function flows(fromWidth: number, toWidth: number, fromTime: number, toTime: number): ExpansionMeasurementQuery[] {
+function flows(fromWidth: number, toWidth: number, fromTime: number, toTime: number): CalibrationMeasurementQuery[] {
   return SOURCE_INDICES.flatMap((i) => FLOW_OFFSETS.map((d) => ({
     id: `widths-${fromWidth}-${toWidth}/source-${i}/offset-${d}`,
     kind: 'flow' as const,
@@ -115,7 +115,7 @@ function flows(fromWidth: number, toWidth: number, fromTime: number, toTime: num
 }
 
 function splits(width: number, fromTime: number, viaTime: number, toTime: number,
-  denominator: 2 | 3): ExpansionMeasurementQuery[] {
+  denominator: 2 | 3): CalibrationMeasurementQuery[] {
   return SOURCE_INDICES.flatMap((i) => FLOW_OFFSETS.flatMap((d) => INTERMEDIATE_OFFSETS.map((r) => ({
     id: `source-${i}/offset-${d}/intermediate-${r}`,
     kind: 'temporal-split' as const,
@@ -125,18 +125,18 @@ function splits(width: number, fromTime: number, viaTime: number, toTime: number
   }))));
 }
 
-function quarterViews(width: number, fromTime: number, toTime: number): ExpansionMeasurementQuery[] {
+function quarterViews(width: number, fromTime: number, toTime: number): CalibrationMeasurementQuery[] {
   return [[width, width], [2 * width, 2 * width], [width, 2 * width], [2 * width, width]]
     .flatMap(([u, v]) => flows(u, v, fromTime, toTime));
 }
 
-function expansionStages(epoch: number): ExpansionMeasurementStage[] {
+function expansionStages(epoch: number): CalibrationMeasurementStage[] {
   const width = QUERY_BASE_WIDTH * 2 ** (epoch - 1);
   const duration = QUERY_BASE_DURATION * 4 ** (epoch - 1);
   const stages = BRANCHES.flatMap(({ name, sign }) => {
     const t = sign * duration;
     const stage = (id: string, title: string, description: string, record: string,
-      queries: ExpansionMeasurementQuery[]): ExpansionMeasurementStage => ({
+      queries: CalibrationMeasurementQuery[]): CalibrationMeasurementStage => ({
       id: `epoch-${epoch}.${name}.${id}`, title, description,
       epoch, branch: name, record: `${name}Extension.${record}`, queries,
     });
@@ -171,7 +171,7 @@ function expansionStages(epoch: number): ExpansionMeasurementStage[] {
   });
   for (const { name, sign } of BRANCHES) {
     const t = sign * duration;
-    const stage = (id: string, title: string, queries: ExpansionMeasurementQuery[]): ExpansionMeasurementStage => ({
+    const stage = (id: string, title: string, queries: CalibrationMeasurementQuery[]): CalibrationMeasurementStage => ({
       id: `epoch-${epoch}.${name}.${id}`, title,
       description: 'Deterministic ordinary-flow view; all counts are contributions from the initialized origin only.',
       epoch, branch: name, record: 'ordinaryFlows', queries,

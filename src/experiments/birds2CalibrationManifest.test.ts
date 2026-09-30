@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { classifyBirds2aCell, classifyBirds2aFlow } from '../models/birds2a/classifiers';
 import { classifyBirds2aFlowTimeSubdivision } from '../models/birds2a/ownerClassifiers';
-import { birds2ExpansionManifest as manifest, type ExpansionMeasurementQuery } from './birds2ExpansionManifest';
+import { birds2CalibrationManifest as manifest, type CalibrationMeasurementQuery } from './birds2CalibrationManifest';
 
 it('is a serializable specification with independent model parameters and seed IDs', () => {
   expect(JSON.parse(JSON.stringify(manifest))).toEqual(manifest);
@@ -40,7 +40,7 @@ it('provides unique stage-scoped query IDs and finite aligned intervals', () => 
     expect(stage.description).not.toBe('');
     expect(stage.record).not.toBe('');
     expect(new Set(stage.queries.map((query) => query.id)).size).toBe(stage.queries.length);
-    for (const query of stage.queries as readonly ExpansionMeasurementQuery[]) {
+    for (const query of stage.queries as readonly CalibrationMeasurementQuery[]) {
       const cells = query.kind === 'population' ? [query.cell]
         : query.kind === 'flow' ? [query.from, query.to] : [query.from, query.via, query.to];
       for (const cell of cells) {

@@ -5,24 +5,24 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { Birds2aExpansion } from '../models/birds2a/expansion';
-import { birds2ExpansionManifest as manifest, type ExpansionMeasurementStage } from './birds2ExpansionManifest';
-import { measureExpansionWorld, readExpansionMeasurements } from './birds2ExpansionMeasurements';
+import { birds2CalibrationManifest as manifest, type CalibrationMeasurementStage } from './birds2CalibrationManifest';
+import { measureCalibrationWorld, readCalibrationMeasurements } from './birds2CalibrationMeasurements';
 
 it('reads every stage, preserves zero observations and matches a filtered run', () => {
   const parameters = { origin: { min: 0, max: 1 }, populationDensity: 2.5, diffusionRate: 0.5 };
-  const all = measureExpansionWorld('measurement-test', parameters, manifest.stages);
+  const all = measureCalibrationWorld('measurement-test', parameters, manifest.stages);
   expect(all).toHaveLength(manifest.stages.length);
   for (const [index, counts] of all.entries()) {
     expect(counts).toHaveLength(manifest.stages[index].queries.length);
     expect(counts.every((count) => Number.isSafeInteger(count) && count >= 0)).toBe(true);
   }
   const stageIndex = manifest.stages.findIndex((stage) => stage.id === 'epoch-2.backward.second-split');
-  expect(measureExpansionWorld('measurement-test', parameters, [manifest.stages[stageIndex]])).toEqual([all[stageIndex]]);
+  expect(measureCalibrationWorld('measurement-test', parameters, [manifest.stages[stageIndex]])).toEqual([all[stageIndex]]);
   for (const id of ['refinement.origin.level-0.forward.A', 'refinement.later.level-2.backward.H']) {
     const index = manifest.stages.findIndex((stage) => stage.id === id);
-    expect(measureExpansionWorld('measurement-test', parameters, [manifest.stages[index]])).toEqual([all[index]]);
+    expect(measureCalibrationWorld('measurement-test', parameters, [manifest.stages[index]])).toEqual([all[index]]);
   }
-  const empty = measureExpansionWorld('empty-measurement', { ...parameters, populationDensity: 0 }, manifest.stages);
+  const empty = measureCalibrationWorld('empty-measurement', { ...parameters, populationDensity: 0 }, manifest.stages);
   expect(empty.flat().every((count) => count === 0)).toBe(true);
 });
 
@@ -35,7 +35,7 @@ it('reads nonzero three-time counts and rejects missing records or incompatible 
       const batches = epoch[`${branch}Extension`][record];
       const batch = batches.find((batch) => batch.intermediates.some(({ count }) => count > 0))!;
       expect(batch).toBeDefined();
-      const stage: ExpansionMeasurementStage = { id: 'test', title: 'Test', description: 'Test',
+      const stage: CalibrationMeasurementStage = { id: 'test', title: 'Test', description: 'Test',
         epoch: 1, branch, record: `${branch}Extension.${record}`,
         queries: batch.intermediates.map(({ cell }, index) => ({
           id: String(index), kind: 'temporal-split',
@@ -43,22 +43,22 @@ it('reads nonzero three-time counts and rejects missing records or incompatible 
           to: { ...batch.toCell, time: batch.toTime },
         })),
       };
-      expect(readExpansionMeasurements(epoch, stage)).toEqual(batch.intermediates.map(({ count }) => count));
-      expect(readExpansionMeasurements(epoch, stage).reduce((a, b) => a + b, 0)).toBe(batch.count);
-      expect(() => readExpansionMeasurements(epoch, { ...stage, record: 'notThere' })).toThrow(/Missing/);
+      expect(readCalibrationMeasurements(epoch, stage)).toEqual(batch.intermediates.map(({ count }) => count));
+      expect(readCalibrationMeasurements(epoch, stage).reduce((a, b) => a + b, 0)).toBe(batch.count);
+      expect(() => readCalibrationMeasurements(epoch, { ...stage, record: 'notThere' })).toThrow(/Missing/);
     }
   }
   const stage = manifest.stages[0];
-  expect(() => readExpansionMeasurements(model.getEpoch(0), { ...stage, queries: [{
+  expect(() => readCalibrationMeasurements(model.getEpoch(0), { ...stage, queries: [{
     id: 'invalid-time', kind: 'population', cell: { min: 0, max: 1, time: 0.25 },
   }] })).toThrow(/geometry/);
 });
 
 it('CLI writes self-describing samples, advances progress and refuses to overwrite output', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'polis-expansion-test-'));
+  const directory = mkdtempSync(join(tmpdir(), 'polis-calibration-test-'));
   const output = join(directory, 'measurements.jsonl');
   const cli = (args: string[]) => spawnSync(process.execPath,
-    ['--import', 'tsx', resolve('src/experiments/birds2ExpansionRunner.ts'), ...args],
+    ['--import', 'tsx', resolve('src/experiments/birds2CalibrationRunner.ts'), ...args],
     { encoding: 'utf8', timeout: 15000 });
   try {
     const args = ['--seed-count', '2', '--stage', 'initial.origin-population', '--output', output];

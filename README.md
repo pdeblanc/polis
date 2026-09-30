@@ -47,14 +47,14 @@ npm run experiment:birds-expansion -- --origin 32 64
 Save Birds 2 single-channel expansion and refinement measurements with a progress bar:
 
 ```sh
-npm run measure:birds2-expansion -- --seed-count 32 --output expansion-pilot.jsonl
-npm run measure:birds2-expansion -- --list-stages
-npm run measure:birds2-expansion -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
-npm run measure:birds2-expansion -- --seed-count 100 --stage refinement.origin.level-0.forward.A --output refinement-A.jsonl
+npm run measure:birds2-calibration -- --seed-count 32 --output calibration-pilot.jsonl
+npm run measure:birds2-calibration -- --list-stages
+npm run measure:birds2-calibration -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
+npm run measure:birds2-calibration -- --seed-count 100 --stage refinement.origin.level-0.forward.A --output refinement-A.jsonl
 ```
 
 Output files must not already exist. See the
-[manifest and output format](docs/BIRDS_2_EXPANSION_MANIFEST.md) for details.
+[manifest and output format](docs/BIRDS_2_CALIBRATION_MANIFEST.md) for details.
 
 See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
 

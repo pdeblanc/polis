@@ -1,7 +1,7 @@
-# Birds 2 single-channel expansion and refinement experiment manifest
+# Birds 2 single-channel calibration manifest
 
 The executable specification is
-[`birds2ExpansionManifest.ts`](../src/experiments/birds2ExpansionManifest.ts).
+[`birds2CalibrationManifest.ts`](../src/experiments/birds2CalibrationManifest.ts).
 It is a serializable TypeScript object, not an experiment runner.
 
 - `modelParameters` contains independent arrays of origins, population densities
@@ -51,9 +51,10 @@ allocations through an internal `queryTemporalSplit` method, not a reconstructio
 from flow margins. This does not extend the consumer-facing Birds API. Expansion
 joint facts remain read from retained records; unavailable joints still throw.
 
-The original 109 expansion groups are followed by 108 refinement groups, for
-16,199 scalar queries per world. Existing command and manifest names are retained
-for compatibility; each output header specifies exactly which targets were run.
+The 109 expansion groups are followed by 108 refinement groups, for
+16,199 scalar queries per world. Each output header specifies exactly which
+targets were run. The seed prefix retains its expansion-era spelling so that
+existing measurements and new runs sample the same worlds.
 
 The manifest contains no ground-truth values or reference-distribution
 calculations. Those belong to separate evaluation code. It does not run
@@ -64,19 +65,19 @@ simulations on import.
 Start with a small seed count:
 
 ```sh
-npm run measure:birds2-expansion -- --seed-count 32 --output expansion-pilot.jsonl
+npm run measure:birds2-calibration -- --seed-count 32 --output calibration-pilot.jsonl
 ```
 
 List stages or measure one exact stage ID:
 
 ```sh
-npm run measure:birds2-expansion -- --list-stages
-npm run measure:birds2-expansion -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
-npm run measure:birds2-expansion -- --seed-count 100 --stage refinement.origin.level-0.forward.A --output refinement-A.jsonl
+npm run measure:birds2-calibration -- --list-stages
+npm run measure:birds2-calibration -- --seed-count 100 --stage epoch-1.forward.first-split --output first-split.jsonl
+npm run measure:birds2-calibration -- --seed-count 100 --stage refinement.origin.level-0.forward.A --output refinement-A.jsonl
 ```
 
 Without overrides the runner uses the manifest's seed count and all stages,
-writing `birds2-expansion.jsonl`. The output path must not already exist and its
+writing `birds2-calibration.jsonl`. The output path must not already exist and its
 parent directory must exist. The progress bar is written to stderr and advances
 after all model parameter combinations for a seed finish. Redirected stderr
 contains one progress line per completed seed instead of terminal cursor updates.

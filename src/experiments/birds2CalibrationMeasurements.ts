@@ -1,34 +1,34 @@
 import { type BridgeBatch, type ContributionFrame, type ContributionStep,
   type ExpansionCell, type ExpansionEpoch } from '../models/birds2a/expansion';
-import { birds2ExpansionManifest, type ExpansionMeasurementQuery,
-  type ExpansionMeasurementStage } from './birds2ExpansionManifest';
+import { birds2CalibrationManifest, type CalibrationMeasurementQuery,
+  type CalibrationMeasurementStage } from './birds2CalibrationManifest';
 import { Birds2aEngine } from '../models/birds2a/birds2aEngine';
 
-export interface ExpansionParameters {
+export interface CalibrationParameters {
   readonly origin: ExpansionCell;
   readonly populationDensity: number;
   readonly diffusionRate: number;
 }
 
-export const expansionParameterCombinations: readonly ExpansionParameters[] =
-  birds2ExpansionManifest.modelParameters.origins.flatMap((origin) =>
-    birds2ExpansionManifest.modelParameters.populationDensities.flatMap((populationDensity) =>
-      birds2ExpansionManifest.modelParameters.diffusionRates.map((diffusionRate) =>
+export const calibrationParameterCombinations: readonly CalibrationParameters[] =
+  birds2CalibrationManifest.modelParameters.origins.flatMap((origin) =>
+    birds2CalibrationManifest.modelParameters.populationDensities.flatMap((populationDensity) =>
+      birds2CalibrationManifest.modelParameters.diffusionRates.map((diffusionRate) =>
         ({ origin, populationDensity, diffusionRate }))));
 
 /** One world initialization, all selected queries, no clearing or resampling.
  * Array positions correspond to the stage and query order in the file header. */
-export function measureExpansionWorld(seed: string, parameters: ExpansionParameters,
-  stages: readonly ExpansionMeasurementStage[]): readonly (readonly number[])[] {
+export function measureCalibrationWorld(seed: string, parameters: CalibrationParameters,
+  stages: readonly CalibrationMeasurementStage[]): readonly (readonly number[])[] {
   const model = new Birds2aEngine(seed, parameters.populationDensity, parameters.diffusionRate, parameters.origin);
   return stages.map((stage) => {
     if (stage.refinement) return readRefinementMeasurements(model, stage);
     if (stage.epoch === undefined) throw new Error('Missing expansion epoch');
-    return readExpansionMeasurements(model.expansion.getEpoch(stage.epoch), stage);
+    return readCalibrationMeasurements(model.expansion.getEpoch(stage.epoch), stage);
   });
 }
 
-export function readRefinementMeasurements(model: Birds2aEngine, stage: ExpansionMeasurementStage): number[] {
+export function readRefinementMeasurements(model: Birds2aEngine, stage: CalibrationMeasurementStage): number[] {
   if (!stage.refinement) throw new Error('Expected a refinement stage');
   return stage.queries.map((query) => {
     if (query.kind === 'population') return model.queryCell(query.cell);
@@ -38,7 +38,7 @@ export function readRefinementMeasurements(model: Birds2aEngine, stage: Expansio
   });
 }
 
-export function readExpansionMeasurements(epoch: ExpansionEpoch, stage: ExpansionMeasurementStage): number[] {
+export function readCalibrationMeasurements(epoch: ExpansionEpoch, stage: CalibrationMeasurementStage): number[] {
   if (epoch.index !== stage.epoch) throw new Error('Measurement epoch mismatch');
   const record = resolveRecord(epoch, stage.record);
   return stage.queries.map((query) => {
@@ -93,7 +93,7 @@ function requireStep(record: unknown): ContributionStep {
   return record as ContributionStep;
 }
 function sameCell(a: ExpansionCell, b: ExpansionCell): boolean { return a.min === b.min && a.max === b.max; }
-type ObservedCell = Extract<ExpansionMeasurementQuery, { kind: 'population' }>['cell'];
+type ObservedCell = Extract<CalibrationMeasurementQuery, { kind: 'population' }>['cell'];
 function matchesGeometry(frame: ContributionFrame, cell: ObservedCell): boolean {
   return frame.time === cell.time && frame.cellWidth === cell.max - cell.min;
 }
