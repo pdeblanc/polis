@@ -34,6 +34,10 @@ use the analysis summary for findings and the canonical proposal for mathematica
 - [`BIRDS_2B_IMPLEMENTATION.md`](./BIRDS_2B_IMPLEMENTATION.md) describes the reference
   channel sum, composite refinement and merge ownership, finite channel search,
   shared API/viewer, and cold/warm benchmarks.
+- [`BIRDS_2_EXPANSION_MANIFEST.md`](./BIRDS_2_EXPANSION_MANIFEST.md) specifies the
+  format and use of the [code manifest](../src/experiments/birds2ExpansionManifest.ts):
+  independent model parameter arrays, a seed prefix and stage-grouped fixed queries
+  for single-channel expansion measurements.
 - [`BIRDS_DESIGN_PROPOSAL.md`](./BIRDS_DESIGN_PROPOSAL.md) is the **canonical v1
   specification** for the implemented birds model.
 - [`BIRDS_ACCEPTANCE_AUDIT.md`](./BIRDS_ACCEPTANCE_AUDIT.md) maps acceptance requirements
