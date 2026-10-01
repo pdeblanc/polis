@@ -139,3 +139,40 @@ leave a partial last line. A file without a final `complete` record is incomplet
 do not interpret absent samples as zero. Automatic resume is not implemented.
 The default full campaign has 16,000 world initializations and about 259 million
 scalar observations, so use a pilot to assess runtime and output size first.
+
+## Query-oriented inspection tables
+
+```sh
+npm run table:birds2-calibration -- --input measurements.jsonl --output measurements.queries.jsonl
+```
+
+This post-processing command creates JSONL with one row per parameter combination
+and experiment query, ordered by parameter, stage and query. It uses the input's
+embedded manifest, not the current source-code manifest, so older complete
+version-1 files are supported. It does not rerun the model or calculate reference
+means. The original JSONL remains unchanged, and existing output files are never
+overwritten.
+
+Each row has `type: "query-summary"`, `formatVersion: 1`, `manifestId`,
+`parameterIndex`, and native JSON objects for `parameters`, `stage`, `query`,
+`seeds`, `statistics` and `source`, plus a numeric `data` array. Stage metadata
+includes its ID/title/description but not the other queries in the stage.
+`data[i]` belongs to seed `seeds.prefix + (seeds.firstId + i)`, in ascending seed order even
+if the source records were unordered. Source path, Git information, runtime and
+start timestamp are retained for provenance when present in the input.
+
+Fields within `statistics` are `n`, `mean`, `variance`, `standardError`, `min` and `max`.
+Variance is the unbiased sample estimator with denominator `n - 1`; standard
+error is `sqrt(variance / n)`. For one seed, variance and standard error are `null`
+(undefined), not zero. Statistics use an online centered-moment calculation to
+avoid subtracting large nearly equal sums of squares. Repeated or correlated
+queries remain separate rows; samples are only combined across world seeds.
+
+The converter rejects incomplete/error runs, duplicate worlds, invalid counts,
+dimension mismatches and inconsistent completion records before opening the
+output. Missing observations are never treated as zeros. Counts are temporarily
+spooled to binary storage (8 bytes per observation), then transposed in blocks
+of at most 256 queries across all seeds. Temporary storage is cleaned up on
+normal completion or caught errors. Allow sufficient temporary disk space as
+well as output space. If writing fails or the process is interrupted, a partial
+JSONL may remain; only treat the output as complete after a successful command.

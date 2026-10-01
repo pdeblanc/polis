@@ -56,6 +56,15 @@ npm run measure:birds2-calibration -- --seed-count 100 --stage refinement.origin
 Output files must not already exist. See the
 [manifest and output format](docs/BIRDS_2_CALIBRATION_MANIFEST.md) for details.
 
+Convert a completed measurement file into query-oriented JSONL:
+
+```sh
+npm run table:birds2-calibration -- --input measurements.jsonl --output measurements.queries.jsonl
+```
+
+Each row contains one query/parameter combination, a seed-ordered data array,
+and sample statistics. Input files are preserved; output files must not exist.
+
 See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
 
 For resumable Birds standard-A evaluation collection, use `npm run evaluate:birds`.
