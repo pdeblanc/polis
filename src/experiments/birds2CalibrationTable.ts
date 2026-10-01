@@ -6,7 +6,7 @@ import { createInterface } from 'node:readline';
 import type { CalibrationMeasurementStage } from './birds2CalibrationManifest';
 import type { CalibrationParameters } from './birds2CalibrationMeasurements';
 
-interface Header {
+export interface CalibrationFileHeader {
   readonly type: 'manifest';
   readonly formatVersion: 1;
   readonly manifest: {
@@ -18,6 +18,16 @@ interface Header {
   readonly git?: unknown;
   readonly runtime?: unknown;
   readonly startedAt?: string;
+}
+
+/** Read only the specification: reference means do not depend on sampled worlds. */
+export async function readCalibrationHeader(path: string): Promise<CalibrationFileHeader> {
+  const stream = createReadStream(path);
+  const lines = createInterface({ input: stream, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) if (line.trim()) return validateHeader(JSON.parse(line));
+    throw new Error('Missing manifest header');
+  } finally { lines.close(); stream.destroy(); }
 }
 
 export function sampleStatistics(data: readonly number[]) {
@@ -49,7 +59,7 @@ export async function writeCalibrationTable(inputPath: string, outputPath: strin
   const stream = createReadStream(input);
   const lines = createInterface({ input: stream, crlfDelay: Infinity });
   try {
-    let header: Header | undefined, queryCount = 0, seen: Uint8Array = new Uint8Array(), worlds = 0, complete = false;
+    let header: CalibrationFileHeader | undefined, queryCount = 0, seen: Uint8Array = new Uint8Array(), worlds = 0, complete = false;
     for await (const line of lines) {
       if (!line.trim()) continue;
       const record = JSON.parse(line) as Record<string, unknown>;
@@ -129,9 +139,9 @@ export async function writeCalibrationTable(inputPath: string, outputPath: strin
   }
 }
 
-function validateHeader(record: Record<string, unknown>): Header {
-  if (record.type !== 'manifest' || record.formatVersion !== 1) throw new Error('Expected version-1 manifest header');
-  const header = record as unknown as Header;
+function validateHeader(record: Record<string, unknown>): CalibrationFileHeader {
+  if (!record || record.type !== 'manifest' || record.formatVersion !== 1) throw new Error('Expected version-1 manifest header');
+  const header = record as unknown as CalibrationFileHeader;
   const seeds = header.manifest?.seeds;
   if (!seeds || typeof seeds.prefix !== 'string' || !Number.isSafeInteger(seeds.firstId) ||
     !Number.isSafeInteger(seeds.count) || seeds.count < 1 || !Number.isSafeInteger(seeds.firstId + seeds.count - 1) ||

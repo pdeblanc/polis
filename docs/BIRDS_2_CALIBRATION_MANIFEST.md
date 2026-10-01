@@ -176,3 +176,24 @@ of at most 256 queries across all seeds. Temporary storage is cleaned up on
 normal completion or caught errors. Allow sufficient temporary disk space as
 well as output space. If writing fails or the process is interrupted, a partial
 JSONL may remain; only treat the output as complete after a successful command.
+
+### Reference distribution rows
+
+```sh
+npm run table:birds2-calibration -- --means --input measurements.jsonl --output measurements.means.jsonl
+```
+
+This writes the same parameter/stage/query ordering and metadata as the inspection
+table, but each row has `type: "query-reference"` and
+`distribution: { kind: "poisson", mean: number }` instead of seed metadata,
+sample data or sample statistics. Join the two files by `parameterIndex`,
+`stage.id` and `query.id` when they use the same source manifest. The reference
+means use `Birds2aMeans`' numerical integration semantics described above.
+
+Only the original measurement file's manifest header is read: reference values
+do not depend on seeds or on the sampling run having completed. This command
+does not validate that run's samples. It computes unit-density integrals once
+per origin/diffusion configuration and reuses them across densities. Progress is
+reported after each parameter combination. Output must not exist; a failed or
+interrupted calculation can leave a partial file, which must not be treated as
+a complete reference table.

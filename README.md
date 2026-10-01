@@ -65,6 +65,12 @@ npm run table:birds2-calibration -- --input measurements.jsonl --output measurem
 Each row contains one query/parameter combination, a seed-ordered data array,
 and sample statistics. Input files are preserved; output files must not exist.
 
+Write corresponding ideal Poisson marginal means (no seed sampling):
+
+```sh
+npm run table:birds2-calibration -- --means --input measurements.jsonl --output measurements.means.jsonl
+```
+
 See the [prototype notes](docs/BIRDS_EXPANSION_PROTOTYPE.md) for parameters and full-record output.
 
 For resumable Birds standard-A evaluation collection, use `npm run evaluate:birds`.
