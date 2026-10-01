@@ -62,6 +62,41 @@ simulations on import.
 
 ## Running measurements
 
+### Reference means
+
+`Birds2aMeans(populationDensity, diffusionRate, origin?)` in
+[`birds2aMeans.ts`](../src/models/birds2a/birds2aMeans.ts) shares the Birds 2a
+consumer query API, but its `count` fields are real-valued ideal Poisson means.
+It takes no seed. `queryInflows` and `queryOutflows` throw unsupported-operation
+errors because the ideal Brownian process has no finite motion envelope.
+`populationSupport` reports infinite bounds at nonzero times with positive
+diffusion; this is not the simulation's bounded support.
+
+The scalar `Birds2aMeanQueries` interface also accepts arbitrary observation
+intervals and times, including expansion bridges and three-time joint counts.
+`measureCalibrationMeans(parameters, stages)` returns these reference means in
+the same `[stage][query]` layout as the sampled measurements. Compute references
+once per parameter combination, not per seed. The CLI still saves raw samples
+only; it does not automatically compute reference means.
+
+For constraints E, the mean is `density × integral_origin P(E | X(0)=x) dx`.
+The reference integrates Gaussian transition densities over whole intervals;
+it does not approximate later positions as cell centers or uniform populations.
+Past and future are independent conditional on the initial position. Displacement
+variance is `diffusionRate × elapsedTime`, and zero diffusion uses exact interval
+intersections. All these unconditional scalar count targets are Poisson, though
+different queries can be correlated.
+
+Means are numerical approximations: adaptive Simpson quadrature uses Gaussian
+boundary-layer splits, a nominal absolute mass tolerance of `1e-10` times the
+integration's spatial scale, and a ±12-standard-deviation integration window
+(omitted Gaussian tail below `4e-33` per transition). These are numerical controls,
+not the simulation's truncation semantics, and they do not promise relative
+accuracy for very small tail means. Failure to converge raises an error. Reference
+caches are disposable and model-scoped.
+
+### Sample runner
+
 Start with a small seed count:
 
 ```sh

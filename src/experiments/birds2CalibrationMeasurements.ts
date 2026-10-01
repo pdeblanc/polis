@@ -3,6 +3,7 @@ import { type BridgeBatch, type ContributionFrame, type ContributionStep,
 import { birds2CalibrationManifest, type CalibrationMeasurementQuery,
   type CalibrationMeasurementStage } from './birds2CalibrationManifest';
 import { Birds2aEngine } from '../models/birds2a/birds2aEngine';
+import { Birds2aMeanQueries } from '../models/birds2a/birds2aMeans';
 
 export interface CalibrationParameters {
   readonly origin: ExpansionCell;
@@ -28,7 +29,17 @@ export function measureCalibrationWorld(seed: string, parameters: CalibrationPar
   });
 }
 
-export function readRefinementMeasurements(model: Birds2aEngine, stage: CalibrationMeasurementStage): number[] {
+/** Seed-independent ideal means, with the same stage/query layout as samples.
+ * Evaluate once per parameter combination, not once per world seed. */
+export function measureCalibrationMeans(parameters: CalibrationParameters,
+  stages: readonly CalibrationMeasurementStage[]): readonly (readonly number[])[] {
+  const model = new Birds2aMeanQueries(parameters.populationDensity, parameters.diffusionRate, parameters.origin);
+  return stages.map((stage) => stage.queries.map((query) => model.queryMarginal(
+    query.kind === 'population' ? [query.cell] : query.kind === 'flow' ? [query.from, query.to] : [query.from, query.via, query.to],
+  )));
+}
+
+export function readRefinementMeasurements(model: Pick<Birds2aEngine, 'queryCell' | 'queryFlow' | 'queryTemporalSplit'>, stage: CalibrationMeasurementStage): number[] {
   if (!stage.refinement) throw new Error('Expected a refinement stage');
   return stage.queries.map((query) => {
     if (query.kind === 'population') return model.queryCell(query.cell);

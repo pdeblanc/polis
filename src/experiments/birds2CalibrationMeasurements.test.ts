@@ -6,7 +6,21 @@ import { spawnSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { Birds2aExpansion } from '../models/birds2a/expansion';
 import { birds2CalibrationManifest as manifest, type CalibrationMeasurementStage } from './birds2CalibrationManifest';
-import { measureCalibrationWorld, readCalibrationMeasurements } from './birds2CalibrationMeasurements';
+import { measureCalibrationMeans, measureCalibrationWorld, readCalibrationMeasurements } from './birds2CalibrationMeasurements';
+
+it('provides reference means in manifest order, including expansion and refinement joints', () => {
+  const parameters = { origin: { min: 0, max: 1 }, populationDensity: 2.5, diffusionRate: 0 };
+  const means = measureCalibrationMeans(parameters, manifest.stages);
+  for (const [index, stage] of manifest.stages.entries()) {
+    expect(means[index]).toEqual(stage.queries.map((query) => {
+      const cells = query.kind === 'population' ? [query.cell] : query.kind === 'flow' ? [query.from, query.to] : [query.from, query.via, query.to];
+      return 2.5 * Math.max(0, Math.min(1, ...cells.map((c) => c.max)) - Math.max(0, ...cells.map((c) => c.min)));
+    }));
+  }
+  const probes = manifest.stages.map((stage) => ({ ...stage, queries: stage.queries.slice(0, 1) }));
+  const diffusive = measureCalibrationMeans({ ...parameters, diffusionRate: 0.5 }, probes);
+  expect(diffusive.flat().every((mean) => Number.isFinite(mean) && mean >= 0 && mean <= 2.5)).toBe(true);
+});
 
 it('reads every stage, preserves zero observations and matches a filtered run', () => {
   const parameters = { origin: { min: 0, max: 1 }, populationDensity: 2.5, diffusionRate: 0.5 };
